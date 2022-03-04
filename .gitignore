@@ -1,0 +1,15 @@
+node_modules
+
+# Hardhat files
+cache
+artifacts
+
+# Coverage reports
+coverage.json
+coverage
+
+# IDEs
+.vscode
+
+# Compilers
+soljson-*
