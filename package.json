@@ -1,6 +1,6 @@
 {
   "name": "@pythia-oracle/pythia-periphery",
-  "version": "0.0.1",
+  "version": "1.0.0-rc.1",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "MIT",
