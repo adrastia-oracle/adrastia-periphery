@@ -1,6 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
+
 const uniswapV3FactoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const uniswapV3InitCodeHash = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
 
@@ -42,15 +44,39 @@ describe("ManagedUniswapV3Oracle#update", function () {
             USDC,
             PERIOD
         );
+
+        const [owner] = await ethers.getSigners();
+
+        // Grant owner the oracle updater role
+        await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
     });
 
-    it("Owner can update", async function () {
-        expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+    describe("Only accounts with oracle updater role can update", function () {
+        it("Accounts with oracle updater role can update", async function () {
+            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+        });
+
+        it("Accounts without oracle updater role cannot update", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await expect(oracle.connect(addr1).update(WETH)).to.be.reverted;
+        });
     });
 
-    it("Non-owner cannot update", async function () {
-        const [, addr1] = await ethers.getSigners();
+    describe("All accounts can update", function () {
+        beforeEach(async () => {
+            // Grant everyone the oracle updater role
+            await oracle.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
+        });
 
-        await expect(oracle.connect(addr1).update(WETH)).to.be.reverted;
+        it("Accounts with oracle updater role can update", async function () {
+            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+        });
+
+        it("Accounts without oracle updater role can update", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await expect(oracle.connect(addr1).update(WETH)).to.emit(oracle, "Updated");
+        });
     });
 });
