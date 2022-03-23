@@ -12,14 +12,13 @@ const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
-const PERIOD = 100;
 
-describe("ManagedUniswapV2Oracle#update", function () {
-    var oracle;
+describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
+    var accumulator;
 
     beforeEach(async () => {
-        const liquidityAccumulatorFactory = await ethers.getContractFactory("UniswapV2LiquidityAccumulatorStub");
-        const liquidityAccumulator = await liquidityAccumulatorFactory.deploy(
+        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV2LiquidityAccumulator");
+        accumulator = await liquidityAccumulatorFactory.deploy(
             uniswapV2FactoryAddress,
             uniswapV2InitCodeHash,
             USDC,
@@ -27,84 +26,56 @@ describe("ManagedUniswapV2Oracle#update", function () {
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
         );
-        await liquidityAccumulator.deployed();
-
-        // Initialize liquidity accumulator
-        await liquidityAccumulator.update(WETH);
-
-        const oracleFactory = await ethers.getContractFactory("ManagedUniswapV2Oracle");
-
-        oracle = await oracleFactory.deploy(
-            liquidityAccumulator.address,
-            uniswapV2FactoryAddress,
-            uniswapV2InitCodeHash,
-            USDC,
-            PERIOD
-        );
 
         const [owner] = await ethers.getSigners();
 
         // Grant owner the oracle updater role
-        await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+        await accumulator.grantRole(ORACLE_UPDATER_ROLE, owner.address);
     });
 
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
-            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+            expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
             const [, addr1] = await ethers.getSigners();
 
-            await expect(oracle.connect(addr1).update(WETH)).to.be.reverted;
+            await expect(accumulator.connect(addr1).update(WETH)).to.be.reverted;
         });
     });
 
     describe("All accounts can update", function () {
         beforeEach(async () => {
             // Grant everyone the oracle updater role
-            await oracle.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
         });
 
         it("Accounts with oracle updater role can update", async function () {
-            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+            expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role can update", async function () {
             const [, addr1] = await ethers.getSigners();
 
-            await expect(oracle.connect(addr1).update(WETH)).to.emit(oracle, "Updated");
+            await expect(accumulator.connect(addr1).update(WETH)).to.emit(accumulator, "Updated");
         });
     });
 });
 
-describe("ManagedUniswapV2Oracle#supportsInterface(interfaceId)", function () {
-    var oracle;
+describe("ManagedUniswapV2LiquidityAccumulator#supportsInterface(interfaceId)", function () {
+    var accumulator;
     var interfaceIds;
 
     beforeEach(async () => {
-        const liquidityAccumulatorFactory = await ethers.getContractFactory("UniswapV2LiquidityAccumulatorStub");
-        const liquidityAccumulator = await liquidityAccumulatorFactory.deploy(
+        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV2LiquidityAccumulator");
+        accumulator = await liquidityAccumulatorFactory.deploy(
             uniswapV2FactoryAddress,
             uniswapV2InitCodeHash,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
-        );
-        await liquidityAccumulator.deployed();
-
-        // Initialize liquidity accumulator
-        await liquidityAccumulator.update(WETH);
-
-        const oracleFactory = await ethers.getContractFactory("ManagedUniswapV2Oracle");
-
-        oracle = await oracleFactory.deploy(
-            liquidityAccumulator.address,
-            uniswapV2FactoryAddress,
-            uniswapV2InitCodeHash,
-            USDC,
-            PERIOD
         );
 
         const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
@@ -113,6 +84,6 @@ describe("ManagedUniswapV2Oracle#supportsInterface(interfaceId)", function () {
 
     it("Should support IAccessControl", async () => {
         const interfaceId = await interfaceIds.iAccessControl();
-        expect(await oracle["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+        expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
 });

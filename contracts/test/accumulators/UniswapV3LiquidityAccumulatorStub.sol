@@ -33,8 +33,4 @@ contract UniswapV3LiquidityAccumulatorStub is UniswapV3LiquidityAccumulator {
     {
         return super.fetchLiquidity(token);
     }
-
-    function stubIsContract(address addr) public view returns (bool) {
-        return isContract(addr);
-    }
 }

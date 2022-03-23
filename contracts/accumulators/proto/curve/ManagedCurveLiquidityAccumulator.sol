@@ -1,22 +1,21 @@
 //SPDX-License-Identifier: MIT
-pragma solidity =0.7.6;
-pragma experimental ABIEncoderV2;
+pragma solidity =0.8.11;
 
-import "@pythia-oracle/pythia-core/contracts/oracles/proto/uniswap/UniswapV3Oracle.sol";
+import "@pythia-oracle/pythia-core/contracts/accumulators/proto/curve/CurveLiquidityAccumulator.sol";
 
-import "@openzeppelin-v3/contracts/access/AccessControl.sol";
+import "@openzeppelin-v4/contracts/access/AccessControl.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedUniswapV3Oracle is AccessControl, UniswapV3Oracle {
+contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumulator {
     constructor(
-        address liquidityAccumulator_,
-        address uniswapFactory_,
-        bytes32 initCodeHash_,
-        uint24[] memory poolFees_,
+        address curvePool_,
+        uint8 nCoins_,
         address quoteToken_,
-        uint256 period_
-    ) UniswapV3Oracle(liquidityAccumulator_, uniswapFactory_, initCodeHash_, poolFees_, quoteToken_, period_) {
+        uint256 updateTheshold_,
+        uint256 minUpdateDelay_,
+        uint256 maxUpdateDelay_
+    ) CurveLiquidityAccumulator(curvePool_, nCoins_, quoteToken_, updateTheshold_, minUpdateDelay_, maxUpdateDelay_) {
         initializeRoles();
     }
 
@@ -26,11 +25,22 @@ contract ManagedUniswapV3Oracle is AccessControl, UniswapV3Oracle {
      * considered. Granting a role to `address(0)` is equivalent to enabling
      * this role for everyone.
      */
+
     modifier onlyRoleOrOpenRole(bytes32 role) {
         if (!hasRole(role, address(0))) {
-            require(hasRole(role, msg.sender), "ManagedUniswapV3Oracle: MISSING_ROLE");
+            require(hasRole(role, msg.sender), "ManagedCurveLiquidityAccumulator: MISSING_ROLE");
         }
         _;
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, LiquidityAccumulator)
+        returns (bool)
+    {
+        return interfaceId == type(IAccessControl).interfaceId || LiquidityAccumulator.supportsInterface(interfaceId);
     }
 
     function initializeRoles() internal virtual {
