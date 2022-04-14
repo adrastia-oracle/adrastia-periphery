@@ -26,6 +26,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
             curvePool.address,
             2,
             USDC,
+            USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -40,6 +41,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         const priceAccumulator = await priceAccumulatorFactory.deploy(
             curvePool.address,
             2,
+            USDC,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
@@ -106,6 +108,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
             curvePool.address,
             2,
             USDC,
+            USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -120,6 +123,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         const priceAccumulator = await priceAccumulatorFactory.deploy(
             curvePool.address,
             2,
+            USDC,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,

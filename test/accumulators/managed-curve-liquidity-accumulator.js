@@ -25,6 +25,7 @@ describe("ManagedCurveLiquidityAccumulator#update", function () {
             curvePool.address,
             2,
             USDC,
+            USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -81,6 +82,7 @@ describe("ManagedCurveLiquidityAccumulator#supportsInterface(interfaceId)", func
         accumulator = await accumulatorFactory.deploy(
             curvePool.address,
             2,
+            USDC,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,

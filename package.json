@@ -32,20 +32,20 @@
   "dependencies": {
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.4.0",
-    "@pythia-oracle/pythia-core": "^1.0.0-rc.4"
+    "@pythia-oracle/pythia-core": "^1.0.0-rc.5"
   },
   "devDependencies": {
     "@atixlabs/hardhat-time-n-mine": "^0.0.5",
     "@nomiclabs/hardhat-ethers": "^2.0.5",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "chai": "^4.3.6",
-    "eth-gas-reporter": "^0.2.24",
-    "ethereum-waffle": "^4.0.0-alpha.0",
-    "ethers": "^5.6.1",
-    "hardhat": "2.9.1",
+    "eth-gas-reporter": "^0.2.25",
+    "ethereum-waffle": "^3.4.4",
+    "ethers": "^5.6.4",
+    "hardhat": "2.9.3",
     "hardhat-gas-reporter": "^1.0.8",
-    "hardhat-tracer": "^1.0.0-alpha.6",
-    "prettier": "^2.6.0",
+    "hardhat-tracer": "^1.1.0-rc.3",
+    "prettier": "^2.6.2",
     "prettier-plugin-solidity": "^1.0.0-beta.18",
     "solhint": "^3.3.7",
     "solhint-plugin-prettier": "^0.0.5",

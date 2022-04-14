@@ -11,11 +11,22 @@ contract ManagedCurvePriceAccumulator is AccessControl, CurvePriceAccumulator {
     constructor(
         address curvePool_,
         int8 nCoins_,
-        address quoteToken_,
+        address poolQuoteToken_,
+        address ourQuoteToken_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
-    ) CurvePriceAccumulator(curvePool_, nCoins_, quoteToken_, updateTheshold_, minUpdateDelay_, maxUpdateDelay_) {
+    )
+        CurvePriceAccumulator(
+            curvePool_,
+            nCoins_,
+            poolQuoteToken_,
+            ourQuoteToken_,
+            updateTheshold_,
+            minUpdateDelay_,
+            maxUpdateDelay_
+        )
+    {
         initializeRoles();
     }
 
