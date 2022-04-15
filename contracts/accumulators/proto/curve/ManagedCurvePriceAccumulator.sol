@@ -11,11 +11,22 @@ contract ManagedCurvePriceAccumulator is AccessControl, CurvePriceAccumulator {
     constructor(
         address curvePool_,
         int8 nCoins_,
-        address quoteToken_,
+        address poolQuoteToken_,
+        address ourQuoteToken_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
-    ) CurvePriceAccumulator(curvePool_, nCoins_, quoteToken_, updateTheshold_, minUpdateDelay_, maxUpdateDelay_) {
+    )
+        CurvePriceAccumulator(
+            curvePool_,
+            nCoins_,
+            poolQuoteToken_,
+            ourQuoteToken_,
+            updateTheshold_,
+            minUpdateDelay_,
+            maxUpdateDelay_
+        )
+    {
         initializeRoles();
     }
 
@@ -54,5 +65,18 @@ contract ManagedCurvePriceAccumulator is AccessControl, CurvePriceAccumulator {
 
     function _update(address token) internal virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
         return super._update(token);
+    }
+
+    function validateObservation(address, uint112) internal virtual override returns (bool) {
+        // Require updaters to be EOAs to limit the attack vector that this function addresses
+        require(msg.sender == tx.origin, "PriceAccumulator: MUST_BE_EOA");
+
+        // Disable the use of pending observations since
+        // 1. They require a lot more gas to keep accumulators updated, and
+        // 2. They only prevent attacks on oracle updaters - gas spend attacks - where attackers can cause accumulators
+        //    to be updated more frequently than necessary (really costly attack vector for price accumulators), and
+        // 3. They may introduce additional attack vectors
+        // Controlling who can update accumulators greatly reduces (or even eliminates) gas spend attacks
+        return true;
     }
 }

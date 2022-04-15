@@ -3,6 +3,9 @@ const { ethers } = require("hardhat");
 
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
+const uniswapV2FactoryAddress = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
+const uniswapV2InitCodeHash = "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f";
+
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
@@ -10,21 +13,14 @@ const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 
-describe("ManagedCurvePriceAccumulator#update", function () {
+describe("ManagedUniswapV2PriceAccumulator#update", function () {
     var accumulator;
 
     beforeEach(async () => {
-        // Deploy the curve pool
-        const poolFactory = await ethers.getContractFactory("CurvePoolStub");
-        const curvePool = await poolFactory.deploy([WETH, USDC]);
-        await curvePool.deployed();
-
-        // Deploy accumulator
-        const accumulatorFactory = await ethers.getContractFactory("ManagedCurvePriceAccumulator");
-        accumulator = await accumulatorFactory.deploy(
-            curvePool.address,
-            2,
-            USDC,
+        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV2PriceAccumulator");
+        accumulator = await liquidityAccumulatorFactory.deploy(
+            uniswapV2FactoryAddress,
+            uniswapV2InitCodeHash,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
@@ -120,22 +116,15 @@ describe("ManagedCurvePriceAccumulator#update", function () {
     });
 });
 
-describe("ManagedCurvePriceAccumulator#supportsInterface(interfaceId)", function () {
+describe("ManagedUniswapV2PriceAccumulator#supportsInterface(interfaceId)", function () {
     var accumulator;
     var interfaceIds;
 
     beforeEach(async () => {
-        // Deploy the curve pool
-        const poolFactory = await ethers.getContractFactory("CurvePoolStub");
-        const curvePool = await poolFactory.deploy([WETH, USDC]);
-        await curvePool.deployed();
-
-        // Deploy accumulator
-        const accumulatorFactory = await ethers.getContractFactory("ManagedCurvePriceAccumulator");
-        accumulator = await accumulatorFactory.deploy(
-            curvePool.address,
-            2,
-            USDC,
+        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV2PriceAccumulator");
+        accumulator = await liquidityAccumulatorFactory.deploy(
+            uniswapV2FactoryAddress,
+            uniswapV2InitCodeHash,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,

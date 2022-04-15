@@ -25,6 +25,7 @@ describe("ManagedCurveLiquidityAccumulator#update", function () {
             curvePool.address,
             2,
             USDC,
+            USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -39,12 +40,53 @@ describe("ManagedCurveLiquidityAccumulator#update", function () {
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
             expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
+
+            // Increase time so that the accumulator needs another update
+            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+            // The second call has some different functionality, so ensure that the results are the same for it
+            expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
             const [, addr1] = await ethers.getSigners();
 
             await expect(accumulator.connect(addr1).update(WETH)).to.be.reverted;
+
+            // Increase time so that the accumulator needs another update
+            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+            // The second call has some different functionality, so ensure that the results are the same for it
+            await expect(accumulator.connect(addr1).update(WETH)).to.be.reverted;
+        });
+    });
+
+    describe("Smart contracts can't update", function () {
+        var updateableCallerFactory;
+
+        beforeEach(async function () {
+            // Allow every address to update
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
+
+            // Perform first update which is allowed regardless of whether it's a smart contract calling
+            await accumulator.update(WETH);
+
+            // Increase time so that the accumulator needs another update
+            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+            updateableCallerFactory = await ethers.getContractFactory("UpdateableCaller");
+        });
+
+        it("Can't update in the constructor", async function () {
+            await expect(updateableCallerFactory.deploy(accumulator.address, true, WETH)).to.be.revertedWith(
+                "LiquidityAccumulator: MUST_BE_EOA"
+            );
+        });
+
+        it("Can't update in a function call", async function () {
+            const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, WETH);
+
+            await expect(updateableCaller.callUpdate()).to.be.revertedWith("LiquidityAccumulator: MUST_BE_EOA");
         });
     });
 
@@ -56,11 +98,23 @@ describe("ManagedCurveLiquidityAccumulator#update", function () {
 
         it("Accounts with oracle updater role can update", async function () {
             expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
+
+            // Increase time so that the accumulator needs another update
+            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+            // The second call has some different functionality, so ensure that the results are the same for it
+            expect(await accumulator.update(WETH)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role can update", async function () {
             const [, addr1] = await ethers.getSigners();
 
+            await expect(accumulator.connect(addr1).update(WETH)).to.emit(accumulator, "Updated");
+
+            // Increase time so that the accumulator needs another update
+            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+            // The second call has some different functionality, so ensure that the results are the same for it
             await expect(accumulator.connect(addr1).update(WETH)).to.emit(accumulator, "Updated");
         });
     });
@@ -81,6 +135,7 @@ describe("ManagedCurveLiquidityAccumulator#supportsInterface(interfaceId)", func
         accumulator = await accumulatorFactory.deploy(
             curvePool.address,
             2,
+            USDC,
             USDC,
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,

@@ -1,27 +1,25 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.11;
 
-import "@pythia-oracle/pythia-core/contracts/accumulators/proto/curve/CurveLiquidityAccumulator.sol";
+import "@pythia-oracle/pythia-core/contracts/accumulators/proto/uniswap/UniswapV2PriceAccumulator.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControl.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumulator {
+contract ManagedUniswapV2PriceAccumulator is AccessControl, UniswapV2PriceAccumulator {
     constructor(
-        address curvePool_,
-        uint8 nCoins_,
-        address poolQuoteToken_,
-        address ourQuoteToken_,
+        address uniswapFactory_,
+        bytes32 initCodeHash_,
+        address quoteToken_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        CurveLiquidityAccumulator(
-            curvePool_,
-            nCoins_,
-            poolQuoteToken_,
-            ourQuoteToken_,
+        UniswapV2PriceAccumulator(
+            uniswapFactory_,
+            initCodeHash_,
+            quoteToken_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_
@@ -39,7 +37,7 @@ contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumu
 
     modifier onlyRoleOrOpenRole(bytes32 role) {
         if (!hasRole(role, address(0))) {
-            require(hasRole(role, msg.sender), "ManagedCurveLiquidityAccumulator: MISSING_ROLE");
+            require(hasRole(role, msg.sender), "ManagedUniswapV2PriceAccumulator: MISSING_ROLE");
         }
         _;
     }
@@ -48,10 +46,10 @@ contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumu
         public
         view
         virtual
-        override(AccessControl, LiquidityAccumulator)
+        override(AccessControl, PriceAccumulator)
         returns (bool)
     {
-        return interfaceId == type(IAccessControl).interfaceId || LiquidityAccumulator.supportsInterface(interfaceId);
+        return interfaceId == type(IAccessControl).interfaceId || PriceAccumulator.supportsInterface(interfaceId);
     }
 
     function initializeRoles() internal virtual {
@@ -67,18 +65,14 @@ contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumu
         return super._update(token);
     }
 
-    function validateObservation(
-        address,
-        uint112,
-        uint112
-    ) internal virtual override returns (bool) {
+    function validateObservation(address, uint112) internal virtual override returns (bool) {
         // Require updaters to be EOAs to limit the attack vector that this function addresses
-        require(msg.sender == tx.origin, "LiquidityAccumulator: MUST_BE_EOA");
+        require(msg.sender == tx.origin, "PriceAccumulator: MUST_BE_EOA");
 
         // Disable the use of pending observations since
         // 1. They require a lot more gas to keep accumulators updated, and
         // 2. They only prevent attacks on oracle updaters - gas spend attacks - where attackers can cause accumulators
-        //    to be updated more frequently than necessary, and
+        //    to be updated more frequently than necessary (really costly attack vector for price accumulators), and
         // 3. They may introduce additional attack vectors
         // Controlling who can update accumulators greatly reduces (or even eliminates) gas spend attacks
         return true;
