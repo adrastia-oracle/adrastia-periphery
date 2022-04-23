@@ -34,7 +34,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         await liquidityAccumulator.deployed();
 
         // Initialize liquidity accumulator
-        await liquidityAccumulator.update(WETH);
+        await liquidityAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
 
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
@@ -50,7 +50,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         await priceAccumulator.deployed();
 
         // Initialize price accumulator
-        await priceAccumulator.update(WETH);
+        await priceAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");
@@ -64,13 +64,13 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
 
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
-            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+            expect(await oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
             const [, addr1] = await ethers.getSigners();
 
-            await expect(oracle.connect(addr1).update(WETH)).to.be.reverted;
+            await expect(oracle.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.reverted;
         });
     });
 
@@ -81,13 +81,13 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         });
 
         it("Accounts with oracle updater role can update", async function () {
-            expect(await oracle.update(WETH)).to.emit(oracle, "Updated");
+            expect(await oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
 
         it("Accounts without oracle updater role can update", async function () {
             const [, addr1] = await ethers.getSigners();
 
-            await expect(oracle.connect(addr1).update(WETH)).to.emit(oracle, "Updated");
+            await expect(oracle.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
     });
 });
@@ -116,7 +116,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         await liquidityAccumulator.deployed();
 
         // Initialize liquidity accumulator
-        await liquidityAccumulator.update(WETH);
+        await liquidityAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
 
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
@@ -132,7 +132,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         await priceAccumulator.deployed();
 
         // Initialize price accumulator
-        await priceAccumulator.update(WETH);
+        await priceAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");

@@ -1,26 +1,26 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8;
 
-import "@pythia-oracle/pythia-core/contracts/interfaces/IUpdateByToken.sol";
+import "@pythia-oracle/pythia-core/contracts/interfaces/IUpdateable.sol";
 
 contract UpdateableCaller {
     address updatable;
-    address token;
+    bytes updateData;
 
     constructor(
         address updateable_,
         bool callUpdateInConstructor,
-        address token_
+        bytes memory updateData_
     ) {
         updatable = updateable_;
-        token = token_;
+        updateData = updateData_;
 
         if (callUpdateInConstructor) {
-            IUpdateByToken(updateable_).update(token_);
+            IUpdateable(updateable_).update(updateData_);
         }
     }
 
     function callUpdate() external {
-        IUpdateByToken(updatable).update(token);
+        IUpdateable(updatable).update(updateData);
     }
 }
