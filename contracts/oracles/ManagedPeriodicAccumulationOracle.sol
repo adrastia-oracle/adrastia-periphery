@@ -52,7 +52,7 @@ contract ManagedPeriodicAccumulationOracle is AccessControl, PeriodicAccumulatio
         _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.ADMIN);
     }
 
-    function _update(address token) internal virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
-        return super._update(token);
+    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
+        return super.update(data);
     }
 }
