@@ -37,25 +37,33 @@ describe("ManagedUniswapV3PriceAccumulator#update", function () {
 
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
-            expect(await accumulator.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(accumulator, "Updated");
+            const price = await accumulator["consultPrice(address)"](WETH);
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+
+            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
 
             // Increase time so that the accumulator needs another update
             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
             // The second call has some different functionality, so ensure that the results are the same for it
-            expect(await accumulator.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(accumulator, "Updated");
+            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
             const [, addr1] = await ethers.getSigners();
 
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.reverted;
+            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+                "ManagedUniswapV3PriceAccumulator: MISSING_ROLE"
+            );
 
             // Increase time so that the accumulator needs another update
             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
             // The second call has some different functionality, so ensure that the results are the same for it
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.reverted;
+            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+                "ManagedUniswapV3PriceAccumulator: MISSING_ROLE"
+            );
         });
     });
 
@@ -99,31 +107,33 @@ describe("ManagedUniswapV3PriceAccumulator#update", function () {
         });
 
         it("Accounts with oracle updater role can update", async function () {
-            expect(await accumulator.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(accumulator, "Updated");
+            const price = await accumulator["consultPrice(address)"](WETH);
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+
+            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
 
             // Increase time so that the accumulator needs another update
             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
             // The second call has some different functionality, so ensure that the results are the same for it
-            expect(await accumulator.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(accumulator, "Updated");
+            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
         });
 
         it("Accounts without oracle updater role can update", async function () {
+            const price = await accumulator["consultPrice(address)"](WETH);
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+
             const [, addr1] = await ethers.getSigners();
 
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(
-                accumulator,
-                "Updated"
-            );
+            await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
 
             // Increase time so that the accumulator needs another update
             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
             // The second call has some different functionality, so ensure that the results are the same for it
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(
-                accumulator,
-                "Updated"
-            );
+            await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
         });
     });
 });

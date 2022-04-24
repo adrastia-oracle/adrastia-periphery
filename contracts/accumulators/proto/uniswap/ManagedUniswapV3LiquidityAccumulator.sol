@@ -66,15 +66,4 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControl, UniswapV3Liquidi
     function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
         return super.update(data);
     }
-
-    function validateObservation(
-        bytes memory,
-        uint112,
-        uint112
-    ) internal virtual override returns (bool) {
-        // Require updaters to be EOAs to limit the attack vector that this function addresses
-        require(msg.sender == tx.origin, "LiquidityAccumulator: MUST_BE_EOA");
-
-        return true;
-    }
 }
