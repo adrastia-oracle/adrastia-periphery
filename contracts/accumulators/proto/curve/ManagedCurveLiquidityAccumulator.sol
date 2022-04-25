@@ -36,12 +36,15 @@ contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumu
      * considered. Granting a role to `address(0)` is equivalent to enabling
      * this role for everyone.
      */
-
     modifier onlyRoleOrOpenRole(bytes32 role) {
         if (!hasRole(role, address(0))) {
             require(hasRole(role, msg.sender), "ManagedCurveLiquidityAccumulator: MISSING_ROLE");
         }
         _;
+    }
+
+    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
+        return super.update(data);
     }
 
     function supportsInterface(bytes4 interfaceId)
@@ -61,9 +64,5 @@ contract ManagedCurveLiquidityAccumulator is AccessControl, CurveLiquidityAccumu
 
         // Set admin of ORACLE_UPDATER as ADMIN
         _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.ADMIN);
-    }
-
-    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
-        return super.update(data);
     }
 }

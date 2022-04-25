@@ -34,12 +34,15 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControl, UniswapV2Liquidi
      * considered. Granting a role to `address(0)` is equivalent to enabling
      * this role for everyone.
      */
-
     modifier onlyRoleOrOpenRole(bytes32 role) {
         if (!hasRole(role, address(0))) {
             require(hasRole(role, msg.sender), "ManagedUniswapV2LiquidityAccumulator: MISSING_ROLE");
         }
         _;
+    }
+
+    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
+        return super.update(data);
     }
 
     function supportsInterface(bytes4 interfaceId)
@@ -59,9 +62,5 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControl, UniswapV2Liquidi
 
         // Set admin of ORACLE_UPDATER as ADMIN
         _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.ADMIN);
-    }
-
-    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
-        return super.update(data);
     }
 }
