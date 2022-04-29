@@ -35,12 +35,17 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
 
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address)"](WETH);
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
+            );
 
             const updateData = ethers.utils.defaultAbiCoder.encode(
                 ["address", "uint", "uint"],
                 [WETH, tokenLiquidity, quoteTokenLiquidity]
             );
+
+            expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
             expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
 
@@ -52,9 +57,21 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
+            );
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(
+                ["address", "uint", "uint"],
+                [WETH, tokenLiquidity, quoteTokenLiquidity]
+            );
+
             const [, addr1] = await ethers.getSigners();
 
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+            expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
+
+            await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
                 "ManagedUniswapV2LiquidityAccumulator: MISSING_ROLE"
             );
 
@@ -62,7 +79,7 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
             // The second call has some different functionality, so ensure that the results are the same for it
-            await expect(accumulator.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+            await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
                 "ManagedUniswapV2LiquidityAccumulator: MISSING_ROLE"
             );
         });
@@ -75,27 +92,37 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
             // Allow every address to update
             await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
 
-            // Perform first update which is allowed regardless of whether it's a smart contract calling
-            await accumulator.update(ethers.utils.hexZeroPad(WETH, 32));
-
-            // Increase time so that the accumulator needs another update
-            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
-
             updateableCallerFactory = await ethers.getContractFactory("UpdateableCaller");
         });
 
         it("Can't update in the constructor", async function () {
-            await expect(
-                updateableCallerFactory.deploy(accumulator.address, true, ethers.utils.hexZeroPad(WETH, 32))
-            ).to.be.revertedWith("LiquidityAccumulator: MUST_BE_EOA");
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
+            );
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(
+                ["address", "uint", "uint"],
+                [WETH, tokenLiquidity, quoteTokenLiquidity]
+            );
+
+            await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
+                "LiquidityAccumulator: MUST_BE_EOA"
+            );
         });
 
         it("Can't update in a function call", async function () {
-            const updateableCaller = await updateableCallerFactory.deploy(
-                accumulator.address,
-                false,
-                ethers.utils.hexZeroPad(WETH, 32)
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
             );
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(
+                ["address", "uint", "uint"],
+                [WETH, tokenLiquidity, quoteTokenLiquidity]
+            );
+
+            const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
 
             await expect(updateableCaller.callUpdate()).to.be.revertedWith("LiquidityAccumulator: MUST_BE_EOA");
         });
@@ -108,12 +135,17 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
         });
 
         it("Accounts with oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address)"](WETH);
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
+            );
 
             const updateData = ethers.utils.defaultAbiCoder.encode(
                 ["address", "uint", "uint"],
                 [WETH, tokenLiquidity, quoteTokenLiquidity]
             );
+
+            expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
             expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
 
@@ -125,7 +157,10 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
         });
 
         it("Accounts without oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address)"](WETH);
+            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                WETH,
+                0
+            );
 
             const updateData = ethers.utils.defaultAbiCoder.encode(
                 ["address", "uint", "uint"],
@@ -133,6 +168,8 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
             );
 
             const [, addr1] = await ethers.getSigners();
+
+            expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(true);
 
             await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
 

@@ -33,8 +33,18 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         );
         await liquidityAccumulator.deployed();
 
+        const [tokenLiquidity, quoteTokenLiquidity] = await liquidityAccumulator["consultLiquidity(address,uint256)"](
+            WETH,
+            0
+        );
+
+        const laUpdateData = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint", "uint"],
+            [WETH, tokenLiquidity, quoteTokenLiquidity]
+        );
+
         // Initialize liquidity accumulator
-        await liquidityAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
+        await liquidityAccumulator.update(laUpdateData);
 
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
@@ -49,8 +59,12 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         );
         await priceAccumulator.deployed();
 
+        const price = await priceAccumulator["consultPrice(address,uint256)"](WETH, 0);
+
+        const paUpdateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+
         // Initialize price accumulator
-        await priceAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
+        await priceAccumulator.update(paUpdateData);
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");
@@ -60,15 +74,30 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
 
         // Grant owner the oracle updater role
         await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+
+        // Perform initial update so that later updates have enough data to calculate a price
+        await oracle.update(ethers.utils.hexZeroPad(WETH, 32));
+
+        const period = await oracle.period();
+
+        // Increase time so that the oracle needs another update
+        await hre.timeAndMine.increaseTime(period.add(1));
+
+        // Mine the block so that view functions will use the updated timestamp
+        await hre.timeAndMine.mine(1);
     });
 
     describe("Only accounts with oracle updater role can update", function () {
         it("Accounts with oracle updater role can update", async function () {
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
+
             expect(await oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
 
         it("Accounts without oracle updater role cannot update", async function () {
             const [, addr1] = await ethers.getSigners();
+
+            expect(await oracle.connect(addr1).canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(false);
 
             await expect(oracle.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.be.reverted;
         });
@@ -81,11 +110,15 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         });
 
         it("Accounts with oracle updater role can update", async function () {
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
+
             expect(await oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
 
         it("Accounts without oracle updater role can update", async function () {
             const [, addr1] = await ethers.getSigners();
+
+            expect(await oracle.connect(addr1).canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
 
             await expect(oracle.connect(addr1).update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
         });
@@ -115,8 +148,18 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         );
         await liquidityAccumulator.deployed();
 
+        const [tokenLiquidity, quoteTokenLiquidity] = await liquidityAccumulator["consultLiquidity(address,uint256)"](
+            WETH,
+            0
+        );
+
+        const laUpdateData = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint", "uint"],
+            [WETH, tokenLiquidity, quoteTokenLiquidity]
+        );
+
         // Initialize liquidity accumulator
-        await liquidityAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
+        await liquidityAccumulator.update(laUpdateData);
 
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
@@ -131,8 +174,12 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         );
         await priceAccumulator.deployed();
 
+        const price = await priceAccumulator["consultPrice(address,uint256)"](WETH, 0);
+
+        const paUpdateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+
         // Initialize price accumulator
-        await priceAccumulator.update(ethers.utils.hexZeroPad(WETH, 32));
+        await priceAccumulator.update(paUpdateData);
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");

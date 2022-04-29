@@ -43,6 +43,13 @@ contract ManagedUniswapV3PriceAccumulator is AccessControl, UniswapV3PriceAccumu
         _;
     }
 
+    function canUpdate(bytes memory data) public view virtual override returns (bool) {
+        // Return false if the message sender is missing the required role
+        if (!hasRole(Roles.ORACLE_UPDATER, address(0)) && !hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
+
+        return super.canUpdate(data);
+    }
+
     function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
         return super.update(data);
     }
