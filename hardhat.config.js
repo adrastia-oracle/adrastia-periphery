@@ -9,7 +9,7 @@ const SOLC_8 = {
     settings: {
         optimizer: {
             enabled: true,
-            runs: 20000,
+            runs: 2000,
         },
     },
 };
