@@ -3,11 +3,11 @@ pragma solidity =0.8.11;
 
 import "@pythia-oracle/pythia-core/contracts/accumulators/proto/curve/CurvePriceAccumulator.sol";
 
-import "@openzeppelin-v4/contracts/access/AccessControl.sol";
+import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedCurvePriceAccumulator is AccessControl, CurvePriceAccumulator {
+contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccumulator {
     constructor(
         address curvePool_,
         int8 nCoins_,
@@ -58,10 +58,11 @@ contract ManagedCurvePriceAccumulator is AccessControl, CurvePriceAccumulator {
         public
         view
         virtual
-        override(AccessControl, PriceAccumulator)
+        override(AccessControlEnumerable, PriceAccumulator)
         returns (bool)
     {
-        return interfaceId == type(IAccessControl).interfaceId || PriceAccumulator.supportsInterface(interfaceId);
+        return
+            AccessControlEnumerable.supportsInterface(interfaceId) || PriceAccumulator.supportsInterface(interfaceId);
     }
 
     function initializeRoles() internal virtual {

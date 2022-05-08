@@ -3,11 +3,11 @@ pragma solidity =0.8.11;
 
 import "@pythia-oracle/pythia-core/contracts/oracles/PeriodicAccumulationOracle.sol";
 
-import "@openzeppelin-v4/contracts/access/AccessControl.sol";
+import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../access/Roles.sol";
 
-contract ManagedPeriodicAccumulationOracle is AccessControl, PeriodicAccumulationOracle {
+contract ManagedPeriodicAccumulationOracle is AccessControlEnumerable, PeriodicAccumulationOracle {
     constructor(
         address liquidityAccumulator_,
         address priceAccumulator_,
@@ -45,11 +45,11 @@ contract ManagedPeriodicAccumulationOracle is AccessControl, PeriodicAccumulatio
         public
         view
         virtual
-        override(AccessControl, PeriodicAccumulationOracle)
+        override(AccessControlEnumerable, PeriodicAccumulationOracle)
         returns (bool)
     {
         return
-            interfaceId == type(IAccessControl).interfaceId ||
+            AccessControlEnumerable.supportsInterface(interfaceId) ||
             PeriodicAccumulationOracle.supportsInterface(interfaceId);
     }
 
