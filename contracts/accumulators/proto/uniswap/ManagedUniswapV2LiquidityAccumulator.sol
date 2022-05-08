@@ -3,11 +3,11 @@ pragma solidity =0.8.11;
 
 import "@pythia-oracle/pythia-core/contracts/accumulators/proto/uniswap/UniswapV2LiquidityAccumulator.sol";
 
-import "@openzeppelin-v4/contracts/access/AccessControl.sol";
+import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedUniswapV2LiquidityAccumulator is AccessControl, UniswapV2LiquidityAccumulator {
+contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, UniswapV2LiquidityAccumulator {
     constructor(
         address uniswapFactory_,
         bytes32 initCodeHash_,
@@ -56,10 +56,12 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControl, UniswapV2Liquidi
         public
         view
         virtual
-        override(AccessControl, LiquidityAccumulator)
+        override(AccessControlEnumerable, LiquidityAccumulator)
         returns (bool)
     {
-        return interfaceId == type(IAccessControl).interfaceId || LiquidityAccumulator.supportsInterface(interfaceId);
+        return
+            AccessControlEnumerable.supportsInterface(interfaceId) ||
+            LiquidityAccumulator.supportsInterface(interfaceId);
     }
 
     function initializeRoles() internal virtual {

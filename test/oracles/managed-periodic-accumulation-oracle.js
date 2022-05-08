@@ -193,4 +193,9 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         const interfaceId = await interfaceIds.iAccessControl();
         expect(await oracle["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
+
+    it("Should support IAccessControlEnumerable", async () => {
+        const interfaceId = await interfaceIds.iAccessControlEnumerable();
+        expect(await oracle["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
 });

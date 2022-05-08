@@ -172,4 +172,9 @@ describe("ManagedUniswapV3PriceAccumulator#supportsInterface(interfaceId)", func
         const interfaceId = await interfaceIds.iAccessControl();
         expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
+
+    it("Should support IAccessControlEnumerable", async () => {
+        const interfaceId = await interfaceIds.iAccessControlEnumerable();
+        expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
 });
