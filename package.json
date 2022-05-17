@@ -1,6 +1,6 @@
 {
   "name": "@pythia-oracle/pythia-periphery",
-  "version": "1.0.0-rc.6",
+  "version": "1.0.0-rc.7",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "MIT",
@@ -31,25 +31,25 @@
   },
   "dependencies": {
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
-    "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.4.0",
-    "@pythia-oracle/pythia-core": "1.0.0-rc.9"
+    "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0",
+    "@pythia-oracle/pythia-core": "1.0.0-rc.10"
   },
   "devDependencies": {
     "@atixlabs/hardhat-time-n-mine": "^0.0.5",
-    "@nomiclabs/hardhat-ethers": "^2.0.5",
+    "@nomiclabs/hardhat-ethers": "^2.0.6",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "chai": "^4.3.6",
     "eth-gas-reporter": "^0.2.25",
     "ethereum-waffle": "^3.4.4",
-    "ethers": "^5.6.4",
-    "hardhat": "2.9.3",
+    "ethers": "^5.6.6",
+    "hardhat": "2.9.5",
     "hardhat-gas-reporter": "^1.0.8",
-    "hardhat-tracer": "^1.1.0-rc.3",
+    "hardhat-tracer": "^1.1.0-rc.6",
     "prettier": "^2.6.2",
     "prettier-plugin-solidity": "^1.0.0-beta.18",
     "solhint": "^3.3.7",
     "solhint-plugin-prettier": "^0.0.5",
-    "solidity-coverage": "^0.7.20"
+    "solidity-coverage": "^0.7.21"
   },
   "scripts": {
     "compile": "hardhat compile",

@@ -5,7 +5,7 @@ require("hardhat-tracer");
 require("@atixlabs/hardhat-time-n-mine");
 
 const SOLC_8 = {
-    version: "0.8.11",
+    version: "0.8.13",
     settings: {
         optimizer: {
             enabled: true,

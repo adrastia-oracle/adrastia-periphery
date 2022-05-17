@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity =0.8.11;
+pragma solidity =0.8.13;
 
 import "@pythia-oracle/pythia-core/contracts/accumulators/proto/uniswap/UniswapV3PriceAccumulator.sol";
 
