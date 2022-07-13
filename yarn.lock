@@ -731,10 +731,10 @@
   resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.6.0.tgz#c91cf64bc27f573836dba4122758b4743418c1b3"
   integrity sha512-8vi4d50NNya/bQqCmaVzvHNmwHvS0OBKb7HNtuNwEE3scXWrP31fKQoGxNMT+KbzmrNZzatE3QK5p2gFONI/hg==
 
-"@pythia-oracle/pythia-core@1.0.0-rc.10":
-  version "1.0.0-rc.10"
-  resolved "https://registry.yarnpkg.com/@pythia-oracle/pythia-core/-/pythia-core-1.0.0-rc.10.tgz#b2077d304c8fa0e86e0f0fa76ce97553bf9af18b"
-  integrity sha512-L6GhfF6z/OGII4KZXEQmfGimzdBDDzGj3uaQjsktBnP+W+dgCyd/Tj5HIT8pPtKnrBFK21HbmEy3a7wdj/9IGg==
+"@pythia-oracle/pythia-core@1.0.0-rc.11":
+  version "1.0.0-rc.11"
+  resolved "https://registry.yarnpkg.com/@pythia-oracle/pythia-core/-/pythia-core-1.0.0-rc.11.tgz#b1849633a972b032a7f4ae40e53c551f44046a96"
+  integrity sha512-DigMBYoDbnhopE7aBUbns/FqVwGhpdIwe3eaYFMVkH7Yb+8oi/eN6le/XjCfYwTUAvn5eIIkaRsalV6niSWFfg==
   dependencies:
     "@openzeppelin-v4/contracts" "npm:@openzeppelin/contracts@4.6.0"
     "@uniswap/v2-core" "^1.0.1"
