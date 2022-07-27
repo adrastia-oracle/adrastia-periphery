@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@pythia-oracle/pythia-core/contracts/accumulators/proto/uniswap/UniswapV3PriceAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV3PriceAccumulator.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 

@@ -3,7 +3,7 @@ pragma solidity =0.8.13;
 
 import "@openzeppelin-v4/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
-import "@pythia-oracle/pythia-core/contracts/accumulators/proto/curve/ICurvePool.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/curve/ICurvePool.sol";
 
 contract CurvePoolStub is ICurvePool {
     address[] public override coins;

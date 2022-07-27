@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@pythia-oracle/pythia-core/contracts/oracles/PeriodicAccumulationOracle.sol";
+import "@adrastia-oracle/adrastia-core/contracts/oracles/PeriodicAccumulationOracle.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 

@@ -3,7 +3,7 @@ pragma solidity =0.8.13;
 
 pragma experimental ABIEncoderV2;
 
-import "@pythia-oracle/pythia-core/contracts/accumulators/proto/curve/CurvePriceAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/curve/CurvePriceAccumulator.sol";
 
 contract CurvePriceAccumulatorStub is CurvePriceAccumulator {
     constructor(

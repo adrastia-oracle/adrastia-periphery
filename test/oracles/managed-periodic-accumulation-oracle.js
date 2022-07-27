@@ -85,6 +85,10 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
 
         // Mine the block so that view functions will use the updated timestamp
         await hre.timeAndMine.mine(1);
+
+        // Update the accumulators so that the oracle is ready and able to update
+        await liquidityAccumulator.update(laUpdateData);
+        await priceAccumulator.update(paUpdateData);
     });
 
     describe("Only accounts with oracle updater role can update", function () {
