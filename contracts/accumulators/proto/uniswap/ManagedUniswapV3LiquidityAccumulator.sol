@@ -13,6 +13,7 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, Uniswa
         bytes32 initCodeHash_,
         uint24[] memory poolFees_,
         address quoteToken_,
+        uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
@@ -22,6 +23,7 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, Uniswa
             initCodeHash_,
             poolFees_,
             quoteToken_,
+            decimals_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_

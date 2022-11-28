@@ -24,6 +24,7 @@ describe("ManagedUniswapV3LiquidityAccumulator#update", function () {
             uniswapV3InitCodeHash,
             POOL_FEES,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -195,6 +196,7 @@ describe("ManagedUniswapV3LiquidityAccumulator#supportsInterface(interfaceId)", 
             uniswapV3InitCodeHash,
             POOL_FEES,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY

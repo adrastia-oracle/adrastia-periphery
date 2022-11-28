@@ -13,6 +13,7 @@ contract ManagedCurveLiquidityAccumulator is AccessControlEnumerable, CurveLiqui
         uint8 nCoins_,
         address poolQuoteToken_,
         address ourQuoteToken_,
+        uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
@@ -22,6 +23,7 @@ contract ManagedCurveLiquidityAccumulator is AccessControlEnumerable, CurveLiqui
             nCoins_,
             poolQuoteToken_,
             ourQuoteToken_,
+            decimals_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_

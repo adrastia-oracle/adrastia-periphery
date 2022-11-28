@@ -22,6 +22,7 @@ describe("ManagedUniswapV2LiquidityAccumulator#update", function () {
             uniswapV2FactoryAddress,
             uniswapV2InitCodeHash,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -192,6 +193,7 @@ describe("ManagedUniswapV2LiquidityAccumulator#supportsInterface(interfaceId)", 
             uniswapV2FactoryAddress,
             uniswapV2InitCodeHash,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
