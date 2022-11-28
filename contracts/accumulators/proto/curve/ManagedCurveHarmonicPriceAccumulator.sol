@@ -1,29 +1,27 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV3LiquidityAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/curve/CurveHarmonicPriceAccumulator.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, UniswapV3LiquidityAccumulator {
+contract ManagedCurveHarmonicPriceAccumulator is AccessControlEnumerable, CurveHarmonicPriceAccumulator {
     constructor(
-        address uniswapFactory_,
-        bytes32 initCodeHash_,
-        uint24[] memory poolFees_,
-        address quoteToken_,
-        uint8 decimals_,
+        address curvePool_,
+        int8 nCoins_,
+        address poolQuoteToken_,
+        address ourQuoteToken_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        UniswapV3LiquidityAccumulator(
-            uniswapFactory_,
-            initCodeHash_,
-            poolFees_,
-            quoteToken_,
-            decimals_,
+        CurveHarmonicPriceAccumulator(
+            curvePool_,
+            nCoins_,
+            poolQuoteToken_,
+            ourQuoteToken_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_
@@ -40,7 +38,7 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, Uniswa
      */
     modifier onlyRoleOrOpenRole(bytes32 role) {
         if (!hasRole(role, address(0))) {
-            require(hasRole(role, msg.sender), "ManagedUniswapV3LiquidityAccumulator: MISSING_ROLE");
+            require(hasRole(role, msg.sender), "ManagedCurvePriceAccumulator: MISSING_ROLE");
         }
         _;
     }
@@ -60,12 +58,11 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, Uniswa
         public
         view
         virtual
-        override(AccessControlEnumerable, LiquidityAccumulator)
+        override(AccessControlEnumerable, PriceAccumulator)
         returns (bool)
     {
         return
-            AccessControlEnumerable.supportsInterface(interfaceId) ||
-            LiquidityAccumulator.supportsInterface(interfaceId);
+            AccessControlEnumerable.supportsInterface(interfaceId) || PriceAccumulator.supportsInterface(interfaceId);
     }
 
     function initializeRoles() internal virtual {

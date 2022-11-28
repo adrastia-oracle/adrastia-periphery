@@ -12,6 +12,7 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, Uniswa
         address uniswapFactory_,
         bytes32 initCodeHash_,
         address quoteToken_,
+        uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
@@ -20,6 +21,7 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, Uniswa
             uniswapFactory_,
             initCodeHash_,
             quoteToken_,
+            decimals_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_

@@ -27,6 +27,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
             2,
             USDC,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY
@@ -146,6 +147,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
             2,
             USDC,
             USDC,
+            0, // Liquidity decimals
             TWO_PERCENT_CHANGE,
             MIN_UPDATE_DELAY,
             MAX_UPDATE_DELAY

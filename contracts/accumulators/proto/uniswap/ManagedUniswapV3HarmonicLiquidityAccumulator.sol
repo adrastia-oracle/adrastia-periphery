@@ -1,13 +1,16 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV3LiquidityAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV3HarmonicLiquidityAccumulator.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../../../access/Roles.sol";
 
-contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, UniswapV3LiquidityAccumulator {
+contract ManagedUniswapV3HarmonicLiquidityAccumulator is
+    AccessControlEnumerable,
+    UniswapV3HarmonicLiquidityAccumulator
+{
     constructor(
         address uniswapFactory_,
         bytes32 initCodeHash_,
@@ -18,7 +21,7 @@ contract ManagedUniswapV3LiquidityAccumulator is AccessControlEnumerable, Uniswa
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        UniswapV3LiquidityAccumulator(
+        UniswapV3HarmonicLiquidityAccumulator(
             uniswapFactory_,
             initCodeHash_,
             poolFees_,

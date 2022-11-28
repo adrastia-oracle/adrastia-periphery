@@ -14,203 +14,211 @@ const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 const POOL_FEES = [3000];
 
-describe("ManagedUniswapV3LiquidityAccumulator#update", function () {
-    var accumulator;
+function describeUniswapV3LiquidityAccumulatorTests(contractName) {
+    describe(contractName + "#update", function () {
+        var accumulator;
 
-    beforeEach(async () => {
-        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV3LiquidityAccumulator");
-        accumulator = await liquidityAccumulatorFactory.deploy(
-            uniswapV3FactoryAddress,
-            uniswapV3InitCodeHash,
-            POOL_FEES,
-            USDC,
-            TWO_PERCENT_CHANGE,
-            MIN_UPDATE_DELAY,
-            MAX_UPDATE_DELAY
-        );
-
-        const [owner] = await ethers.getSigners();
-
-        // Grant owner the oracle updater role
-        await accumulator.grantRole(ORACLE_UPDATER_ROLE, owner.address);
-    });
-
-    describe("Only accounts with oracle updater role can update", function () {
-        it("Accounts with oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
-
-            expect(await accumulator.canUpdate(updateData)).to.equal(true);
-
-            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
-
-            // Increase time so that the accumulator needs another update
-            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
-
-            // The second call has some different functionality, so ensure that the results are the same for it
-            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
-        });
-
-        it("Accounts without oracle updater role cannot update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
-
-            const [, addr1] = await ethers.getSigners();
-
-            expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
-
-            await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
-                "ManagedUniswapV3LiquidityAccumulator: MISSING_ROLE"
-            );
-
-            // Increase time so that the accumulator needs another update
-            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
-
-            // The second call has some different functionality, so ensure that the results are the same for it
-            await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
-                "ManagedUniswapV3LiquidityAccumulator: MISSING_ROLE"
-            );
-        });
-    });
-
-    describe("Smart contracts can't update", function () {
-        var updateableCallerFactory;
-
-        beforeEach(async function () {
-            // Allow every address to update
-            await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
-
-            updateableCallerFactory = await ethers.getContractFactory("UpdateableCaller");
-        });
-
-        it("Can't update in the constructor", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
-
-            await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
-                "LiquidityAccumulator: MUST_BE_EOA"
-            );
-        });
-
-        it("Can't update in a function call", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
-
-            const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
-
-            await expect(updateableCaller.callUpdate()).to.be.revertedWith("LiquidityAccumulator: MUST_BE_EOA");
-        });
-    });
-
-    describe("All accounts can update", function () {
         beforeEach(async () => {
-            // Grant everyone the oracle updater role
-            await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
+            const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
+            accumulator = await liquidityAccumulatorFactory.deploy(
+                uniswapV3FactoryAddress,
+                uniswapV3InitCodeHash,
+                POOL_FEES,
+                USDC,
+                0, // Liquidity decimals
+                TWO_PERCENT_CHANGE,
+                MIN_UPDATE_DELAY,
+                MAX_UPDATE_DELAY
+            );
+
+            const [owner] = await ethers.getSigners();
+
+            // Grant owner the oracle updater role
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, owner.address);
         });
 
-        it("Accounts with oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
+        describe("Only accounts with oracle updater role can update", function () {
+            it("Accounts with oracle updater role can update", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
 
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
 
-            expect(await accumulator.canUpdate(updateData)).to.equal(true);
+                expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
-            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
+                expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
 
-            // Increase time so that the accumulator needs another update
-            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+                // Increase time so that the accumulator needs another update
+                await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
-            // The second call has some different functionality, so ensure that the results are the same for it
-            expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
+                // The second call has some different functionality, so ensure that the results are the same for it
+                expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
+            });
+
+            it("Accounts without oracle updater role cannot update", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
+
+                const [, addr1] = await ethers.getSigners();
+
+                expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
+
+                await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
+                    "ManagedUniswapV3LiquidityAccumulator: MISSING_ROLE"
+                );
+
+                // Increase time so that the accumulator needs another update
+                await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                // The second call has some different functionality, so ensure that the results are the same for it
+                await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(
+                    "ManagedUniswapV3LiquidityAccumulator: MISSING_ROLE"
+                );
+            });
         });
 
-        it("Accounts without oracle updater role can update", async function () {
-            const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
-                WETH,
-                0
-            );
+        describe("Smart contracts can't update", function () {
+            var updateableCallerFactory;
 
-            const updateData = ethers.utils.defaultAbiCoder.encode(
-                ["address", "uint", "uint"],
-                [WETH, tokenLiquidity, quoteTokenLiquidity]
-            );
+            beforeEach(async function () {
+                // Allow every address to update
+                await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
 
-            const [, addr1] = await ethers.getSigners();
+                updateableCallerFactory = await ethers.getContractFactory("UpdateableCaller");
+            });
 
-            expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(true);
+            it("Can't update in the constructor", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
 
-            await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
 
-            // Increase time so that the accumulator needs another update
-            await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+                await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
+                    "LiquidityAccumulator: MUST_BE_EOA"
+                );
+            });
 
-            // The second call has some different functionality, so ensure that the results are the same for it
-            await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
+            it("Can't update in a function call", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
+
+                const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
+
+                await expect(updateableCaller.callUpdate()).to.be.revertedWith("LiquidityAccumulator: MUST_BE_EOA");
+            });
+        });
+
+        describe("All accounts can update", function () {
+            beforeEach(async () => {
+                // Grant everyone the oracle updater role
+                await accumulator.grantRole(ORACLE_UPDATER_ROLE, ethers.constants.AddressZero);
+            });
+
+            it("Accounts with oracle updater role can update", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
+
+                expect(await accumulator.canUpdate(updateData)).to.equal(true);
+
+                expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
+
+                // Increase time so that the accumulator needs another update
+                await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                // The second call has some different functionality, so ensure that the results are the same for it
+                expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
+            });
+
+            it("Accounts without oracle updater role can update", async function () {
+                const [tokenLiquidity, quoteTokenLiquidity] = await accumulator["consultLiquidity(address,uint256)"](
+                    WETH,
+                    0
+                );
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                );
+
+                const [, addr1] = await ethers.getSigners();
+
+                expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(true);
+
+                await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
+
+                // Increase time so that the accumulator needs another update
+                await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                // The second call has some different functionality, so ensure that the results are the same for it
+                await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
+            });
         });
     });
-});
 
-describe("ManagedUniswapV3LiquidityAccumulator#supportsInterface(interfaceId)", function () {
-    var accumulator;
-    var interfaceIds;
+    describe(contractName + "#supportsInterface(interfaceId)", function () {
+        var accumulator;
+        var interfaceIds;
 
-    beforeEach(async () => {
-        const liquidityAccumulatorFactory = await ethers.getContractFactory("ManagedUniswapV3LiquidityAccumulator");
-        accumulator = await liquidityAccumulatorFactory.deploy(
-            uniswapV3FactoryAddress,
-            uniswapV3InitCodeHash,
-            POOL_FEES,
-            USDC,
-            TWO_PERCENT_CHANGE,
-            MIN_UPDATE_DELAY,
-            MAX_UPDATE_DELAY
-        );
+        beforeEach(async () => {
+            const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
+            accumulator = await liquidityAccumulatorFactory.deploy(
+                uniswapV3FactoryAddress,
+                uniswapV3InitCodeHash,
+                POOL_FEES,
+                USDC,
+                0, // Liquidity decimals
+                TWO_PERCENT_CHANGE,
+                MIN_UPDATE_DELAY,
+                MAX_UPDATE_DELAY
+            );
 
-        const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
-        interfaceIds = await interfaceIdsFactory.deploy();
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            interfaceIds = await interfaceIdsFactory.deploy();
+        });
+
+        it("Should support IAccessControl", async () => {
+            const interfaceId = await interfaceIds.iAccessControl();
+            expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+        });
+
+        it("Should support IAccessControlEnumerable", async () => {
+            const interfaceId = await interfaceIds.iAccessControlEnumerable();
+            expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+        });
     });
+}
 
-    it("Should support IAccessControl", async () => {
-        const interfaceId = await interfaceIds.iAccessControl();
-        expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
-    });
-
-    it("Should support IAccessControlEnumerable", async () => {
-        const interfaceId = await interfaceIds.iAccessControlEnumerable();
-        expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
-    });
-});
+describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3LiquidityAccumulator");
+describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3GeometricLiquidityAccumulator");
+describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3HarmonicLiquidityAccumulator");
