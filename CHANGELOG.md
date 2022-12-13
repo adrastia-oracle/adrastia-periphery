@@ -1,5 +1,8 @@
 # Changelog
 
+## v2.0.0
+- Upgrade adrastoa-core to v2.0.0
+
 ## v1.0.0
 - Upgrade pythia-core from v1.0.0-rc.11 to v1.0.0
 
