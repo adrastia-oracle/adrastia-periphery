@@ -10,6 +10,7 @@ const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 const PERIOD = 100;
+const GRANULARITY = 1;
 
 describe("ManagedPeriodicAccumulationOracle#update", function () {
     var oracle;
@@ -69,7 +70,13 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");
-        oracle = await oracleFactory.deploy(liquidityAccumulator.address, priceAccumulator.address, WETH, PERIOD);
+        oracle = await oracleFactory.deploy(
+            liquidityAccumulator.address,
+            priceAccumulator.address,
+            WETH,
+            PERIOD,
+            GRANULARITY
+        );
 
         const [owner] = await ethers.getSigners();
 
@@ -189,7 +196,13 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
 
         // Deploy oracle
         const oracleFactory = await ethers.getContractFactory("ManagedPeriodicAccumulationOracle");
-        oracle = await oracleFactory.deploy(liquidityAccumulator.address, priceAccumulator.address, WETH, PERIOD);
+        oracle = await oracleFactory.deploy(
+            liquidityAccumulator.address,
+            priceAccumulator.address,
+            WETH,
+            PERIOD,
+            GRANULARITY
+        );
 
         const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
         interfaceIds = await interfaceIdsFactory.deploy();
