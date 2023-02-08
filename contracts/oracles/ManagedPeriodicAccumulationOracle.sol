@@ -12,8 +12,9 @@ contract ManagedPeriodicAccumulationOracle is AccessControlEnumerable, PeriodicA
         address liquidityAccumulator_,
         address priceAccumulator_,
         address quoteToken_,
-        uint256 period_
-    ) PeriodicAccumulationOracle(liquidityAccumulator_, priceAccumulator_, quoteToken_, period_) {
+        uint256 period_,
+        uint256 granularity_
+    ) PeriodicAccumulationOracle(liquidityAccumulator_, priceAccumulator_, quoteToken_, period_, granularity_) {
         initializeRoles();
     }
 
@@ -41,13 +42,9 @@ contract ManagedPeriodicAccumulationOracle is AccessControlEnumerable, PeriodicA
         return super.update(data);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerable, PeriodicAccumulationOracle)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, PeriodicAccumulationOracle) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) ||
             PeriodicAccumulationOracle.supportsInterface(interfaceId);
