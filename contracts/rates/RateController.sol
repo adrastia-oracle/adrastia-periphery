@@ -52,12 +52,12 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @param token The token for which the rate buffer's capacity was increased.
     /// @param oldCapacity The previous capacity of the rate buffer.
     /// @param newCapacity The new capacity of the rate buffer.
-    event RateCapacityIncreased(address indexed token, uint256 oldCapacity, uint256 newCapacity);
+    event RatesCapacityIncreased(address indexed token, uint256 oldCapacity, uint256 newCapacity);
 
     /// @notice Event emitted when a rate buffer's capacity is initialized.
     /// @param token The token for which the rate buffer's capacity was initialized.
     /// @param capacity The capacity of the rate buffer.
-    event RateCapacityInitialized(address indexed token, uint256 capacity);
+    event RatesCapacityInitialized(address indexed token, uint256 capacity);
 
     /// @notice Event emitted when a new rate is pushed to the rate buffer.
     /// @param token The token for which the rate was pushed.
@@ -246,7 +246,7 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
         }
 
         if (meta.maxSize != amount) {
-            emit RateCapacityIncreased(token, meta.maxSize, amount);
+            emit RatesCapacityIncreased(token, meta.maxSize, amount);
 
             // Update the metadata
             meta.maxSize = uint8(amount);
@@ -384,7 +384,7 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
         meta.maxSize = initialBufferCardinality;
         meta.pauseUpdates = false;
 
-        emit RateCapacityInitialized(token, meta.maxSize);
+        emit RatesCapacityInitialized(token, meta.maxSize);
     }
 
     function push(address token, RateLibrary.Rate memory rate) internal virtual {
