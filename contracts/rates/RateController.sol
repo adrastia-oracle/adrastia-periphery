@@ -4,6 +4,7 @@ pragma solidity =0.8.13;
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 
+import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165Checker.sol";
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
@@ -14,7 +15,7 @@ import "../access/Roles.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
-contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriodic, AccessControlEnumerable {
+contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable, IPeriodic, AccessControlEnumerable {
     using SafeCast for uint256;
 
     struct BufferMetadata {
@@ -351,6 +352,19 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @inheritdoc IUpdateable
     function timeSinceLastUpdate(bytes memory data) public view virtual override returns (uint256) {
         return block.timestamp - lastUpdateTime(data);
+    }
+
+    /// @inheritdoc ERC165
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, ERC165) returns (bool) {
+        return
+            interfaceId == type(IHistoricalRates).interfaceId ||
+            interfaceId == type(IRateComputer).interfaceId ||
+            interfaceId == type(IUpdateable).interfaceId ||
+            interfaceId == type(IPeriodic).interfaceId ||
+            AccessControlEnumerable.supportsInterface(interfaceId) ||
+            ERC165.supportsInterface(interfaceId);
     }
 
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
