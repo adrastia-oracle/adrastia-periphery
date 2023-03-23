@@ -71,6 +71,10 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @param areUpdatesPaused Whether rate updates are paused for the token.
     event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
 
+    /// @notice Event emitted when the rate configuration for a token is updated.
+    /// @param token The token for which the rate configuration was updated.
+    event RateConfigUpdated(address indexed token);
+
     /// @notice An error that is thrown if we try to initialize a rate buffer that has already been initialized.
     /// @param token The token for which we tried to initialize the rate buffer.
     error BufferAlreadyInitialized(address token);
@@ -161,6 +165,8 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
         }
 
         rateConfigs[token] = config;
+
+        emit RateConfigUpdated(token);
 
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
