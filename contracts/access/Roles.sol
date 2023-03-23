@@ -8,7 +8,7 @@ library Roles {
 
     bytes32 public constant ORACLE_UPDATER = keccak256("ORACLE_UPDATER_ROLE");
 
-    bytes32 public constant RATE_ADMIN = keccak256("RATE_ROLE");
+    bytes32 public constant RATE_ADMIN = keccak256("RATE_ADMIN_ROLE");
 
     bytes32 public constant UPDATE_PAUSE_ADMIN = keccak256("UPDATE_PAUSE_ADMIN_ROLE");
 }
