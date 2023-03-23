@@ -363,8 +363,7 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             interfaceId == type(IRateComputer).interfaceId ||
             interfaceId == type(IUpdateable).interfaceId ||
             interfaceId == type(IPeriodic).interfaceId ||
-            AccessControlEnumerable.supportsInterface(interfaceId) ||
-            ERC165.supportsInterface(interfaceId);
+            super.supportsInterface(interfaceId);
     }
 
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
