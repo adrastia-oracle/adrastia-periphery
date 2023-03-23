@@ -168,7 +168,15 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @param token The token for which to change the pause state.
     /// @param paused Whether rate updates should be paused.
     function setUpdatesPaused(address token, bool paused) external virtual onlyRole(Roles.UPDATE_PAUSE_ADMIN) {
-        rateBufferMetadata[token].pauseUpdates = paused;
+        BufferMetadata storage meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing
+            // It doesn't make sense to pause updates if they can't occur in the first place
+            // Plus, buffer initialization sets the pause state to false, so setting it beforehand can cause confusion
+            revert MissingConfig(token);
+        }
+
+        meta.pauseUpdates = paused;
     }
 
     /// @inheritdoc IRateComputer
