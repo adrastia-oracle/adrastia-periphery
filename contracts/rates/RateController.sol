@@ -112,8 +112,8 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @param token The token for which we tried to set the rate configuration.
     error InvalidConfig(address token);
 
-    /// @notice An error that is thrown if we try to initialize a rate buffer without a rate configuration.
-    /// @param token The token for which we tried to initialize the rate buffer.
+    /// @notice An error that is thrown if we require a rate configuration that has not been set.
+    /// @param token The token for which we require a rate configuration.
     error MissingConfig(address token);
 
     /// @notice Creates a new rate controller.
@@ -137,6 +137,18 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
             revert MissingRole(role);
         }
         _;
+    }
+
+    /// @notice Returns the rate configuration for a token.
+    /// @param token The token for which to get the rate configuration.
+    /// @return The rate configuration for the token.
+    function getConfig(address token) external view virtual returns (RateConfig memory) {
+        BufferMetadata memory meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            revert MissingConfig(token);
+        }
+
+        return rateConfigs[token];
     }
 
     /// @notice Sets the rate configuration for a token. This can only be called by the rate admin.
