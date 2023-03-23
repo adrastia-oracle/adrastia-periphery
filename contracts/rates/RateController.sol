@@ -66,6 +66,11 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
     /// @param timestamp The timestamp at which the rate was pushed.
     event RateUpdated(address indexed token, uint256 target, uint256 current, uint256 timestamp);
 
+    /// @notice Event emitted when the pause status of rate updates for a token is changed.
+    /// @param token The token for which the pause status of rate updates was changed.
+    /// @param areUpdatesPaused Whether rate updates are paused for the token.
+    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
+
     /// @notice An error that is thrown if we try to initialize a rate buffer that has already been initialized.
     /// @param token The token for which we tried to initialize the rate buffer.
     error BufferAlreadyInitialized(address token);
@@ -183,7 +188,11 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
             revert MissingConfig(token);
         }
 
-        meta.pauseUpdates = paused;
+        if (meta.pauseUpdates != paused) {
+            meta.pauseUpdates = paused;
+
+            emit PauseStatusChanged(token, paused);
+        }
     }
 
     /// @inheritdoc IRateComputer
