@@ -164,6 +164,13 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
         }
     }
 
+    /// @notice Determines whether rate updates are paused for a token.
+    /// @param token The token for which to determine whether rate updates are paused.
+    /// @return Whether rate updates are paused for the given token.
+    function areUpdatesPaused(address token) external view virtual returns (bool) {
+        return rateBufferMetadata[token].pauseUpdates;
+    }
+
     /// @notice Changes the pause state of rate updates for a token. This can only be called by the update pause admin.
     /// @param token The token for which to change the pause state.
     /// @param paused Whether rate updates should be paused.
