@@ -4,6 +4,7 @@ pragma solidity =0.8.13;
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 
+import "@openzeppelin-v4/contracts/utils/introspection/ERC165Checker.sol";
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
 
@@ -165,6 +166,13 @@ contract RateController is IHistoricalRates, IRateComputer, IUpdateable, IPeriod
         // have a hard cap on the rate.
         uint256 sum = 0;
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
+            if (
+                address(config.components[i]) == address(0) ||
+                !ERC165Checker.supportsInterface(address(config.components[i]), type(IRateComputer).interfaceId)
+            ) {
+                revert InvalidConfig(token);
+            }
+
             sum += config.componentWeights[i];
         }
         if (sum > 10000) {
