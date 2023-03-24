@@ -1,6 +1,8 @@
-node_modules
+# Secrets
+.env
+.env.*
 
-# Hardhat files
+#Hardhat files
 cache
 artifacts
 
@@ -11,5 +13,17 @@ coverage
 # IDEs
 .vscode
 
+# Generated files
+node_modules
+dist
+typechain
+cache
+
+# OS files
+.DS_Store
+
 # Compilers
 soljson-*
+
+#Local deployment
+deployments/localhost
