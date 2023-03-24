@@ -535,16 +535,16 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
         // Set admin of UPDATE_PAUSE_ADMIN as ADMIN
         _setRoleAdmin(Roles.UPDATE_PAUSE_ADMIN, Roles.ADMIN);
 
-        // Set admin of ORACLE_UPDATER_MANAGER as ADMIN
-        _setRoleAdmin(Roles.ORACLE_UPDATER_MANAGER, Roles.ADMIN);
+        // Set admin of UPDATER_ADMIN as ADMIN
+        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
 
-        // Set admin of ORACLE_UPDATER as ORACLE_UPDATER_MANAGER
-        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.ORACLE_UPDATER_MANAGER);
+        // Set admin of ORACLE_UPDATER as UPDATER_ADMIN
+        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
 
         // Hierarchy:
         // ADMIN
         //   - RATE_ADMIN
-        //   - ORACLE_UPDATER_MANAGER
+        //   - UPDATER_ADMIN
         //     - ORACLE_UPDATER
         //   - UPDATE_PAUSE_ADMIN
     }

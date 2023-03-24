@@ -4,7 +4,7 @@ pragma solidity >=0.5.0 <0.9.0;
 library Roles {
     bytes32 public constant ADMIN = keccak256("ADMIN_ROLE");
 
-    bytes32 public constant ORACLE_UPDATER_MANAGER = keccak256("ORACLE_UPDATER_MANAGER_ROLE");
+    bytes32 public constant UPDATER_ADMIN = keccak256("UPDATER_ADMIN_ROLE");
 
     bytes32 public constant ORACLE_UPDATER = keccak256("ORACLE_UPDATER_ROLE");
 
