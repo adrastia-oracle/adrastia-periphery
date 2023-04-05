@@ -79,7 +79,7 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
 
     /// @notice Event emitted when the rate configuration for a token is updated.
     /// @param token The token for which the rate configuration was updated.
-    event RateConfigUpdated(address indexed token);
+    event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig);
 
     /// @notice An error that is thrown if we try to initialize a rate buffer that has already been initialized.
     /// @param token The token for which we tried to initialize the rate buffer.
@@ -196,9 +196,11 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             revert InvalidConfig(token);
         }
 
+        RateConfig memory oldConfig = rateConfigs[token];
+
         rateConfigs[token] = config;
 
-        emit RateConfigUpdated(token);
+        emit RateConfigUpdated(token, oldConfig, config);
 
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {

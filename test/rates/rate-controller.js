@@ -26,6 +26,14 @@ const DEFAULT_CONFIG = {
     components: [],
 };
 
+const ZERO_CONFIG = {
+    maxIncrease: BigNumber.from(0),
+    maxDecrease: BigNumber.from(0),
+    base: BigNumber.from(0),
+    componentWeights: [],
+    components: [],
+};
+
 async function currentBlockTimestamp() {
     const currentBlockNumber = await ethers.provider.getBlockNumber();
 
@@ -367,7 +375,16 @@ describe("RateController#setConfig", function () {
     });
 
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
 
         // Sanity check that the new config is set
         const newConfig = await controller.getConfig(GRT);
@@ -379,8 +396,27 @@ describe("RateController#setConfig", function () {
     });
 
     it("Should emit a RateConfigUpdated event if the config is valid and we call the function multiple times", async function () {
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx1 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx1).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt1 = await tx1.wait();
+        const event1 = receipt1.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event1?.args?.token).to.equal(GRT);
+        expect(event1?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event1?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+
+        const tx2 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx2).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt2 = await tx2.wait();
+        const event2 = receipt2.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event2?.args?.token).to.equal(GRT);
+        expect(event2?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+        expect(event2?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
 
         // Sanity check that the new config is set
         const newConfig = await controller.getConfig(GRT);
@@ -439,7 +475,16 @@ describe("RateController#setConfig", function () {
             components: [computer.address],
         };
 
-        await expect(controller.setConfig(GRT, secondConfig)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx = await controller.setConfig(GRT, secondConfig);
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(secondConfig));
 
         // Sanity check that the new config is set
         const newConfig2 = await controller.getConfig(GRT);
