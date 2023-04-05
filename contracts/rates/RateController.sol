@@ -37,6 +37,10 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @notice The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     uint256 public immutable override period;
 
+    /// @notice True if all rate updaters must be EOA accounts; false otherwise.
+    /// @dev This is a security feature to prevent malicious contracts from updating rates.
+    bool public immutable updatersMustBeEoa;
+
     /// @notice Maps a token to its metadata.
     mapping(address => BufferMetadata) internal rateBufferMetadata;
 
@@ -118,14 +122,21 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @param token The token for which we require a rate configuration.
     error MissingConfig(address token);
 
+    /// @notice An error that is thrown if we require that all rate updaters be EOA accounts, but the updater is not.
+    /// @param txOrigin The address of the transaction origin.
+    /// @param updater The address of the rate updater.
+    error UpdaterMustBeEoa(address txOrigin, address updater);
+
     /// @notice Creates a new rate controller.
     /// @param period_ The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     /// @param initialBufferCardinality_ The initial capacity of the rate buffer.
-    constructor(uint32 period_, uint8 initialBufferCardinality_) {
+    /// @param updatersMustBeEoa_ True if all rate updaters must be EOA accounts; false otherwise.
+    constructor(uint32 period_, uint8 initialBufferCardinality_, bool updatersMustBeEoa_) {
         initializeRoles();
 
         period = period_;
         initialBufferCardinality = initialBufferCardinality_;
+        updatersMustBeEoa = updatersMustBeEoa_;
     }
 
     /**
@@ -339,7 +350,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             // Can only update if the update is needed
             needsUpdate(data) &&
             // Can only update if the sender is an oracle updater or the oracle updater role is open
-            (hasRole(Roles.ORACLE_UPDATER, address(0)) || hasRole(Roles.ORACLE_UPDATER, msg.sender));
+            (hasRole(Roles.ORACLE_UPDATER, address(0)) || hasRole(Roles.ORACLE_UPDATER, msg.sender)) &&
+            // Can only update if the sender is an EOA or the contract allows EOA updates
+            (!updatersMustBeEoa || msg.sender == tx.origin);
     }
 
     /// @inheritdoc IUpdateable
@@ -491,6 +504,11 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     }
 
     function performUpdate(bytes memory data) internal virtual returns (bool) {
+        if (updatersMustBeEoa && msg.sender != tx.origin) {
+            // Only EOA can update
+            revert UpdaterMustBeEoa(tx.origin, msg.sender);
+        }
+
         address token = abi.decode(data, (address));
 
         // Compute the target rate
