@@ -20,6 +20,8 @@ const INITIAL_BUFFER_CARDINALITY = 2;
 const DEFAULT_CONFIG = {
     maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
     maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
+    maxPercentIncrease: BigNumber.from(10000), // 100%
+    maxPercentDecrease: BigNumber.from(10000), // 100%
     base: ethers.utils.parseUnits("0.6", 18), // 60%
     componentWeights: [],
     components: [],
@@ -234,6 +236,7 @@ describe("RateController#setConfig", function () {
 
     it("Should revert if there's a component length mismatch (componentWeights.length = 1, components.length = 0)", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: ethers.utils.parseUnits("0.6", 18), // 60%
@@ -246,6 +249,7 @@ describe("RateController#setConfig", function () {
 
     it("Should revert if there's a component length mismatch (componentWeights.length = 0, components.length = 1)", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: ethers.utils.parseUnits("0.6", 18), // 60%
@@ -256,8 +260,18 @@ describe("RateController#setConfig", function () {
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
     });
 
+    it("Should revert if the max percent decrease is greater than 100%", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            maxPercentDecrease: BigNumber.from(10001),
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+    });
+
     it("Should revert if the sum of the component weights is greater than 10000 (with one component)", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: ethers.utils.parseUnits("0", 18), // 0%
@@ -270,6 +284,7 @@ describe("RateController#setConfig", function () {
 
     it("Should revert if the sum of the component weights is greater than 10000 (with two components)", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: ethers.utils.parseUnits("0", 18), // 0%
@@ -282,6 +297,7 @@ describe("RateController#setConfig", function () {
 
     it("Should revert if a rate overflow is possible", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: BigNumber.from(1),
@@ -294,6 +310,7 @@ describe("RateController#setConfig", function () {
 
     it("Should revert when a component with the zero address is provided", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: BigNumber.from(1),
@@ -312,6 +329,7 @@ describe("RateController#setConfig", function () {
         await badComputerInstance.deployed();
 
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: BigNumber.from(1),
@@ -330,6 +348,7 @@ describe("RateController#setConfig", function () {
         await badComputerInstance.deployed();
 
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
             maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
             base: BigNumber.from(1),
@@ -406,8 +425,11 @@ describe("RateController#setConfig", function () {
         expect(newConfig.components).to.deep.equal(DEFAULT_CONFIG.components);
 
         const secondConfig = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
             maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
+            maxPercentIncrease: BigNumber.from(1000), // 10%
+            maxPercentDecrease: BigNumber.from(2000), // 20%
             base: ethers.utils.parseUnits("0", 18), // 0%
             componentWeights: [10000],
             components: [computer.address],
@@ -641,6 +663,7 @@ describe("RateController#computeRate", function () {
 
                 // Set the config
                 const config = {
+                    ...DEFAULT_CONFIG,
                     maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
                     maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
                     base: test.base,
@@ -660,6 +683,7 @@ describe("RateController#computeRate", function () {
 
     it("Should return the base rate if no components are specified", async function () {
         const config = {
+            ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
             maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
             base: ethers.utils.parseUnits("0.05", 18), // 5%
@@ -1108,6 +1132,13 @@ describe("RateController#update", function () {
 
         const targetRate = DEFAULT_CONFIG.base.add(DEFAULT_CONFIG.maxIncrease.mul(3));
 
+        // Sanity check that that max increase cap is more strict than the max percent increase cap
+        const targetRateCappedByMaxIncrease = currentRate.add(DEFAULT_CONFIG.maxIncrease);
+        const targetRateCappedByMaxPercentIncrease = currentRate.add(
+            currentRate.mul(DEFAULT_CONFIG.maxPercentIncrease).div(10000)
+        );
+        expect(targetRateCappedByMaxIncrease).to.be.lt(targetRateCappedByMaxPercentIncrease);
+
         // Change the target rate
         await controller.setConfig(GRT, {
             ...DEFAULT_CONFIG,
@@ -1144,6 +1175,13 @@ describe("RateController#update", function () {
 
         const targetRate = DEFAULT_CONFIG.base.sub(DEFAULT_CONFIG.maxDecrease.mul(3));
 
+        // Sanity check that that max decrease cap is more strict than the max percent decrease cap
+        const targetRateCappedByMaxDecrease = currentRate.sub(DEFAULT_CONFIG.maxDecrease);
+        const targetRateCappedByMaxPercentDecrease = currentRate.sub(
+            currentRate.mul(DEFAULT_CONFIG.maxPercentDecrease).div(10000)
+        );
+        expect(targetRateCappedByMaxDecrease).to.be.gt(targetRateCappedByMaxPercentDecrease);
+
         // Change the target rate
         await controller.setConfig(GRT, {
             ...DEFAULT_CONFIG,
@@ -1166,6 +1204,88 @@ describe("RateController#update", function () {
 
         expect(latestRate.target).to.equal(targetRate);
         expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Rate increases are limited by the max rate percent increase", async function () {
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // Push INITIAL_BUFFER_CARDINALITY updates
+        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+            await controller.stubPush(GRT, currentRate, currentRate, 1);
+        }
+
+        const maxIncrease = ethers.utils.parseUnits("1.0", 18);
+        const maxPercentIncrease = BigNumber.from(10); // 0.1%
+
+        const cappedRate = currentRate.add(currentRate.mul(maxPercentIncrease).div(10000));
+        const targetRate = cappedRate.add(1);
+
+        // Sanity check that max percent increase cap is more strict than the max increase cap
+        expect(cappedRate).to.be.lt(DEFAULT_CONFIG.base.add(maxIncrease));
+
+        // Change the target rate
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            maxIncrease: maxIncrease,
+            maxPercentIncrease: maxPercentIncrease,
+            base: targetRate,
+        });
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const updateTx = await controller.update(updateData);
+
+        const currentTime = await currentBlockTimestamp();
+
+        await expect(updateTx).to.emit(controller, "RateUpdated").withArgs(GRT, targetRate, cappedRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(cappedRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Rate decreases are limited by the max rate percent decrease", async function () {
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // Push INITIAL_BUFFER_CARDINALITY updates
+        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+            await controller.stubPush(GRT, currentRate, currentRate, 1);
+        }
+
+        const maxDecrease = ethers.utils.parseUnits("1.0", 18);
+        const maxPercentDecrease = BigNumber.from(10); // 0.1%
+
+        const cappedRate = currentRate.sub(currentRate.mul(maxPercentDecrease).div(10000));
+        const targetRate = cappedRate.sub(1);
+
+        // Sanity check that max percent increase cap is more strict than the max increase cap
+        expect(cappedRate).to.be.gt(currentRate.sub(maxDecrease));
+
+        // Change the target rate
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            maxDecrease: maxDecrease,
+            maxPercentDecrease: maxPercentDecrease,
+            base: targetRate,
+        });
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const updateTx = await controller.update(updateData);
+
+        const currentTime = await currentBlockTimestamp();
+
+        await expect(updateTx).to.emit(controller, "RateUpdated").withArgs(GRT, targetRate, cappedRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(cappedRate);
         expect(latestRate.timestamp).to.equal(currentTime);
     });
 

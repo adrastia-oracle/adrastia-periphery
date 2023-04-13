@@ -1,3 +1,4 @@
+const { BigNumber } = require("ethers");
 const hre = require("hardhat");
 
 const ethers = hre.ethers;
@@ -5,12 +6,16 @@ const ethers = hre.ethers;
 async function main() {
     const token = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619";
 
-    // The following configuration assumes that 1e18 = 100%
+    // The following configuration assumes that 1e18 = 100% for rates
 
     // The maximum increase in the rate per update
     const maxIncrease = ethers.utils.parseUnits("0.02", 18); // 2%
     // The maximum decrease in the rate per update
     const maxDecrease = ethers.utils.parseUnits("0.01", 18); // 1%
+    // The maximum percent increase in the rate per update
+    const maxPercentIncrease = BigNumber.from(10000); // 100%
+    // The maximum percent decrease in the rate per update
+    const maxPercentDecrease = BigNumber.from(1000); // 10%
     // The base rate
     const baseRate = ethers.utils.parseUnits("0.6", 18); // 60%
     // Dynamic rate components
@@ -33,6 +38,10 @@ async function main() {
         maxIncrease.toString() +
         '","' +
         maxDecrease.toString() +
+        '","' +
+        maxPercentIncrease.toString() +
+        '","' +
+        maxPercentDecrease.toString() +
         '","' +
         baseRate.toString() +
         '",' +

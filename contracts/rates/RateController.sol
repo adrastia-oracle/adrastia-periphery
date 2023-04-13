@@ -29,6 +29,8 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     struct RateConfig {
         uint64 maxIncrease;
         uint64 maxDecrease;
+        uint32 maxPercentIncrease; // 10000 = 100%
+        uint16 maxPercentDecrease; // 10000 = 100%
         uint64 base;
         uint16[] componentWeights; // 10000 = 100%
         IRateComputer[] components;
@@ -158,6 +160,11 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @param config The rate configuration to set.
     function setConfig(address token, RateConfig calldata config) external virtual onlyRole(Roles.RATE_ADMIN) {
         if (config.components.length != config.componentWeights.length) {
+            revert InvalidConfig(token);
+        }
+
+        if (config.maxPercentDecrease > 10000) {
+            // The maximum percent decrease must be less than or equal to 100%.
             revert InvalidConfig(token);
         }
 
@@ -366,6 +373,7 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             super.supportsInterface(interfaceId);
     }
 
+    // TODO: If the rate is capped, the rate will not change.
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
         address token = abi.decode(data, (address));
 
@@ -506,14 +514,30 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             uint64 last = rateBuffers[token][meta.end].current;
 
             if (newRate > last) {
+                // Clamp the rate to the maximum constant increase
                 if (newRate - last > config.maxIncrease) {
                     // The new rate is too high, so we change it by the maximum increase
                     newRate = last + config.maxIncrease;
                 }
+
+                // Clamp the rate to the maximum percentage increase
+                uint256 maxIncreaseAbsolute = (uint256(last) * config.maxPercentIncrease) / 10000;
+                if (newRate - last > maxIncreaseAbsolute) {
+                    // The new rate is too high, so we change it by the maximum percentage increase
+                    newRate = last + uint64(maxIncreaseAbsolute);
+                }
             } else if (newRate < last) {
+                // Clamp the rate to the maximum constant decrease
                 if (last - newRate > config.maxDecrease) {
                     // The new rate is too low, so we change it by the maximum decrease
                     newRate = last - config.maxDecrease;
+                }
+
+                // Clamp the rate to the maximum percentage decrease
+                uint256 maxDecreaseAbsolute = (uint256(last) * config.maxPercentDecrease) / 10000;
+                if (last - newRate > maxDecreaseAbsolute) {
+                    // The new rate is too low, so we change it by the maximum percentage decrease
+                    newRate = last - uint64(maxDecreaseAbsolute);
                 }
             }
         }
