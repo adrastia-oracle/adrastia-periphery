@@ -11,7 +11,11 @@ contract RateControllerStub is RateController {
 
     Config public config;
 
-    constructor(uint32 period_, uint8 initialBufferCardinality_) RateController(period_, initialBufferCardinality_) {}
+    constructor(
+        uint32 period_,
+        uint8 initialBufferCardinality_,
+        bool updatersMustBeEoa_
+    ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     function stubPush(address token, uint64 target, uint64 current, uint32 timestamp) public {
         RateLibrary.Rate memory rate;
@@ -39,5 +43,21 @@ contract RateControllerStub is RateController {
     function needsUpdate(bytes memory data) public view virtual override returns (bool) {
         if (config.needsUpdateOverridden) return config.needsUpdate;
         else return super.needsUpdate(data);
+    }
+}
+
+contract RateControllerStubCaller {
+    RateControllerStub immutable callee;
+
+    constructor(RateControllerStub callee_) {
+        callee = callee_;
+    }
+
+    function canUpdate(bytes memory data) public view returns (bool) {
+        return callee.canUpdate(data);
+    }
+
+    function update(bytes memory data) public returns (bool) {
+        return callee.update(data);
     }
 }

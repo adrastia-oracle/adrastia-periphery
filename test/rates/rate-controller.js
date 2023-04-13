@@ -15,6 +15,7 @@ const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
 const PERIOD = 100;
 const INITIAL_BUFFER_CARDINALITY = 2;
+const UPDATERS_MUST_BE_EOA = false;
 
 // In this example, 1e18 = 100%
 const DEFAULT_CONFIG = {
@@ -23,6 +24,14 @@ const DEFAULT_CONFIG = {
     maxPercentIncrease: BigNumber.from(10000), // 100%
     maxPercentDecrease: BigNumber.from(10000), // 100%
     base: ethers.utils.parseUnits("0.6", 18), // 60%
+    componentWeights: [],
+    components: [],
+};
+
+const ZERO_CONFIG = {
+    maxIncrease: BigNumber.from(0),
+    maxDecrease: BigNumber.from(0),
+    base: BigNumber.from(0),
     componentWeights: [],
     components: [],
 };
@@ -48,14 +57,32 @@ describe("RateController#constructor", function () {
         {
             period: 1,
             initialBufferCardinality: 1,
+            updaterMustBeEoa: false,
         },
         {
             period: 2,
             initialBufferCardinality: 1,
+            updaterMustBeEoa: false,
         },
         {
             period: 1,
             initialBufferCardinality: 2,
+            updaterMustBeEoa: false,
+        },
+        {
+            period: 1,
+            initialBufferCardinality: 1,
+            updaterMustBeEoa: true,
+        },
+        {
+            period: 2,
+            initialBufferCardinality: 1,
+            updaterMustBeEoa: true,
+        },
+        {
+            period: 1,
+            initialBufferCardinality: 2,
+            updaterMustBeEoa: true,
         },
     ];
 
@@ -63,13 +90,20 @@ describe("RateController#constructor", function () {
         it(
             "Should deploy with period " +
                 test.period +
-                " and initialBufferCardinality " +
-                test.initialBufferCardinality,
+                ", initialBufferCardinality " +
+                test.initialBufferCardinality +
+                ", and updaterMustBeEoa " +
+                test.updaterMustBeEoa,
             async function () {
-                const rateController = await factory.deploy(test.period, test.initialBufferCardinality);
+                const rateController = await factory.deploy(
+                    test.period,
+                    test.initialBufferCardinality,
+                    test.updaterMustBeEoa
+                );
 
                 expect(await rateController.period()).to.equal(test.period);
                 expect(await rateController.getRatesCapacity(GRT)).to.equal(test.initialBufferCardinality);
+                expect(await rateController.updatersMustBeEoa()).to.equal(test.updaterMustBeEoa);
 
                 // Granularity should always be 1
                 expect(await rateController.granularity()).to.equal(1);
@@ -84,7 +118,7 @@ describe("RateController#push", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
     });
 
     it("Should initialize the buffer if it hasn't been initialized", async function () {
@@ -101,7 +135,7 @@ describe("RateController#setUpdatesPaused", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -194,7 +228,7 @@ describe("RateController#setConfig", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         const computerFactory = await ethers.getContractFactory("RateComputerStub");
 
@@ -360,7 +394,16 @@ describe("RateController#setConfig", function () {
     });
 
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
 
         // Sanity check that the new config is set
         const newConfig = await controller.getConfig(GRT);
@@ -372,8 +415,27 @@ describe("RateController#setConfig", function () {
     });
 
     it("Should emit a RateConfigUpdated event if the config is valid and we call the function multiple times", async function () {
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
-        await expect(controller.setConfig(GRT, DEFAULT_CONFIG)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx1 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx1).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt1 = await tx1.wait();
+        const event1 = receipt1.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event1?.args?.token).to.equal(GRT);
+        expect(event1?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event1?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+
+        const tx2 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await expect(tx2).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt2 = await tx2.wait();
+        const event2 = receipt2.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event2?.args?.token).to.equal(GRT);
+        expect(event2?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+        expect(event2?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
 
         // Sanity check that the new config is set
         const newConfig = await controller.getConfig(GRT);
@@ -435,7 +497,16 @@ describe("RateController#setConfig", function () {
             components: [computer.address],
         };
 
-        await expect(controller.setConfig(GRT, secondConfig)).to.emit(controller, "RateConfigUpdated").withArgs(GRT);
+        const tx = await controller.setConfig(GRT, secondConfig);
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(secondConfig));
 
         // Sanity check that the new config is set
         const newConfig2 = await controller.getConfig(GRT);
@@ -453,7 +524,7 @@ describe("RateController#getConfig", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -489,7 +560,7 @@ describe("RateController#computeRate", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -705,7 +776,7 @@ describe("RateController#timeSinceLastUpdate", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -756,7 +827,7 @@ describe("RateController#lastUpdateTime", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -796,10 +867,10 @@ describe("RateController#lastUpdateTime", function () {
 describe("RateController#canUpdate", function () {
     var controller;
 
-    beforeEach(async () => {
+    async function deploy(updatersMustBeEOA) {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, updatersMustBeEOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -812,6 +883,10 @@ describe("RateController#canUpdate", function () {
 
         // Set config for GRT
         await controller.setConfig(GRT, DEFAULT_CONFIG);
+    }
+
+    beforeEach(async () => {
+        await deploy(false);
     });
 
     it("Should return false if it doesn't need an update", async function () {
@@ -884,6 +959,118 @@ describe("RateController#canUpdate", function () {
 
         expect(canUpdate).to.be.true;
     });
+
+    it("Can't update if the updaters must be EOA and the sender is a contract, with the updater having the required role", async function () {
+        // Redeploy with updatersMustBeEOA = true
+        await deploy(true);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // needsUpdate should return true
+        await controller.overrideNeedsUpdate(true, true);
+
+        // Revoke the role from everyone
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        // Grant the role to the caller contract
+        await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const canUpdate = await caller.canUpdate(updateData);
+        const canUpdateWithEoa = await controller.canUpdate(updateData);
+
+        expect(canUpdate).to.be.false;
+
+        // Sanity check that EOA can update
+        expect(canUpdateWithEoa).to.be.true;
+    });
+
+    it("Can't update if the updaters must be EOA and the sender is a contract, with the required role being open", async function () {
+        // Redeploy with updatersMustBeEOA = true
+        await deploy(true);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // needsUpdate should return true
+        await controller.overrideNeedsUpdate(true, true);
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Revoke the role from the signer
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to everyone
+        await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const canUpdate = await caller.canUpdate(updateData);
+        const canUpdateWithEoa = await controller.canUpdate(updateData);
+
+        expect(canUpdate).to.be.false;
+
+        // Sanity check that EOA can update
+        expect(canUpdateWithEoa).to.be.true;
+    });
+
+    it("Can update if the updaters don't have to be EOA and the sender is a contract, with the updater having the required role", async function () {
+        // Redeploy with updatersMustBeEOA = false
+        await deploy(false);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // needsUpdate should return true
+        await controller.overrideNeedsUpdate(true, true);
+
+        // Revoke the role from everyone
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        // Grant the role to the caller contract
+        await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const canUpdate = await caller.canUpdate(updateData);
+
+        expect(canUpdate).to.be.true;
+    });
+
+    it("Can update if the updaters don't have to be EOA and the sender is a contract, with the required role being open", async function () {
+        // Redeploy with updatersMustBeEOA = false
+        await deploy(false);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // needsUpdate should return true
+        await controller.overrideNeedsUpdate(true, true);
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Revoke the role from the signer
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to everyone
+        await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const canUpdate = await caller.canUpdate(updateData);
+
+        expect(canUpdate).to.be.true;
+    });
 });
 
 describe("RateController#needsUpdate", function () {
@@ -892,7 +1079,7 @@ describe("RateController#needsUpdate", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -1009,10 +1196,10 @@ describe("RateController#needsUpdate", function () {
 describe("RateController#update", function () {
     var controller;
 
-    beforeEach(async () => {
+    async function deploy(updatersMustBeEoa) {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, updatersMustBeEoa);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -1025,6 +1212,108 @@ describe("RateController#update", function () {
 
         // Set config for GRT
         await controller.setConfig(GRT, DEFAULT_CONFIG);
+    }
+
+    beforeEach(async () => {
+        await deploy(false);
+    });
+
+    it("Reverts if the caller is a smart contract and updatersMustBeEoa is true, with the caller contract having the required role", async function () {
+        // Deploy a new controller with updatersMustBeEoa set to true
+        await deploy(true);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Grant the role to the signer
+        await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to the caller contract
+        await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+        // Revoke the role from everyone
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        await expect(caller.update(updateData)).to.be.revertedWith("UpdaterMustBeEoa");
+
+        // Sanity check that the signer can update
+        await expect(controller.update(updateData)).to.not.be.reverted;
+    });
+
+    it("Reverts if the caller is a smart contract and updatersMustBeEoa is true, with the required role being open", async function () {
+        // Deploy a new controller with updatersMustBeEoa set to true
+        await deploy(true);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Revoke the role from the signer
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to everyone
+        await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        await expect(caller.update(updateData)).to.be.revertedWith("UpdaterMustBeEoa");
+
+        // Sanity check that the signer can update
+        await expect(controller.update(updateData)).to.not.be.reverted;
+    });
+
+    it("Works if the caller is a smart contract and updatersMustBeEoa is false, with the caller contract having the required role", async function () {
+        // Deploy a new controller with updatersMustBeEoa set to false
+        await deploy(false);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Grant the role to the signer
+        await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to the caller contract
+        await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+        // Revoke the role from everyone
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        await expect(caller.update(updateData)).to.not.be.reverted;
+    });
+
+    it("Works if the caller is a smart contract and updatersMustBeEoa is false, with the required role being open", async function () {
+        // Deploy a new controller with updatersMustBeEoa set to false
+        await deploy(false);
+
+        // Deploy the caller contract
+        const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+        const caller = await callerFactory.deploy(controller.address);
+        await caller.deployed();
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Revoke the role from the signer
+        await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+        // Grant the role to everyone
+        await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        await expect(caller.update(updateData)).to.not.be.reverted;
     });
 
     it("Reverts if the caller doesn't have the ORACLE_UPDATER_ROLE", async function () {
@@ -1392,7 +1681,7 @@ describe("RateController - IHistoricalRates implementation", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -2153,7 +2442,7 @@ describe("RateController#supportsInterface", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("RateControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY);
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
 
         const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
         interfaceIds = await interfaceIdsFactory.deploy();
