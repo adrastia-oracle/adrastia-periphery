@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "../../rates/RateController.sol";
+import "../../rates/ManagedRateController.sol";
 
-contract RateControllerStub is RateController {
+contract RateControllerStub is ManagedRateController {
     struct Config {
         bool needsUpdateOverridden;
         bool needsUpdate;
@@ -15,7 +15,7 @@ contract RateControllerStub is RateController {
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) ManagedRateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     function stubPush(address token, uint64 target, uint64 current, uint32 timestamp) public {
         RateLibrary.Rate memory rate;

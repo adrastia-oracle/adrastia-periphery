@@ -6,16 +6,14 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165Checker.sol";
-import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
 
 import "./IHistoricalRates.sol";
 import "./IRateComputer.sol";
-import "../access/Roles.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
-contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable, IPeriodic, AccessControlEnumerable {
+abstract contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable, IPeriodic {
     using SafeCast for uint256;
 
     struct BufferMetadata {
@@ -87,11 +85,6 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @param token The token for which we tried to initialize the rate buffer.
     error BufferAlreadyInitialized(address token);
 
-    /// @notice An error that is thrown if we're missing a required role.
-    /// @dev A different error is thrown when using the `onlyRole` modifier.
-    /// @param requiredRole The role (hash) that we're missing.
-    error MissingRole(bytes32 requiredRole);
-
     /// @notice An error that is thrown if we try to retrieve a rate at an invalid index.
     /// @param token The token for which we tried to retrieve the rate.
     /// @param index The index of the rate that we tried to retrieve.
@@ -134,24 +127,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @param initialBufferCardinality_ The initial capacity of the rate buffer.
     /// @param updatersMustBeEoa_ True if all rate updaters must be EOA accounts; false otherwise.
     constructor(uint32 period_, uint8 initialBufferCardinality_, bool updatersMustBeEoa_) {
-        initializeRoles();
-
         period = period_;
         initialBufferCardinality = initialBufferCardinality_;
         updatersMustBeEoa = updatersMustBeEoa_;
-    }
-
-    /**
-     * @notice Modifier to make a function callable only by a certain role. In
-     * addition to checking the sender's role, `address(0)` 's role is also
-     * considered. Granting a role to `address(0)` is equivalent to enabling
-     * this role for everyone.
-     */
-    modifier onlyRoleOrOpenRole(bytes32 role) {
-        if (!hasRole(role, address(0)) && !hasRole(role, msg.sender)) {
-            revert MissingRole(role);
-        }
-        _;
     }
 
     /// @notice Returns the rate configuration for a token.
@@ -169,7 +147,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @notice Sets the rate configuration for a token. This can only be called by the rate admin.
     /// @param token The token for which to set the rate configuration.
     /// @param config The rate configuration to set.
-    function setConfig(address token, RateConfig calldata config) external virtual onlyRole(Roles.RATE_ADMIN) {
+    function setConfig(address token, RateConfig calldata config) external virtual {
+        checkSetConfig();
+
         if (config.components.length != config.componentWeights.length) {
             revert InvalidConfig(token);
         }
@@ -226,7 +206,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @notice Changes the pause state of rate updates for a token. This can only be called by the update pause admin.
     /// @param token The token for which to change the pause state.
     /// @param paused Whether rate updates should be paused.
-    function setUpdatesPaused(address token, bool paused) external virtual onlyRole(Roles.UPDATE_PAUSE_ADMIN) {
+    function setUpdatesPaused(address token, bool paused) external virtual {
+        checkSetUpdatesPaused();
+
         BufferMetadata storage meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
             // Uninitialized buffer means that the rate config is missing
@@ -296,7 +278,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     /// @param amount The new capacity of rates for the token. Must be greater than the current capacity, but
     ///   less than 256.
     /// @inheritdoc IHistoricalRates
-    function setRatesCapacity(address token, uint256 amount) external virtual onlyRole(Roles.ADMIN) {
+    function setRatesCapacity(address token, uint256 amount) external virtual {
+        checkSetRatesCapacity();
+
         BufferMetadata storage meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
             // Buffer is not initialized yet
@@ -330,9 +314,9 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     }
 
     /// @inheritdoc IUpdateable
-    function update(
-        bytes memory data
-    ) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool b) {
+    function update(bytes memory data) public virtual override returns (bool b) {
+        checkUpdate();
+
         if (needsUpdate(data)) return performUpdate(data);
 
         return false;
@@ -358,8 +342,6 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
         return
             // Can only update if the update is needed
             needsUpdate(data) &&
-            // Can only update if the sender is an oracle updater or the oracle updater role is open
-            (hasRole(Roles.ORACLE_UPDATER, address(0)) || hasRole(Roles.ORACLE_UPDATER, msg.sender)) &&
             // Can only update if the sender is an EOA or the contract allows EOA updates
             (!updatersMustBeEoa || msg.sender == tx.origin);
     }
@@ -377,9 +359,7 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
     }
 
     /// @inheritdoc ERC165
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(AccessControlEnumerable, ERC165) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
         return
             interfaceId == type(IHistoricalRates).interfaceId ||
             interfaceId == type(IRateComputer).interfaceId ||
@@ -571,28 +551,11 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
         return true;
     }
 
-    function initializeRoles() internal virtual {
-        // Setup admin role, setting msg.sender as admin
-        _setupRole(Roles.ADMIN, msg.sender);
-        _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
+    function checkSetConfig() internal view virtual;
 
-        // Set admin of RATE_ADMIN as ADMIN
-        _setRoleAdmin(Roles.RATE_ADMIN, Roles.ADMIN);
+    function checkSetUpdatesPaused() internal view virtual;
 
-        // Set admin of UPDATE_PAUSE_ADMIN as ADMIN
-        _setRoleAdmin(Roles.UPDATE_PAUSE_ADMIN, Roles.ADMIN);
+    function checkSetRatesCapacity() internal view virtual;
 
-        // Set admin of UPDATER_ADMIN as ADMIN
-        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
-
-        // Set admin of ORACLE_UPDATER as UPDATER_ADMIN
-        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
-
-        // Hierarchy:
-        // ADMIN
-        //   - RATE_ADMIN
-        //   - UPDATER_ADMIN
-        //     - ORACLE_UPDATER
-        //   - UPDATE_PAUSE_ADMIN
-    }
+    function checkUpdate() internal view virtual;
 }

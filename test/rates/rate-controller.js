@@ -52,7 +52,7 @@ describe("RateController#constructor", function () {
     var factory;
 
     beforeEach(async () => {
-        factory = await ethers.getContractFactory("RateController");
+        factory = await ethers.getContractFactory("ManagedRateController");
     });
 
     const tests = [
