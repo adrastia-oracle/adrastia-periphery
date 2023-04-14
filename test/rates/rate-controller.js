@@ -21,8 +21,8 @@ const UPDATERS_MUST_BE_EOA = false;
 const DEFAULT_CONFIG = {
     maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
     maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
-    maxPercentIncrease: BigNumber.from(10000), // 100%
-    maxPercentDecrease: BigNumber.from(10000), // 100%
+    maxPercentIncrease: 10000, // 100%
+    maxPercentDecrease: 10000, // 100%
     base: ethers.utils.parseUnits("0.6", 18), // 60%
     componentWeights: [],
     components: [],
@@ -31,6 +31,8 @@ const DEFAULT_CONFIG = {
 const ZERO_CONFIG = {
     maxIncrease: BigNumber.from(0),
     maxDecrease: BigNumber.from(0),
+    maxPercentIncrease: 0,
+    maxPercentDecrease: 0,
     base: BigNumber.from(0),
     componentWeights: [],
     components: [],
@@ -401,6 +403,7 @@ describe("RateController#setConfig", function () {
         // Check the event args
         const receipt = await tx.wait();
         const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        console.log(event?.args?.oldConfig);
         expect(event?.args?.token).to.equal(GRT);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -482,6 +485,8 @@ describe("RateController#setConfig", function () {
         const newConfig = await controller.getConfig(GRT);
         expect(newConfig.maxIncrease).to.equal(DEFAULT_CONFIG.maxIncrease);
         expect(newConfig.maxDecrease).to.equal(DEFAULT_CONFIG.maxDecrease);
+        expect(newConfig.maxPercentIncrease).to.equal(DEFAULT_CONFIG.maxPercentIncrease);
+        expect(newConfig.maxPercentDecrease).to.equal(DEFAULT_CONFIG.maxPercentDecrease);
         expect(newConfig.base).to.equal(DEFAULT_CONFIG.base);
         expect(newConfig.componentWeights).to.deep.equal(DEFAULT_CONFIG.componentWeights);
         expect(newConfig.components).to.deep.equal(DEFAULT_CONFIG.components);
@@ -490,8 +495,8 @@ describe("RateController#setConfig", function () {
             ...DEFAULT_CONFIG,
             maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
             maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
-            maxPercentIncrease: BigNumber.from(1000), // 10%
-            maxPercentDecrease: BigNumber.from(2000), // 20%
+            maxPercentIncrease: 1000, // 10%
+            maxPercentDecrease: 2000, // 20%
             base: ethers.utils.parseUnits("0", 18), // 0%
             componentWeights: [10000],
             components: [computer.address],
@@ -512,6 +517,8 @@ describe("RateController#setConfig", function () {
         const newConfig2 = await controller.getConfig(GRT);
         expect(newConfig2.maxIncrease).to.equal(secondConfig.maxIncrease);
         expect(newConfig2.maxDecrease).to.equal(secondConfig.maxDecrease);
+        expect(newConfig2.maxPercentIncrease).to.equal(secondConfig.maxPercentIncrease);
+        expect(newConfig2.maxPercentDecrease).to.equal(secondConfig.maxPercentDecrease);
         expect(newConfig2.base).to.equal(secondConfig.base);
         expect(newConfig2.componentWeights).to.deep.equal(secondConfig.componentWeights);
         expect(newConfig2.components).to.deep.equal(secondConfig.components);
@@ -1635,7 +1642,7 @@ describe("RateController#update", function () {
         }
 
         const maxIncrease = ethers.utils.parseUnits("1.0", 18);
-        const maxPercentIncrease = BigNumber.from(10); // 0.1%
+        const maxPercentIncrease = 10; // 0.1%
 
         const cappedRate = currentRate.add(currentRate.mul(maxPercentIncrease).div(10000));
         const targetRate = cappedRate.add(1);
