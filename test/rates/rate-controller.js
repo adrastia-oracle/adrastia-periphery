@@ -1142,7 +1142,7 @@ describe("RateController#needsUpdate", function () {
         expect(needsUpdate).to.be.false;
 
         // Sanity check that it needs an update if the rate changes
-        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base + 1 });
+        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base.add(1) });
         expect(await controller.needsUpdate(updateData)).to.be.true;
     });
 
@@ -1164,7 +1164,7 @@ describe("RateController#needsUpdate", function () {
         }
 
         // Change the base
-        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base + 1 });
+        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base.add(1) });
 
         const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
@@ -1183,7 +1183,7 @@ describe("RateController#needsUpdate", function () {
         }
 
         // Change the target
-        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base + 1 });
+        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base.add(1) });
 
         const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
@@ -1191,6 +1191,135 @@ describe("RateController#needsUpdate", function () {
 
         expect(needsUpdate).to.be.true;
     });
+
+    it("Should return true if the current and next rates are capped, but there's still a different current rate in the buffer", async function () {
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        const capacity = 10;
+
+        await controller.setRatesCapacity(GRT, capacity);
+
+        // Push capacity updates
+        for (let i = 0; i < capacity - 1; i++) {
+            await controller.stubPush(GRT, currentRate, currentRate, 1);
+        }
+
+        const targetRate = currentRate + 2;
+        const cappedRate = currentRate + 1;
+
+        // Push the new capped rate
+        await controller.stubPush(GRT, targetRate, cappedRate, 1);
+
+        // Change the target
+        await controller.setConfig(GRT, { ...DEFAULT_CONFIG, maxIncrease: 0, base: targetRate });
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const needsUpdate = await controller.needsUpdate(updateData);
+
+        expect(needsUpdate).to.be.true;
+    });
+
+    it(
+        "Should return false if the update period has been passed and the target rate is higher than the current " +
+            "rate, but the target rate is clamped to the current rate using maxIncrease",
+        async function () {
+            // Get the current rate
+            const currentRate = await controller.computeRate(GRT);
+
+            // Push INITIAL_BUFFER_CARDINALITY updates
+            for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+                await controller.stubPush(GRT, currentRate, currentRate, 1);
+            }
+
+            // Change the base
+            await controller.setConfig(GRT, { ...DEFAULT_CONFIG, maxIncrease: 0, base: DEFAULT_CONFIG.base.add(1) });
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+            const needsUpdate = await controller.needsUpdate(updateData);
+
+            expect(needsUpdate).to.be.false;
+        }
+    );
+
+    it(
+        "Should return false if the update period has been passed and the target rate is higher than the current " +
+            "rate, but the target rate is clamped to the current rate using maxPercentIncrease",
+        async function () {
+            // Get the current rate
+            const currentRate = await controller.computeRate(GRT);
+
+            // Push INITIAL_BUFFER_CARDINALITY updates
+            for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+                await controller.stubPush(GRT, currentRate, currentRate, 1);
+            }
+
+            // Change the base
+            await controller.setConfig(GRT, {
+                ...DEFAULT_CONFIG,
+                maxPercentIncrease: 0,
+                base: DEFAULT_CONFIG.base.add(1),
+            });
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+            const needsUpdate = await controller.needsUpdate(updateData);
+
+            expect(needsUpdate).to.be.false;
+        }
+    );
+
+    it(
+        "Should return false if the update period has been passed and the target rate is lower than the current " +
+            "rate, but the target rate is clamped to the current rate using maxDecrease",
+        async function () {
+            // Get the current rate
+            const currentRate = await controller.computeRate(GRT);
+
+            // Push INITIAL_BUFFER_CARDINALITY updates
+            for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+                await controller.stubPush(GRT, currentRate, currentRate, 1);
+            }
+
+            // Change the base
+            await controller.setConfig(GRT, { ...DEFAULT_CONFIG, maxDecrease: 0, base: DEFAULT_CONFIG.base.sub(1) });
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+            const needsUpdate = await controller.needsUpdate(updateData);
+
+            expect(needsUpdate).to.be.false;
+        }
+    );
+
+    it(
+        "Should return false if the update period has been passed and the target rate is lower than the current " +
+            "rate, but the target rate is clamped to the current rate using maxPercentDecrease",
+        async function () {
+            // Get the current rate
+            const currentRate = await controller.computeRate(GRT);
+
+            // Push INITIAL_BUFFER_CARDINALITY updates
+            for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+                await controller.stubPush(GRT, currentRate, currentRate, 1);
+            }
+
+            // Change the base
+            await controller.setConfig(GRT, {
+                ...DEFAULT_CONFIG,
+                maxPercentDecrease: 0,
+                base: DEFAULT_CONFIG.base.sub(1),
+            });
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+            const needsUpdate = await controller.needsUpdate(updateData);
+
+            expect(needsUpdate).to.be.false;
+        }
+    );
 });
 
 describe("RateController#update", function () {

@@ -388,7 +388,6 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
             super.supportsInterface(interfaceId);
     }
 
-    // TODO: If the rate is capped, the rate will not change.
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
         address token = abi.decode(data, (address));
 
@@ -397,12 +396,12 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
         // If the buffer has empty slots, they can be filled
         if (meta.size != meta.maxSize) return true;
 
-        // All current and target rates in the buffer should match the current target rate
-        // Otherwise, the rate will change
-        uint64 target = computeRateInternal(token);
+        // All current rates in the buffer should match the next rate. Otherwise, the rate will change.
+        // We don't check target rates because if the rate is capped, the current rate may never reach the target rate.
+        (, uint64 nextRate) = computeRateAndClamp(token);
         RateLibrary.Rate[] memory rates = getRatesInternal(token, meta.size, 0, 1);
         for (uint256 i = 0; i < rates.length; ++i) {
-            if (rates[i].target != target || rates[i].current != target) return true;
+            if (rates[i].current != nextRate) return true;
         }
 
         return false;
@@ -513,18 +512,10 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
         return rate;
     }
 
-    function performUpdate(bytes memory data) internal virtual returns (bool) {
-        if (updatersMustBeEoa && msg.sender != tx.origin) {
-            // Only EOA can update
-            revert UpdaterMustBeEoa(tx.origin, msg.sender);
-        }
-
-        address token = abi.decode(data, (address));
-
+    function computeRateAndClamp(address token) internal view virtual returns (uint64 target, uint64 newRate) {
         // Compute the target rate
-        uint64 target = computeRateInternal(token);
-
-        uint64 newRate = target;
+        target = computeRateInternal(token);
+        newRate = target;
 
         RateConfig memory config = rateConfigs[token];
         BufferMetadata memory meta = rateBufferMetadata[token];
@@ -561,6 +552,18 @@ contract RateController is ERC165, IHistoricalRates, IRateComputer, IUpdateable,
                 }
             }
         }
+    }
+
+    function performUpdate(bytes memory data) internal virtual returns (bool) {
+        if (updatersMustBeEoa && msg.sender != tx.origin) {
+            // Only EOA can update
+            revert UpdaterMustBeEoa(tx.origin, msg.sender);
+        }
+
+        address token = abi.decode(data, (address));
+
+        // Compute the new target rate and clamp it
+        (uint64 target, uint64 newRate) = computeRateAndClamp(token);
 
         // Push the new rate
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));
