@@ -6,6 +6,11 @@ import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "./RateController.sol";
 import "../access/Roles.sol";
 
+/**
+ * @title ManagedRateController
+ * @notice A smart contract that extends RateController and AccessControlEnumerable to manage and update rates with
+ * access control restrictions based on roles.
+ */
 contract ManagedRateController is RateController, AccessControlEnumerable {
     /// @notice An error that is thrown if we're missing a required role.
     /// @dev A different error is thrown when using the `onlyRole` modifier.
@@ -25,6 +30,12 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
         _;
     }
 
+    /**
+     * @notice Constructs the ManagedRateController contract.
+     * @param period_ The period for the rate controller.
+     * @param initialBufferCardinality_ The initial buffer cardinality for the rate controller.
+     * @param updatersMustBeEoa_ A flag indicating if updaters must be externally owned accounts.
+     */
     constructor(
         uint32 period_,
         uint8 initialBufferCardinality_,
@@ -33,6 +44,12 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
         initializeRoles();
     }
 
+    /**
+     * @notice Checks if the sender can update the rates.
+     * @param data The data containing the token address.
+     * @return b A boolean indicating if the sender is allowed to update the rates, provided that the conditions in the
+     * parent contract are also met.
+     */
     function canUpdate(bytes memory data) public view virtual override returns (bool b) {
         return
             // Can only update if the sender is an oracle updater or the oracle updater role is open
@@ -40,20 +57,26 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
             super.canUpdate(data);
     }
 
+    /// @inheritdoc IERC165
     function supportsInterface(
         bytes4 interfaceId
     ) public view virtual override(AccessControlEnumerable, RateController) returns (bool) {
         return super.supportsInterface(interfaceId);
     }
 
+    /// @notice Requires the sender to have the RATE_ADMIN role to call setConfig.
     function checkSetConfig() internal view virtual override onlyRole(Roles.RATE_ADMIN) {}
 
+    /// @notice Requires the sender to have the UPDATE_PAUSE_ADMIN role to call setUpdatesPaused.
     function checkSetUpdatesPaused() internal view virtual override onlyRole(Roles.UPDATE_PAUSE_ADMIN) {}
 
+    /// @notice Requires the sender to have the ADMIN role to call setRatesCapacity.
     function checkSetRatesCapacity() internal view virtual override onlyRole(Roles.ADMIN) {}
 
+    /// @notice Requires the sender to have the ORACLE_UPDATER role to call update.
     function checkUpdate() internal view virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) {}
 
+    /// @notice Initializes the roles hierarchy.
     function initializeRoles() internal virtual {
         // Setup admin role, setting msg.sender as admin
         _setupRole(Roles.ADMIN, msg.sender);
