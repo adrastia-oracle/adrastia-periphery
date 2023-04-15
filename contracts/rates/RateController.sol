@@ -13,6 +13,8 @@ import "./IRateComputer.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
+/// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
+/// checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
 abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic {
     using SafeCast for uint256;
 
@@ -248,6 +250,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         super._setRatesCapacity(token, amount);
     }
 
+    /// @notice Determines if any changes will occur in the rate buffer after a new rate is added.
+    /// @dev This function is used to reduce the amount of gas used by updaters when the rate is not changing.
+    /// @param data A bytes array containing the token address to be decoded.
+    /// @return bool A boolean value indicating whether any changes will occur in the rate buffer.
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
         address token = abi.decode(data, (address));
 
@@ -281,6 +287,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return rateBuffers[token][meta.end];
     }
 
+    /// @notice Computes the rate for the given token.
+    /// @dev This function calculates the rate for the specified token by summing its base rate
+    /// and the weighted rates of its components. The component rates are computed using the `computeRate`
+    /// function of each component and multiplied by the corresponding weight, then divided by 10,000.
+    /// @param token The address of the token for which to compute the rate.
+    /// @return uint64 The computed rate for the given token.
     function computeRateInternal(address token) internal view virtual returns (uint64) {
         RateConfig memory config = rateConfigs[token];
 
@@ -296,6 +308,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return rate;
     }
 
+    /// @notice Computes the target rate and clamps it based on the specified token's rate configuration.
+    /// @dev This function calculates the target rate by calling `computeRateInternal`. It then clamps the new rate
+    /// to ensure it is within the specified bounds for maximum constant and percentage increases or decreases.
+    /// This helps to prevent sudden or extreme rate fluctuations.
+    /// @param token The address of the token for which to compute the clamped rate.
+    /// @return target The computed target rate for the given token.
+    /// @return newRate The clamped rate for the given token, taking into account the maximum increase and decrease
+    /// constraints.
     function computeRateAndClamp(address token) internal view virtual returns (uint64 target, uint64 newRate) {
         // Compute the target rate
         target = computeRateInternal(token);
@@ -338,6 +358,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    /// @notice Performs an update of the token's rate based on the provided data.
+    /// @dev This function ensures that only EOAs (Externally Owned Accounts) can update the rate
+    /// if `updatersMustBeEoa` is set to true. It decodes the token address from the input data, computes
+    /// the new clamped rate using `computeRateAndClamp`, and then pushes the new rate to the rate buffer.
+    /// @param data The input data, containing the token address to be updated.
+    /// @return bool Returns true if the update is successful.
     function performUpdate(bytes memory data) internal virtual returns (bool) {
         if (updatersMustBeEoa && msg.sender != tx.origin) {
             // Only EOA can update
@@ -355,11 +381,19 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return true;
     }
 
+    /// @notice Checks if the caller is authorized to set the configuration.
+    /// @dev This function should contain the access control logic for the setConfig function.
     function checkSetConfig() internal view virtual;
 
+    /// @notice Checks if the caller is authorized to pause or resume updates.
+    /// @dev This function should contain the access control logic for the setUpdatesPaused function.
     function checkSetUpdatesPaused() internal view virtual;
 
+    /// @notice Checks if the caller is authorized to set the rates capacity.
+    /// @dev This function should contain the access control logic for the setRatesCapacity function.
     function checkSetRatesCapacity() internal view virtual;
 
+    /// @notice Checks if the caller is authorized to perform an update.
+    /// @dev This function should contain the access control logic for the update function.
     function checkUpdate() internal view virtual;
 }
