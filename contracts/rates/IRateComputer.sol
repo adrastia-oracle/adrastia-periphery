@@ -1,12 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity =0.8.13;
-
-import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
-import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
-
-import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
-
-import "../access/Roles.sol";
+pragma solidity >=0.5.0 <0.9.0;
 
 /**
  * @title IRateComputer
