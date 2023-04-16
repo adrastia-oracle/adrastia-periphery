@@ -2571,6 +2571,123 @@ describe("RateController - IHistoricalRates implementation", function () {
     });
 });
 
+describe("RateController#manuallyPushRate", function () {
+    var controller;
+
+    beforeEach(async function () {
+        const controllerFactory = await ethers.getContractFactory("RateControllerStub");
+
+        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Grant all roles to the signer
+        await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+        await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+        // Set config for GRT
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+    });
+
+    it("Should revert if the caller does not have the ADMIN role", async function () {
+        // Get the second signer
+        const [, signer] = await ethers.getSigners();
+
+        // Assign the signer all of the other roles
+        await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+        await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+
+        // Format the signer's address to be lowercase
+        const signerAddress = signer.address.toLowerCase();
+
+        const rate = ethers.utils.parseUnits("0.1234", 18);
+
+        await expect(controller.connect(signer).manuallyPushRate(GRT, rate, rate, 1)).to.be.revertedWith(
+            "AccessControl: account " + signerAddress + " is missing role " + ADMIN_ROLE
+        );
+
+        // Sanity check that we can successfully call the function if we have the role
+        await controller.grantRole(ADMIN_ROLE, signer.address);
+        await expect(controller.connect(signer).manuallyPushRate(GRT, rate, rate, 1)).to.not.be.reverted;
+    });
+
+    it("Should revert if the token doesn't have a config", async function () {
+        const rate = ethers.utils.parseUnits("0.1234", 18);
+
+        await expect(controller.manuallyPushRate(USDC, rate, rate, 1)).to.be.revertedWith(
+            'MissingConfig("' + USDC + '")'
+        );
+
+        // Sanity check that it works if we set a config
+        await controller.setConfig(USDC, DEFAULT_CONFIG);
+        await expect(controller.manuallyPushRate(USDC, rate, rate, 1)).to.not.be.reverted;
+    });
+
+    it("Doesn't emit any events or push any rates if the amount is set to zero", async function () {
+        const rate = ethers.utils.parseUnits("0.1234", 18);
+
+        const initialRateCount = await controller.getRatesCount(GRT);
+        // Sanity check that the rate count is 0
+        expect(initialRateCount).to.equal(0);
+
+        const tx = await controller.manuallyPushRate(GRT, rate, rate, 0);
+
+        const receipt = await tx.wait();
+
+        expect(receipt.events.length).to.equal(0);
+        expect(await controller.getRatesCount(GRT)).to.equal(initialRateCount);
+    });
+
+    it("Pushes one rate if the amount is set to one", async function () {
+        const rate = ethers.utils.parseUnits("0.1234", 18);
+
+        const initialRateCount = await controller.getRatesCount(GRT);
+        // Sanity check that the rate count is 0
+        expect(initialRateCount).to.equal(0);
+
+        const capacity = await controller.getRatesCapacity(GRT);
+
+        const amount = 1;
+
+        const tx = await controller.manuallyPushRate(GRT, rate, rate, amount);
+        const receipt = await tx.wait();
+        const timestamp = await blockTimestamp(receipt.blockNumber);
+
+        expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
+        expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+        expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
+        // Ensure RateUpdated was emitted `amount` times
+        expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
+    });
+
+    it("Pushes two rates if the amount is set to two", async function () {
+        const rate = ethers.utils.parseUnits("0.1234", 18);
+
+        const initialRateCount = await controller.getRatesCount(GRT);
+        // Sanity check that the rate count is 0
+        expect(initialRateCount).to.equal(0);
+
+        const capacity = await controller.getRatesCapacity(GRT);
+
+        const amount = 2;
+
+        const tx = await controller.manuallyPushRate(GRT, rate, rate, amount);
+        const receipt = await tx.wait();
+        const timestamp = await blockTimestamp(receipt.blockNumber);
+
+        expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
+        expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+        expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
+        // Ensure RateUpdated was emitted `amount` times
+        expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
+    });
+});
+
 describe("RateController#supportsInterface", function () {
     var controller;
     var interfaceIds;

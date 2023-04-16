@@ -67,6 +67,9 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
     /// @notice Requires the sender to have the RATE_ADMIN role to call setConfig.
     function checkSetConfig() internal view virtual override onlyRole(Roles.RATE_ADMIN) {}
 
+    /// @notice Requires the sender to have the RATE_ADMIN role to call manuallyPushRate.
+    function checkManuallyPushRate() internal view virtual override onlyRole(Roles.ADMIN) {}
+
     /// @notice Requires the sender to have the UPDATE_PAUSE_ADMIN role to call setUpdatesPaused.
     function checkSetUpdatesPaused() internal view virtual override onlyRole(Roles.UPDATE_PAUSE_ADMIN) {}
 

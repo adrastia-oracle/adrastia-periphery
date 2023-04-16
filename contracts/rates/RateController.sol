@@ -38,6 +38,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Maps a token to its rate configuration.
     mapping(address => RateConfig) internal rateConfigs;
 
+    /// @notice Event emitted when a new rate is manually pushed to the rate buffer.
+    /// @param token The token for which the rate was pushed.
+    /// @param target The target rate.
+    /// @param current The effective rate.
+    /// @param timestamp The timestamp at which the rate was pushed.
+    /// @param amount The amount of times the rate was pushed.
+    event RatePushedManually(address indexed token, uint256 target, uint256 current, uint256 timestamp, uint256 amount);
+
     /// @notice Event emitted when the pause status of rate updates for a token is changed.
     /// @param token The token for which the pause status of rate updates was changed.
     /// @param areUpdatesPaused Whether rate updates are paused for the token.
@@ -134,6 +142,42 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         if (meta.maxSize == 0) {
             // We require that the buffer is initialized before allowing rate updates to occur
             initializeBuffers(token);
+        }
+    }
+
+    /// @notice Manually pushes new rates for a token, bypassing the update logic, clamp logic, pause logic, and
+    /// other restrictions.
+    /// @dev WARNING: This function is very powerful and should only be used in emergencies. It is intended to be used
+    /// to manually push rates when the rate controller is in a bad state. It should not be used to push rates
+    /// regularly. Make sure to lock it down with the highest level of security.
+    /// @param token The token for which to push rates.
+    /// @param target The target rate to push.
+    /// @param current The current rate to push.
+    /// @param amount The number of times to push the rate.
+    function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external {
+        checkManuallyPushRate();
+
+        BufferMetadata storage meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing
+            revert MissingConfig(token);
+        }
+
+        // Note: We don't check the pause status here because we want to allow rate updates to be manually pushed even
+        // if rate updates are paused.
+
+        RateLibrary.Rate memory rate = RateLibrary.Rate({
+            target: target,
+            current: current,
+            timestamp: uint32(block.timestamp)
+        });
+
+        for (uint256 i = 0; i < amount; ++i) {
+            push(token, rate);
+        }
+
+        if (amount > 0) {
+            emit RatePushedManually(token, target, current, block.timestamp, amount);
         }
     }
 
@@ -384,6 +428,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Checks if the caller is authorized to set the configuration.
     /// @dev This function should contain the access control logic for the setConfig function.
     function checkSetConfig() internal view virtual;
+
+    /// @notice Checks if the caller is authorized to manually push rates.
+    /// @dev This function should contain the access control logic for the manuallyPushRate function.
+    /// WARNING: The manuallyPushRate function is very dangerous and should only be used in emergencies. Ensure that
+    /// this function is implemented correctly and that the access control logic is sufficient to prevent abuse.
+    function checkManuallyPushRate() internal view virtual;
 
     /// @notice Checks if the caller is authorized to pause or resume updates.
     /// @dev This function should contain the access control logic for the setUpdatesPaused function.
