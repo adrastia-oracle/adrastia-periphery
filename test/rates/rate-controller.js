@@ -17,8 +17,16 @@ const PERIOD = 100;
 const INITIAL_BUFFER_CARDINALITY = 2;
 const UPDATERS_MUST_BE_EOA = false;
 
+const MAX_RATE = BigNumber.from(2).pow(64).sub(1);
+const MIN_RATE = BigNumber.from(0);
+
+const MAX_PERCENT_INCREASE = 2 ** 32 - 1;
+const MAX_PERCENT_DECREASE = 10000;
+
 // In this example, 1e18 = 100%
 const DEFAULT_CONFIG = {
+    max: ethers.utils.parseUnits("1.0", 18), // 100%
+    min: ethers.utils.parseUnits("0.0", 18), // 0%
     maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
     maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
     maxPercentIncrease: 10000, // 100%
@@ -29,6 +37,8 @@ const DEFAULT_CONFIG = {
 };
 
 const ZERO_CONFIG = {
+    max: BigNumber.from(0),
+    min: BigNumber.from(0),
     maxIncrease: BigNumber.from(0),
     maxDecrease: BigNumber.from(0),
     maxPercentIncrease: 0,
@@ -291,6 +301,16 @@ describe("RateController#setConfig", function () {
             base: ethers.utils.parseUnits("0.6", 18), // 60%
             componentWeights: [],
             components: [computer.address],
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+    });
+
+    it("Should revert if the max rate is less than the min rate", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            max: ethers.utils.parseUnits("1", 18),
+            min: ethers.utils.parseUnits("2", 18),
         };
 
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
@@ -1546,6 +1566,190 @@ describe("RateController#update", function () {
         expect(latestRate.timestamp).to.equal(currentTime);
     });
 
+    it("Initial setting of the rate is capped by the min rate", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: ethers.utils.parseUnits("0.5", 18),
+            base: ethers.utils.parseUnits("0.4", 18),
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const targetRate = config.base;
+        const expectedCurrentRate = config.min;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Initial setting of the rate is capped by the max rate", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            max: ethers.utils.parseUnits("0.5", 18),
+            base: ethers.utils.parseUnits("0.6", 18),
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const targetRate = config.base;
+        const expectedCurrentRate = config.max;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Further setting of the rate is capped by the min rate", async function () {
+        const minRate = ethers.utils.parseUnits("0.5", 18);
+        const targetRate = ethers.utils.parseUnits("0.4", 18);
+
+        await controller.stubPush(GRT, minRate, minRate, 1);
+
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            base: targetRate,
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = config.min;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Further setting of the rate is capped by the max rate", async function () {
+        const maxRate = ethers.utils.parseUnits("0.5", 18);
+        const targetRate = ethers.utils.parseUnits("0.6", 18);
+
+        await controller.stubPush(GRT, maxRate, maxRate, 1);
+
+        const config = {
+            ...DEFAULT_CONFIG,
+            max: maxRate,
+            base: targetRate,
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = config.max;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("The current rate jumps to the min rate if the target is less than the min rate and change is unrestricted", async function () {
+        const initialRate = ethers.utils.parseUnits("0.5", 18);
+        const minRate = ethers.utils.parseUnits("0.15", 18);
+        const targetRate = ethers.utils.parseUnits("0.1", 18);
+
+        await controller.stubPush(GRT, initialRate, initialRate, 1);
+
+        const config = {
+            ...DEFAULT_CONFIG,
+            max: MAX_RATE,
+            min: minRate,
+            base: targetRate,
+            maxIncrease: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = config.min;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("The current rate jumps to the max rate if the target is greater than the max rate and change is unrestricted", async function () {
+        const initialRate = ethers.utils.parseUnits("0.5", 18);
+        const maxRate = ethers.utils.parseUnits("0.85", 18);
+        const targetRate = ethers.utils.parseUnits("0.9", 18);
+
+        await controller.stubPush(GRT, initialRate, initialRate, 1);
+
+        const config = {
+            ...DEFAULT_CONFIG,
+            max: maxRate,
+            min: MIN_RATE,
+            base: targetRate,
+            maxIncrease: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+        };
+        await controller.setConfig(GRT, config);
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        const updateTx = await controller.update(updateData);
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = config.max;
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
     it("Rate increases are limited by the max rate increase", async function () {
         // Get the current rate
         const currentRate = await controller.computeRate(GRT);
@@ -1610,6 +1814,94 @@ describe("RateController#update", function () {
         // Change the target rate
         await controller.setConfig(GRT, {
             ...DEFAULT_CONFIG,
+            base: targetRate,
+        });
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const updateTx = await controller.update(updateData);
+
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = currentRate.sub(DEFAULT_CONFIG.maxDecrease);
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Rate increases are limited by the max rate increase, even when the minimum rate is equal to the target rate", async function () {
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // Push INITIAL_BUFFER_CARDINALITY updates
+        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+            await controller.stubPush(GRT, currentRate, currentRate, 1);
+        }
+
+        const targetRate = DEFAULT_CONFIG.base.add(DEFAULT_CONFIG.maxIncrease.mul(3));
+
+        // Sanity check that that max increase cap is more strict than the max percent increase cap
+        const targetRateCappedByMaxIncrease = currentRate.add(DEFAULT_CONFIG.maxIncrease);
+        const targetRateCappedByMaxPercentIncrease = currentRate.add(
+            currentRate.mul(DEFAULT_CONFIG.maxPercentIncrease).div(10000)
+        );
+        expect(targetRateCappedByMaxIncrease).to.be.lt(targetRateCappedByMaxPercentIncrease);
+
+        // Change the target rate
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: targetRate,
+            base: targetRate,
+        });
+
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+        const updateTx = await controller.update(updateData);
+
+        const currentTime = await currentBlockTimestamp();
+
+        const expectedCurrentRate = currentRate.add(DEFAULT_CONFIG.maxIncrease);
+
+        await expect(updateTx)
+            .to.emit(controller, "RateUpdated")
+            .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.target).to.equal(targetRate);
+        expect(latestRate.current).to.equal(expectedCurrentRate);
+        expect(latestRate.timestamp).to.equal(currentTime);
+    });
+
+    it("Rate decreases are limited by the max rate decrease, even when the maximum rate is equal to the target rate", async function () {
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // Push INITIAL_BUFFER_CARDINALITY updates
+        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
+            await controller.stubPush(GRT, currentRate, currentRate, 1);
+        }
+
+        const targetRate = DEFAULT_CONFIG.base.sub(DEFAULT_CONFIG.maxDecrease.mul(3));
+
+        // Sanity check that that max decrease cap is more strict than the max percent decrease cap
+        const targetRateCappedByMaxDecrease = currentRate.sub(DEFAULT_CONFIG.maxDecrease);
+        const targetRateCappedByMaxPercentDecrease = currentRate.sub(
+            currentRate.mul(DEFAULT_CONFIG.maxPercentDecrease).div(10000)
+        );
+        expect(targetRateCappedByMaxDecrease).to.be.gt(targetRateCappedByMaxPercentDecrease);
+
+        // Change the target rate
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            max: targetRate,
             base: targetRate,
         });
 

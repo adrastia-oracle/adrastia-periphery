@@ -19,6 +19,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     using SafeCast for uint256;
 
     struct RateConfig {
+        uint64 max;
+        uint64 min;
         uint64 maxIncrease;
         uint64 maxDecrease;
         uint32 maxPercentIncrease; // 10000 = 100%
@@ -105,6 +107,11 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         if (config.maxPercentDecrease > 10000) {
             // The maximum percent decrease must be less than or equal to 100%.
+            revert InvalidConfig(token);
+        }
+
+        if (config.max < config.min) {
+            // The maximum rate must be greater than or equal to the minimum rate.
             revert InvalidConfig(token);
         }
 
@@ -366,6 +373,18 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         newRate = target;
 
         RateConfig memory config = rateConfigs[token];
+
+        // Clamp the rate to the minimum and maximum rates
+        // We do this before clamping the rate to the maximum constant and percentage increases or decreases because
+        // we don't want a change in the minimum or maximum rate to cause a sudden change in the rate.
+        if (newRate < config.min) {
+            // The new rate is too low, so we change it to the minimum rate
+            newRate = config.min;
+        } else if (newRate > config.max) {
+            // The new rate is too high, so we change it to the maximum rate
+            newRate = config.max;
+        }
+
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.size > 0) {
             // We have a previous rate, so let's make sure we don't change it too much

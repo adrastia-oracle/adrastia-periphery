@@ -8,6 +8,10 @@ async function main() {
 
     // The following configuration assumes that 1e18 = 100% for rates
 
+    // The maximum rate
+    const max = ethers.utils.parseUnits("1", 18); // 100%
+    // The minimum rate
+    const min = ethers.utils.parseUnits("0", 18); // 0%
     // The maximum increase in the rate per update
     const maxIncrease = ethers.utils.parseUnits("0.02", 18); // 2%
     // The maximum decrease in the rate per update
@@ -35,6 +39,10 @@ async function main() {
     // Assemble the configuration as a string
     const configuration =
         '["' +
+        max.toString() +
+        '","' +
+        min.toString() +
+        '","' +
         maxIncrease.toString() +
         '","' +
         maxDecrease.toString() +
