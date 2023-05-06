@@ -9,6 +9,7 @@ import "../../../access/Roles.sol";
 
 contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, UniswapV2LiquidityAccumulator {
     constructor(
+        IAveragingStrategy averagingStrategy_,
         address uniswapFactory_,
         bytes32 initCodeHash_,
         address quoteToken_,
@@ -18,6 +19,7 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, Uniswa
         uint256 maxUpdateDelay_
     )
         UniswapV2LiquidityAccumulator(
+            averagingStrategy_,
             uniswapFactory_,
             initCodeHash_,
             quoteToken_,
@@ -54,13 +56,9 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, Uniswa
         return super.update(data);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerable, LiquidityAccumulator)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, LiquidityAccumulator) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) ||
             LiquidityAccumulator.supportsInterface(interfaceId);

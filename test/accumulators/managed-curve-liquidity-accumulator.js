@@ -1,6 +1,11 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const {
+    abi: ARITHMETIC_AVERAGING_ABI,
+    bytecode: ARITHMETIC_AVERAGING_BYTECODE,
+} = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/averaging/ArithmeticAveraging.sol/ArithmeticAveraging.json");
+
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
@@ -10,19 +15,38 @@ const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 
+async function currentBlockTimestamp() {
+    const currentBlockNumber = await ethers.provider.getBlockNumber();
+
+    return await blockTimestamp(currentBlockNumber);
+}
+
+async function blockTimestamp(blockNum) {
+    return (await ethers.provider.getBlock(blockNum)).timestamp;
+}
+
 function describeCurveLiquidityAccumulatorTests(contractName) {
     describe(contractName + "#update", function () {
         var accumulator;
 
-        beforeEach(async () => {
+        beforeEach(async function () {
             // Deploy the curve pool
             const poolFactory = await ethers.getContractFactory("CurvePoolStub");
             const curvePool = await poolFactory.deploy([WETH, USDC]);
             await curvePool.deployed();
 
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             // Deploy accumulator
             const accumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await accumulatorFactory.deploy(
+                averagingStrategy.address,
                 curvePool.address,
                 2,
                 USDC,
@@ -47,8 +71,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
@@ -69,8 +93,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const [, addr1] = await ethers.getSigners();
@@ -108,8 +132,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
@@ -124,8 +148,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
@@ -147,8 +171,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
@@ -169,8 +193,8 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const [, addr1] = await ethers.getSigners();
@@ -198,9 +222,18 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
             const curvePool = await poolFactory.deploy([WETH, USDC]);
             await curvePool.deployed();
 
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             // Deploy accumulator
             const accumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await accumulatorFactory.deploy(
+                averagingStrategy.address,
                 curvePool.address,
                 2,
                 USDC,
@@ -228,5 +261,3 @@ function describeCurveLiquidityAccumulatorTests(contractName) {
 }
 
 describeCurveLiquidityAccumulatorTests("ManagedCurveLiquidityAccumulator");
-describeCurveLiquidityAccumulatorTests("ManagedCurveGeometricLiquidityAccumulator");
-describeCurveLiquidityAccumulatorTests("ManagedCurveHarmonicLiquidityAccumulator");

@@ -30,7 +30,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "3.0.0",
+    "@adrastia-oracle/adrastia-core": "4.0.0-beta.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },

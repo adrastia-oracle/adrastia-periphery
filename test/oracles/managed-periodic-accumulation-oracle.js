@@ -1,6 +1,11 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const {
+    abi: ARITHMETIC_AVERAGING_ABI,
+    bytecode: ARITHMETIC_AVERAGING_BYTECODE,
+} = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/averaging/ArithmeticAveraging.sol/ArithmeticAveraging.json");
+
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
@@ -12,6 +17,16 @@ const TWO_PERCENT_CHANGE = 2000000;
 const PERIOD = 100;
 const GRANULARITY = 1;
 
+async function currentBlockTimestamp() {
+    const currentBlockNumber = await ethers.provider.getBlockNumber();
+
+    return await blockTimestamp(currentBlockNumber);
+}
+
+async function blockTimestamp(blockNum) {
+    return (await ethers.provider.getBlock(blockNum)).timestamp;
+}
+
 describe("ManagedPeriodicAccumulationOracle#update", function () {
     var oracle;
 
@@ -21,9 +36,18 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         const curvePool = await poolFactory.deploy([WETH, USDC]);
         await curvePool.deployed();
 
+        // Deploy the averaging strategy
+        const averagingStrategyFactory = await ethers.getContractFactory(
+            ARITHMETIC_AVERAGING_ABI,
+            ARITHMETIC_AVERAGING_BYTECODE
+        );
+        const averagingStrategy = await averagingStrategyFactory.deploy();
+        await averagingStrategy.deployed();
+
         // Deploy liquidity accumulator
         const liquidityAccumulatorFactory = await ethers.getContractFactory("CurveLiquidityAccumulatorStub");
         const liquidityAccumulator = await liquidityAccumulatorFactory.deploy(
+            averagingStrategy.address,
             curvePool.address,
             2,
             USDC,
@@ -41,8 +65,8 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         );
 
         const laUpdateData = ethers.utils.defaultAbiCoder.encode(
-            ["address", "uint", "uint"],
-            [WETH, tokenLiquidity, quoteTokenLiquidity]
+            ["address", "uint", "uint", "uint"],
+            [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
         );
 
         // Initialize liquidity accumulator
@@ -51,6 +75,7 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
         const priceAccumulator = await priceAccumulatorFactory.deploy(
+            averagingStrategy.address,
             curvePool.address,
             2,
             USDC,
@@ -63,7 +88,10 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
 
         const price = await priceAccumulator["consultPrice(address,uint256)"](WETH, 0);
 
-        const paUpdateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+        const paUpdateData = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint", "uint"],
+            [WETH, price, await currentBlockTimestamp()]
+        );
 
         // Initialize price accumulator
         await priceAccumulator.update(paUpdateData);
@@ -147,9 +175,18 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         const curvePool = await poolFactory.deploy([WETH, USDC]);
         await curvePool.deployed();
 
+        // Deploy the averaging strategy
+        const averagingStrategyFactory = await ethers.getContractFactory(
+            ARITHMETIC_AVERAGING_ABI,
+            ARITHMETIC_AVERAGING_BYTECODE
+        );
+        const averagingStrategy = await averagingStrategyFactory.deploy();
+        await averagingStrategy.deployed();
+
         // Deploy liquidity accumulator
         const liquidityAccumulatorFactory = await ethers.getContractFactory("CurveLiquidityAccumulatorStub");
         const liquidityAccumulator = await liquidityAccumulatorFactory.deploy(
+            averagingStrategy.address,
             curvePool.address,
             2,
             USDC,
@@ -167,8 +204,8 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         );
 
         const laUpdateData = ethers.utils.defaultAbiCoder.encode(
-            ["address", "uint", "uint"],
-            [WETH, tokenLiquidity, quoteTokenLiquidity]
+            ["address", "uint", "uint", "uint"],
+            [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
         );
 
         // Initialize liquidity accumulator
@@ -177,6 +214,7 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
         // Deploy price accumulator
         const priceAccumulatorFactory = await ethers.getContractFactory("CurvePriceAccumulatorStub");
         const priceAccumulator = await priceAccumulatorFactory.deploy(
+            averagingStrategy.address,
             curvePool.address,
             2,
             USDC,
@@ -189,7 +227,10 @@ describe("ManagedPeriodicAccumulationOracle#supportsInterface(interfaceId)", fun
 
         const price = await priceAccumulator["consultPrice(address,uint256)"](WETH, 0);
 
-        const paUpdateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+        const paUpdateData = ethers.utils.defaultAbiCoder.encode(
+            ["address", "uint", "uint"],
+            [WETH, price, await currentBlockTimestamp()]
+        );
 
         // Initialize price accumulator
         await priceAccumulator.update(paUpdateData);

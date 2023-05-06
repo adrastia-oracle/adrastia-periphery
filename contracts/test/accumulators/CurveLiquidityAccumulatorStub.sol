@@ -7,6 +7,7 @@ import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/curve/CurveL
 
 contract CurveLiquidityAccumulatorStub is CurveLiquidityAccumulator {
     constructor(
+        IAveragingStrategy averagingStrategy_,
         address pool_,
         uint8 nCoins_,
         address poolQuoteToken_,
@@ -17,6 +18,7 @@ contract CurveLiquidityAccumulatorStub is CurveLiquidityAccumulator {
         uint256 maxUpdateDelay_
     )
         CurveLiquidityAccumulator(
+            averagingStrategy_,
             pool_,
             nCoins_,
             poolQuoteToken_,
@@ -28,11 +30,9 @@ contract CurveLiquidityAccumulatorStub is CurveLiquidityAccumulator {
         )
     {}
 
-    function harnessFetchLiquidity(address token)
-        public
-        view
-        returns (uint256 tokenLiquidity, uint256 quoteTokenLiquidity)
-    {
-        return super.fetchLiquidity(token);
+    function harnessFetchLiquidity(
+        address token
+    ) public view returns (uint256 tokenLiquidity, uint256 quoteTokenLiquidity) {
+        return super.fetchLiquidity(abi.encode(token));
     }
 }

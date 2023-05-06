@@ -1,6 +1,11 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const {
+    abi: ARITHMETIC_AVERAGING_ABI,
+    bytecode: ARITHMETIC_AVERAGING_BYTECODE,
+} = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/averaging/ArithmeticAveraging.sol/ArithmeticAveraging.json");
+
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
 const uniswapV2FactoryAddress = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
@@ -13,13 +18,32 @@ const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 
+async function currentBlockTimestamp() {
+    const currentBlockNumber = await ethers.provider.getBlockNumber();
+
+    return await blockTimestamp(currentBlockNumber);
+}
+
+async function blockTimestamp(blockNum) {
+    return (await ethers.provider.getBlock(blockNum)).timestamp;
+}
+
 function describeUniswapV2PriceAccumulatorTests(contractName) {
     describe(contractName + "#update", function () {
         var accumulator;
 
         beforeEach(async () => {
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await liquidityAccumulatorFactory.deploy(
+                averagingStrategy.address,
                 uniswapV2FactoryAddress,
                 uniswapV2InitCodeHash,
                 USDC,
@@ -38,7 +62,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Accounts with oracle updater role can update", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -54,7 +81,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Accounts without oracle updater role cannot update", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 const [, addr1] = await ethers.getSigners();
 
@@ -87,7 +117,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Can't update in the constructor", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
                     "PriceAccumulator: MUST_BE_EOA"
@@ -97,7 +130,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Can't update in a function call", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
 
@@ -114,7 +150,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Accounts with oracle updater role can update", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -130,7 +169,10 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
             it("Accounts without oracle updater role can update", async function () {
                 const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
 
-                const updateData = ethers.utils.defaultAbiCoder.encode(["address", "uint"], [WETH, price]);
+                const updateData = ethers.utils.defaultAbiCoder.encode(
+                    ["address", "uint", "uint"],
+                    [WETH, price, await currentBlockTimestamp()]
+                );
 
                 const [, addr1] = await ethers.getSigners();
 
@@ -152,8 +194,17 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
         var interfaceIds;
 
         beforeEach(async () => {
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await liquidityAccumulatorFactory.deploy(
+                averagingStrategy.address,
                 uniswapV2FactoryAddress,
                 uniswapV2InitCodeHash,
                 USDC,
@@ -179,5 +230,3 @@ function describeUniswapV2PriceAccumulatorTests(contractName) {
 }
 
 describeUniswapV2PriceAccumulatorTests("ManagedUniswapV2PriceAccumulator");
-describeUniswapV2PriceAccumulatorTests("ManagedUniswapV2GeometricPriceAccumulator");
-describeUniswapV2PriceAccumulatorTests("ManagedUniswapV2HarmonicPriceAccumulator");

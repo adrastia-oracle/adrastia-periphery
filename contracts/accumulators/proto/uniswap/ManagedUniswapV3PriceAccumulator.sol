@@ -9,6 +9,7 @@ import "../../../access/Roles.sol";
 
 contract ManagedUniswapV3PriceAccumulator is AccessControlEnumerable, UniswapV3PriceAccumulator {
     constructor(
+        IAveragingStrategy averagingStrategy_,
         address uniswapFactory_,
         bytes32 initCodeHash_,
         uint24[] memory poolFees_,
@@ -18,6 +19,7 @@ contract ManagedUniswapV3PriceAccumulator is AccessControlEnumerable, UniswapV3P
         uint256 maxUpdateDelay_
     )
         UniswapV3PriceAccumulator(
+            averagingStrategy_,
             uniswapFactory_,
             initCodeHash_,
             poolFees_,
@@ -54,13 +56,9 @@ contract ManagedUniswapV3PriceAccumulator is AccessControlEnumerable, UniswapV3P
         return super.update(data);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerable, PriceAccumulator)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, PriceAccumulator) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) || PriceAccumulator.supportsInterface(interfaceId);
     }

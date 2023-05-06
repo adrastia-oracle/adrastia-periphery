@@ -9,6 +9,7 @@ import "../../../access/Roles.sol";
 
 contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccumulator {
     constructor(
+        IAveragingStrategy averagingStrategy_,
         address curvePool_,
         int8 nCoins_,
         address poolQuoteToken_,
@@ -18,6 +19,7 @@ contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccu
         uint256 maxUpdateDelay_
     )
         CurvePriceAccumulator(
+            averagingStrategy_,
             curvePool_,
             nCoins_,
             poolQuoteToken_,
@@ -54,13 +56,9 @@ contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccu
         return super.update(data);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerable, PriceAccumulator)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, PriceAccumulator) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) || PriceAccumulator.supportsInterface(interfaceId);
     }

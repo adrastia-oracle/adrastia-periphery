@@ -9,6 +9,7 @@ import "../../../access/Roles.sol";
 
 contract ManagedCurveLiquidityAccumulator is AccessControlEnumerable, CurveLiquidityAccumulator {
     constructor(
+        IAveragingStrategy averagingStrategy_,
         address curvePool_,
         uint8 nCoins_,
         address poolQuoteToken_,
@@ -19,6 +20,7 @@ contract ManagedCurveLiquidityAccumulator is AccessControlEnumerable, CurveLiqui
         uint256 maxUpdateDelay_
     )
         CurveLiquidityAccumulator(
+            averagingStrategy_,
             curvePool_,
             nCoins_,
             poolQuoteToken_,
@@ -56,13 +58,9 @@ contract ManagedCurveLiquidityAccumulator is AccessControlEnumerable, CurveLiqui
         return super.update(data);
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        virtual
-        override(AccessControlEnumerable, LiquidityAccumulator)
-        returns (bool)
-    {
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, LiquidityAccumulator) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) ||
             LiquidityAccumulator.supportsInterface(interfaceId);

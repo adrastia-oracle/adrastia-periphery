@@ -1,6 +1,11 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const {
+    abi: ARITHMETIC_AVERAGING_ABI,
+    bytecode: ARITHMETIC_AVERAGING_BYTECODE,
+} = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/averaging/ArithmeticAveraging.sol/ArithmeticAveraging.json");
+
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
 const uniswapV3FactoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
@@ -14,13 +19,32 @@ const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
 const POOL_FEES = [3000];
 
+async function currentBlockTimestamp() {
+    const currentBlockNumber = await ethers.provider.getBlockNumber();
+
+    return await blockTimestamp(currentBlockNumber);
+}
+
+async function blockTimestamp(blockNum) {
+    return (await ethers.provider.getBlock(blockNum)).timestamp;
+}
+
 function describeUniswapV3LiquidityAccumulatorTests(contractName) {
     describe(contractName + "#update", function () {
         var accumulator;
 
         beforeEach(async () => {
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await liquidityAccumulatorFactory.deploy(
+                averagingStrategy.address,
                 uniswapV3FactoryAddress,
                 uniswapV3InitCodeHash,
                 POOL_FEES,
@@ -45,8 +69,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
@@ -67,8 +91,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const [, addr1] = await ethers.getSigners();
@@ -106,8 +130,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 await expect(updateableCallerFactory.deploy(accumulator.address, true, updateData)).to.be.revertedWith(
@@ -122,8 +146,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
@@ -145,8 +169,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
@@ -167,8 +191,8 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
                 );
 
                 const updateData = ethers.utils.defaultAbiCoder.encode(
-                    ["address", "uint", "uint"],
-                    [WETH, tokenLiquidity, quoteTokenLiquidity]
+                    ["address", "uint", "uint", "uint"],
+                    [WETH, tokenLiquidity, quoteTokenLiquidity, await currentBlockTimestamp()]
                 );
 
                 const [, addr1] = await ethers.getSigners();
@@ -191,8 +215,17 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
         var interfaceIds;
 
         beforeEach(async () => {
+            // Deploy the averaging strategy
+            const averagingStrategyFactory = await ethers.getContractFactory(
+                ARITHMETIC_AVERAGING_ABI,
+                ARITHMETIC_AVERAGING_BYTECODE
+            );
+            const averagingStrategy = await averagingStrategyFactory.deploy();
+            await averagingStrategy.deployed();
+
             const liquidityAccumulatorFactory = await ethers.getContractFactory(contractName);
             accumulator = await liquidityAccumulatorFactory.deploy(
+                averagingStrategy.address,
                 uniswapV3FactoryAddress,
                 uniswapV3InitCodeHash,
                 POOL_FEES,
@@ -220,5 +253,3 @@ function describeUniswapV3LiquidityAccumulatorTests(contractName) {
 }
 
 describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3LiquidityAccumulator");
-describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3GeometricLiquidityAccumulator");
-describeUniswapV3LiquidityAccumulatorTests("ManagedUniswapV3HarmonicLiquidityAccumulator");
