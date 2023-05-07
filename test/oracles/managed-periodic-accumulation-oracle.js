@@ -6,6 +6,7 @@ const {
     bytecode: ARITHMETIC_AVERAGING_BYTECODE,
 } = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/averaging/ArithmeticAveraging.sol/ArithmeticAveraging.json");
 
+const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
@@ -107,6 +108,9 @@ describe("ManagedPeriodicAccumulationOracle#update", function () {
         );
 
         const [owner] = await ethers.getSigners();
+
+        // Grant owner the updater admin role
+        await oracle.grantRole(UPDATER_ADMIN_ROLE, owner.address);
 
         // Grant owner the oracle updater role
         await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);

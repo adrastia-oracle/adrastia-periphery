@@ -69,7 +69,15 @@ contract ManagedUniswapV2LiquidityAccumulator is AccessControlEnumerable, Uniswa
         _setupRole(Roles.ADMIN, msg.sender);
         _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
 
-        // Set admin of ORACLE_UPDATER as ADMIN
-        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.ADMIN);
+        // UPDATER_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
+
+        // ORACLE_UPDATER is managed by UPDATER_ADMIN
+        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
+
+        // Hierarchy:
+        // ADMIN
+        //   - UPDATER_ADMIN
+        //     - ORACLE_UPDATER
     }
 }
