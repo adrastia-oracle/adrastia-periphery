@@ -3,6 +3,8 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
+import "@adrastia-oracle/adrastia-core/contracts/interfaces/IAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/interfaces/IOracle.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin-v4/contracts/access/IAccessControl.sol";
@@ -38,5 +40,13 @@ contract InterfaceIds {
 
     function iRateComputer() external pure returns (bytes4) {
         return type(IRateComputer).interfaceId;
+    }
+
+    function iAccumulator() external pure returns (bytes4) {
+        return type(IAccumulator).interfaceId;
+    }
+
+    function iOracle() external pure returns (bytes4) {
+        return type(IOracle).interfaceId;
     }
 }

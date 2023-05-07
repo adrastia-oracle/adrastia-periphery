@@ -213,6 +213,11 @@ function describeLiquidityAccumulatorTests(
             const interfaceId = await interfaceIds.iAccessControlEnumerable();
             expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
         });
+
+        it("Should support IAccumulator", async () => {
+            const interfaceId = await interfaceIds.iAccumulator();
+            expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+        });
     });
 }
 
