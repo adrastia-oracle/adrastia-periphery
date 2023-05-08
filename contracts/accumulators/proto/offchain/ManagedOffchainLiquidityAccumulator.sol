@@ -5,9 +5,14 @@ import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/offchain/Off
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
+import "../../AccumulatorConfig.sol";
 import "../../../access/Roles.sol";
 
-contract ManagedOffchainLiquidityAccumulator is AccessControlEnumerable, OffchainLiquidityAccumulator {
+contract ManagedOffchainLiquidityAccumulator is
+    AccessControlEnumerable,
+    OffchainLiquidityAccumulator,
+    AccumulatorConfig
+{
     constructor(
         IAveragingStrategy averagingStrategy_,
         address quoteToken_,
@@ -24,6 +29,7 @@ contract ManagedOffchainLiquidityAccumulator is AccessControlEnumerable, Offchai
             minUpdateDelay_,
             maxUpdateDelay_
         )
+        AccumulatorConfig(uint32(updateTheshold_), uint32(minUpdateDelay_), uint32(maxUpdateDelay_))
     {
         initializeRoles();
     }
@@ -47,10 +53,25 @@ contract ManagedOffchainLiquidityAccumulator is AccessControlEnumerable, Offchai
             LiquidityAccumulator.supportsInterface(interfaceId);
     }
 
+    function _updateDelay() internal view virtual override returns (uint256) {
+        return config.updateDelay;
+    }
+
+    function _heartbeat() internal view virtual override returns (uint256) {
+        return config.heartbeat;
+    }
+
+    function _updateThreshold() internal view virtual override returns (uint256) {
+        return config.updateThreshold;
+    }
+
     function initializeRoles() internal virtual {
         // Setup admin role, setting msg.sender as admin
         _setupRole(Roles.ADMIN, msg.sender);
         _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
+
+        // CONFIG_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.CONFIG_ADMIN, Roles.ADMIN);
 
         // UPDATER_ADMIN is managed by ADMIN
         _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
@@ -60,6 +81,7 @@ contract ManagedOffchainLiquidityAccumulator is AccessControlEnumerable, Offchai
 
         // Hierarchy:
         // ADMIN
+        //   - CONFIG_ADMIN
         //   - UPDATER_ADMIN
         //     - ORACLE_UPDATER
     }

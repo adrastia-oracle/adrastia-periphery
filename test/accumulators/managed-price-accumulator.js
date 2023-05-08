@@ -13,6 +13,7 @@ const uniswapV3InitCodeHash = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea
 
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
+const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
@@ -20,6 +21,12 @@ const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
+
+const DEFAULT_CONFIG = {
+    updateThreshold: TWO_PERCENT_CHANGE,
+    updateDelay: MIN_UPDATE_DELAY,
+    heartbeat: MAX_UPDATE_DELAY,
+};
 
 async function currentBlockTimestamp() {
     const currentBlockNumber = await ethers.provider.getBlockNumber();
@@ -38,6 +45,68 @@ function describePriceAccumulatorTests(
     updaterRoleCanBeOpen,
     smartContractsCanUpdate
 ) {
+    describe(contractName + "#setConfig", function () {
+        var accumulator;
+
+        beforeEach(async function () {
+            accumulator = await deployFunction();
+
+            const [owner] = await ethers.getSigners();
+
+            // Grant owner the config admin role
+            await accumulator.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+        });
+
+        it("Only accounts with config admin role can set config", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            expect(await accumulator.hasRole(CONFIG_ADMIN_ROLE, addr1.address)).to.equal(false);
+
+            await expect(accumulator.connect(addr1).setConfig(DEFAULT_CONFIG)).to.be.revertedWith("AccessControl");
+        });
+
+        it("Works", async function () {
+            const config = {
+                updateThreshold: TWO_PERCENT_CHANGE * 2,
+                updateDelay: MIN_UPDATE_DELAY + 100,
+                heartbeat: MAX_UPDATE_DELAY + 100,
+            };
+
+            const tx = await accumulator.setConfig(config);
+            const receipt = await tx.wait();
+
+            expect(receipt.events[0].event).to.equal("ConfigUpdated");
+            // Expect that the first event parameter is the DEFAULT_CONFIG object
+            expect(receipt.events[0].args[0]).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            // Expect that the second event parameter is the config object
+            expect(receipt.events[0].args[1]).to.deep.equal(Object.values(config));
+
+            expect(await accumulator.updateThreshold()).to.equal(config.updateThreshold);
+            expect(await accumulator.updateDelay()).to.equal(config.updateDelay);
+            expect(await accumulator.heartbeat()).to.equal(config.heartbeat);
+        });
+
+        it("Reverts if updateThreshold is 0", async function () {
+            const config = {
+                updateThreshold: 0,
+                updateDelay: MIN_UPDATE_DELAY + 100,
+                heartbeat: MAX_UPDATE_DELAY + 100,
+            };
+
+            await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
+        });
+
+        it("Reverts if updateDelay is greater than heartbeat", async function () {
+            const config = {
+                updateThreshold: TWO_PERCENT_CHANGE * 2,
+                updateDelay: MAX_UPDATE_DELAY + 100,
+                heartbeat: MIN_UPDATE_DELAY + 100,
+            };
+
+            await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
+        });
+    });
+
     describe(contractName + "#update", function () {
         var accumulator;
 
