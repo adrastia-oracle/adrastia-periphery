@@ -1,6 +1,6 @@
 {
   "name": "@adrastia-oracle/adrastia-periphery",
-  "version": "3.0.0",
+  "version": "4.0.0-beta.1",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "MIT",
@@ -30,7 +30,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "3.0.0",
+    "@adrastia-oracle/adrastia-core": "4.0.0-beta.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },
@@ -39,6 +40,7 @@
     "@nomiclabs/hardhat-ethers": "^2.2.1",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "chai": "^4.3.7",
+    "dotenv": "^16.0.3",
     "eth-gas-reporter": "^0.2.25",
     "ethereum-waffle": "^3.4.4",
     "ethers": "^5.7.2",

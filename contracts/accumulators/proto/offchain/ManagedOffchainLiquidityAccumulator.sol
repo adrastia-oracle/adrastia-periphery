@@ -1,32 +1,28 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV2LiquidityAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/offchain/OffchainLiquidityAccumulator.sol";
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
 import "../../AccumulatorConfig.sol";
 import "../../../access/Roles.sol";
 
-contract ManagedUniswapV2LiquidityAccumulator is
+contract ManagedOffchainLiquidityAccumulator is
     AccessControlEnumerable,
-    UniswapV2LiquidityAccumulator,
+    OffchainLiquidityAccumulator,
     AccumulatorConfig
 {
     constructor(
         IAveragingStrategy averagingStrategy_,
-        address uniswapFactory_,
-        bytes32 initCodeHash_,
         address quoteToken_,
         uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        UniswapV2LiquidityAccumulator(
+        OffchainLiquidityAccumulator(
             averagingStrategy_,
-            uniswapFactory_,
-            initCodeHash_,
             quoteToken_,
             decimals_,
             updateTheshold_,
@@ -38,12 +34,12 @@ contract ManagedUniswapV2LiquidityAccumulator is
 
     function canUpdate(bytes memory data) public view virtual override returns (bool) {
         // Return false if the message sender is missing the required role
-        if (!hasRole(Roles.ORACLE_UPDATER, address(0)) && !hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
+        if (!hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
 
         return super.canUpdate(data);
     }
 
-    function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
+    function update(bytes memory data) public virtual override onlyRole(Roles.ORACLE_UPDATER) returns (bool) {
         return super.update(data);
     }
 
