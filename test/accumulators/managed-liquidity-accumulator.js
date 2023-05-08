@@ -146,7 +146,7 @@ function describeLiquidityAccumulatorTests(
 
                 expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
 
-                const revertReason = updaterRoleCanBeOpen ? contractName + ": MISSING_ROLE" : "AccessControl";
+                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : "AccessControl";
 
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
 
