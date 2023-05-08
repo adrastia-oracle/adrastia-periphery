@@ -30,9 +30,7 @@ contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccu
             maxUpdateDelay_
         )
         AccumulatorConfig(uint32(updateTheshold_), uint32(minUpdateDelay_), uint32(maxUpdateDelay_))
-    {
-        initializeRoles();
-    }
+    {}
 
     /**
      * @notice Modifier to make a function callable only by a certain role. In
@@ -75,26 +73,5 @@ contract ManagedCurvePriceAccumulator is AccessControlEnumerable, CurvePriceAccu
 
     function _updateThreshold() internal view virtual override returns (uint256) {
         return config.updateThreshold;
-    }
-
-    function initializeRoles() internal virtual {
-        // Setup admin role, setting msg.sender as admin
-        _setupRole(Roles.ADMIN, msg.sender);
-        _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
-
-        // CONFIG_ADMIN is managed by ADMIN
-        _setRoleAdmin(Roles.CONFIG_ADMIN, Roles.ADMIN);
-
-        // UPDATER_ADMIN is managed by ADMIN
-        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
-
-        // ORACLE_UPDATER is managed by UPDATER_ADMIN
-        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
-
-        // Hierarchy:
-        // ADMIN
-        //   - CONFIG_ADMIN
-        //   - UPDATER_ADMIN
-        //     - ORACLE_UPDATER
     }
 }

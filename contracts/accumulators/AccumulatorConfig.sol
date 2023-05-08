@@ -28,6 +28,8 @@ contract AccumulatorConfig is AccessControlEnumerable {
     /// @param updateDelay_ The initial value for the update delay.
     /// @param heartbeat_ The initial value for the heartbeat.
     constructor(uint32 updateThreshold_, uint32 updateDelay_, uint32 heartbeat_) {
+        initializeRoles();
+
         config.updateThreshold = updateThreshold_;
         config.updateDelay = updateDelay_;
         config.heartbeat = heartbeat_;
@@ -46,5 +48,26 @@ contract AccumulatorConfig is AccessControlEnumerable {
         Config memory oldConfig = config;
         config = newConfig;
         emit ConfigUpdated(oldConfig, newConfig);
+    }
+
+    function initializeRoles() internal virtual {
+        // Setup admin role, setting msg.sender as admin
+        _setupRole(Roles.ADMIN, msg.sender);
+        _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
+
+        // CONFIG_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.CONFIG_ADMIN, Roles.ADMIN);
+
+        // UPDATER_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
+
+        // ORACLE_UPDATER is managed by UPDATER_ADMIN
+        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
+
+        // Hierarchy:
+        // ADMIN
+        //   - CONFIG_ADMIN
+        //   - UPDATER_ADMIN
+        //     - ORACLE_UPDATER
     }
 }
