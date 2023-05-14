@@ -2,7 +2,7 @@
 
 ## v4.0.0
 ### Dependencies
-- Upgrade adrastia-core to v4.0.0-beta.1.
+- Upgrade adrastia-core to v4.0.0-beta.2.
 
 ### Accumulators
 - Add AccumulatorConfig: A base contract for managing the configuration of an accumulator.
@@ -13,6 +13,7 @@
     - UPDATER_ADMIN
       - ORACLE_UPDATER
 - Add ManagedOffchainPriceAccumulator and ManagedOffchainLiquidityAccumulator.
+- Add managed interest rate accumulators for Compound v2, Compound III, Aave v2, and Aave v3.
 
 ### Rates
 - Add RateController and related contracts: A contract that periodically computes and stores rates for tokens.
