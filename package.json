@@ -31,13 +31,13 @@
   },
   "dependencies": {
     "@adrastia-oracle/adrastia-core": "4.0.0-beta.2",
-    "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },
   "devDependencies": {
     "@atixlabs/hardhat-time-n-mine": "^0.0.5",
     "@nomiclabs/hardhat-ethers": "^2.2.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@nomiclabs/hardhat-waffle": "^2.0.3",
     "chai": "^4.3.7",
     "dotenv": "^16.0.3",
