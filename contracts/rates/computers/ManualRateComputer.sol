@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
+import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
+
 import "../IRateComputer.sol";
 
 /**
@@ -9,7 +11,7 @@ import "../IRateComputer.sol";
  * @dev This contract is meant to be inherited by a more specific implementation that provides access control.
  *      The checkSetRate function must be implemented in the inheriting contract to enforce access control.
  */
-abstract contract ManualRateComputer is IRateComputer {
+abstract contract ManualRateComputer is IERC165, IRateComputer {
     /// @notice A struct to store rate and timestamp.
     struct Rate {
         uint64 rate;
@@ -49,6 +51,11 @@ abstract contract ManualRateComputer is IRateComputer {
         checkSetRate();
 
         rates[token] = Rate(rate, uint32(block.timestamp));
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IRateComputer).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
     /**

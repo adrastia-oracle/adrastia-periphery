@@ -22,6 +22,14 @@ contract ManagedManualRateComputer is ManualRateComputer, AccessControlEnumerabl
         initializeRoles();
     }
 
+    /// @inheritdoc IERC165
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, ManualRateComputer) returns (bool) {
+        return
+            ManualRateComputer.supportsInterface(interfaceId) || AccessControlEnumerable.supportsInterface(interfaceId);
+    }
+
     /// @notice Requires the sender to have the RATE_ADMIN role to call setRate.
     function checkSetRate() internal view virtual override onlyRole(Roles.RATE_ADMIN) {}
 

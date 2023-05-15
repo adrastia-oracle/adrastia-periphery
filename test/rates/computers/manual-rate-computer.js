@@ -135,3 +135,28 @@ describe("ManagedManualRateComputer#setRate", function () {
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
     });
 });
+
+describe("ManagedManualRateComputer#supportsInterface", function () {
+    var interfaceIds;
+    var computer;
+
+    beforeEach(async function () {
+        const [deployer] = await ethers.getSigners();
+
+        const computerFactory = await ethers.getContractFactory("ManagedManualRateComputer");
+        computer = await computerFactory.deploy();
+
+        const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+        interfaceIds = await interfaceIdsFactory.deploy();
+    });
+
+    it("Should support IERC165", async () => {
+        const interfaceId = await interfaceIds.iERC165();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IRateComputer", async () => {
+        const interfaceId = await interfaceIds.iRateComputer();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+});
