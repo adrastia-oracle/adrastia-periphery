@@ -116,7 +116,9 @@ describe("ManagedManualRateComputer#setRate", function () {
         // Sanity check that other doesn't have the ADMIN role
         expect(await computer.hasRole(ADMIN_ROLE, other.address)).to.be.false;
 
-        await computer.setRate(GRT, A_GOOD_RATE);
+        expect(await computer.setRate(GRT, A_GOOD_RATE))
+            .to.emit(computer, "RateUpdated")
+            .withArgs(GRT, A_GOOD_RATE);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
@@ -129,7 +131,9 @@ describe("ManagedManualRateComputer#setRate", function () {
         expect(await computer.hasRole(RATE_ADMIN_ROLE, deployer.address)).to.be.true;
         expect(await computer.hasRole(ADMIN_ROLE, deployer.address)).to.be.true;
 
-        await computer.setRate(GRT, A_GOOD_RATE);
+        expect(await computer.setRate(GRT, A_GOOD_RATE))
+            .to.emit(computer, "RateUpdated")
+            .withArgs(GRT, A_GOOD_RATE);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
