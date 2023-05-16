@@ -3,33 +3,19 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/oracles/PeriodicAccumulationOracle.sol";
 
-import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
+import "./bases/ManagedOracleBase.sol";
 
-import "../access/Roles.sol";
-
-contract ManagedPeriodicAccumulationOracle is AccessControlEnumerable, PeriodicAccumulationOracle {
+contract ManagedPeriodicAccumulationOracle is PeriodicAccumulationOracle, ManagedOracleBase {
     constructor(
         address liquidityAccumulator_,
         address priceAccumulator_,
         address quoteToken_,
         uint256 period_,
         uint256 granularity_
-    ) PeriodicAccumulationOracle(liquidityAccumulator_, priceAccumulator_, quoteToken_, period_, granularity_) {
-        initializeRoles();
-    }
-
-    /**
-     * @notice Modifier to make a function callable only by a certain role. In
-     * addition to checking the sender's role, `address(0)` 's role is also
-     * considered. Granting a role to `address(0)` is equivalent to enabling
-     * this role for everyone.
-     */
-    modifier onlyRoleOrOpenRole(bytes32 role) {
-        if (!hasRole(role, address(0))) {
-            require(hasRole(role, msg.sender), "ManagedPeriodicAccumulationOracle: MISSING_ROLE");
-        }
-        _;
-    }
+    )
+        PeriodicAccumulationOracle(liquidityAccumulator_, priceAccumulator_, quoteToken_, period_, granularity_)
+        ManagedOracleBase()
+    {}
 
     function canUpdate(bytes memory data) public view virtual override returns (bool) {
         // Return false if the message sender is missing the required role
@@ -48,22 +34,5 @@ contract ManagedPeriodicAccumulationOracle is AccessControlEnumerable, PeriodicA
         return
             AccessControlEnumerable.supportsInterface(interfaceId) ||
             PeriodicAccumulationOracle.supportsInterface(interfaceId);
-    }
-
-    function initializeRoles() internal virtual {
-        // Setup admin role, setting msg.sender as admin
-        _setupRole(Roles.ADMIN, msg.sender);
-        _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
-
-        // UPDATER_ADMIN is managed by ADMIN
-        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
-
-        // ORACLE_UPDATER is managed by UPDATER_ADMIN
-        _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
-
-        // Hierarchy:
-        // ADMIN
-        //   - UPDATER_ADMIN
-        //     - ORACLE_UPDATER
     }
 }
