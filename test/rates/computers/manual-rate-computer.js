@@ -163,4 +163,14 @@ describe("ManagedManualRateComputer#supportsInterface", function () {
         const interfaceId = await interfaceIds.iRateComputer();
         expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
+
+    it("Should support IAccessControlEnumerable", async () => {
+        const interfaceId = await interfaceIds.iAccessControlEnumerable();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IAccessControl", async () => {
+        const interfaceId = await interfaceIds.iAccessControl();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
 });
