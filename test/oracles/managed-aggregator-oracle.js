@@ -30,8 +30,13 @@ const DEFAULT_QUOTE_TOKEN_ADDRESS = USDC;
 const DEFAULT_QUOTE_TOKEN_SYMBOL = "USDC";
 const DEFAULT_QUOTE_TOKEN_DECIMALS = 6;
 const DEFAULT_LIQUIDITY_DECIMALS = 0;
+
 const DEFAULT_PERIOD = 100;
 const DEFAULT_GRANULARITY = 1;
+
+const DEFAULT_UPDATE_DELAY = 1;
+const DEFAULT_HEARTBEAT = 2;
+const DEFAULT_UPDATE_THRESHOLD = 2000000; // 2% change
 
 const ERROR_MISSING_ORACLES = 1;
 const ERROR_INVALID_MINIMUM_RESPONSES = 2;
@@ -51,7 +56,7 @@ async function blockTimestamp(blockNum) {
     return (await ethers.provider.getBlock(blockNum)).timestamp;
 }
 
-async function deployDefaultAggregator(constructorOverrides = {}) {
+async function deployDefaultPeriodicAggregator(constructorOverrides = {}) {
     const quoteTokenAddress = constructorOverrides.quoteTokenAddress ?? DEFAULT_QUOTE_TOKEN_ADDRESS;
 
     const averagingStrategyFactory = await ethers.getContractFactory(
@@ -98,9 +103,61 @@ async function deployDefaultAggregator(constructorOverrides = {}) {
     };
 }
 
+async function deployDefaultCurrentAggregator(constructorOverrides = {}) {
+    const quoteTokenAddress = constructorOverrides.quoteTokenAddress ?? DEFAULT_QUOTE_TOKEN_ADDRESS;
+
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    const aggregationStrategyFactory = await ethers.getContractFactory(
+        DEFAULT_AGGREGATION_STRATEGY_ABI,
+        DEFAULT_AGGREGATION_STRATEGY_BYTECODE
+    );
+    const aggregationStrategy = await aggregationStrategyFactory.deploy(averagingStrategy.address);
+    await aggregationStrategy.deployed();
+
+    const oracleStubFactory = await ethers.getContractFactory("MockOracle");
+    const oracleStub = await oracleStubFactory.deploy(
+        quoteTokenAddress,
+        constructorOverrides.liquidityDecimals ?? DEFAULT_LIQUIDITY_DECIMALS
+    );
+    await oracleStub.deployed();
+
+    const aggregatorParams = {
+        aggregationStrategy: constructorOverrides.aggregationStrategy ?? aggregationStrategy.address,
+        validationStrategy: constructorOverrides.validationStrategy ?? ethers.constants.AddressZero,
+        quoteTokenName: constructorOverrides.quoteTokenName ?? DEFAULT_QUOTE_TOKEN_NAME,
+        quoteTokenAddress: quoteTokenAddress,
+        quoteTokenSymbol: constructorOverrides.quoteTokenSymbol ?? DEFAULT_QUOTE_TOKEN_SYMBOL,
+        quoteTokenDecimals: constructorOverrides.quoteTokenDecimals ?? DEFAULT_QUOTE_TOKEN_DECIMALS,
+        liquidityDecimals: constructorOverrides.liquidityDecimals ?? DEFAULT_LIQUIDITY_DECIMALS,
+        oracles: constructorOverrides.oracles ?? [oracleStub.address],
+        tokenSpecificOracles: constructorOverrides.tokenSpecificOracles ?? [],
+    };
+
+    const aggregatorFactory = await ethers.getContractFactory("ManagedCurrentAggregatorOracle");
+    const aggregator = await aggregatorFactory.deploy(
+        aggregatorParams,
+        DEFAULT_UPDATE_THRESHOLD,
+        DEFAULT_UPDATE_DELAY,
+        DEFAULT_HEARTBEAT
+    );
+
+    return {
+        aggregator: aggregator,
+        oracles: [oracleStub],
+        aggregationStrategy: aggregatorParams.aggregationStrategy,
+        validationStrategy: aggregatorParams.validationStrategy,
+    };
+}
+
 describe("ManagedPeriodicAggregatorOracle#constructor", function () {
     it("Works with the default parameters", async function () {
-        const aggregatorDeployment = await deployDefaultAggregator();
+        const aggregatorDeployment = await deployDefaultPeriodicAggregator();
 
         const oracle = aggregatorDeployment.aggregator;
 
@@ -118,6 +175,151 @@ describe("ManagedPeriodicAggregatorOracle#constructor", function () {
         expect(await oracle.period()).to.equal(DEFAULT_PERIOD);
         expect(await oracle.granularity()).to.equal(DEFAULT_GRANULARITY);
         expect(await oracle.getOracles(WETH)).to.eql(underlyingOracles); // eql = deep equality
+    });
+});
+
+describe("ManagedCurrentAggregatorOracle#constructor", function () {
+    it("Works with the default parameters", async function () {
+        const aggregatorDeployment = await deployDefaultCurrentAggregator();
+
+        const oracle = aggregatorDeployment.aggregator;
+
+        const underlyingOracles = aggregatorDeployment.oracles.map((oracle) => {
+            return [oracle.address, DEFAULT_QUOTE_TOKEN_DECIMALS, DEFAULT_LIQUIDITY_DECIMALS];
+        });
+
+        expect(await oracle.aggregationStrategy(WETH)).to.equal(aggregatorDeployment.aggregationStrategy);
+        expect(await oracle.validationStrategy(WETH)).to.equal(aggregatorDeployment.validationStrategy);
+        expect(await oracle.quoteTokenName()).to.equal(DEFAULT_QUOTE_TOKEN_NAME);
+        expect(await oracle.quoteTokenAddress()).to.equal(DEFAULT_QUOTE_TOKEN_ADDRESS);
+        expect(await oracle.quoteTokenSymbol()).to.equal(DEFAULT_QUOTE_TOKEN_SYMBOL);
+        expect(await oracle.quoteTokenDecimals()).to.equal(DEFAULT_QUOTE_TOKEN_DECIMALS);
+        expect(await oracle.liquidityDecimals()).to.equal(DEFAULT_LIQUIDITY_DECIMALS);
+        expect(await oracle.getOracles(WETH)).to.eql(underlyingOracles); // eql = deep equality
+        expect(await oracle.updateThreshold()).to.equal(DEFAULT_UPDATE_THRESHOLD);
+        expect(await oracle.updateDelay()).to.equal(DEFAULT_UPDATE_DELAY);
+        expect(await oracle.heartbeat()).to.equal(DEFAULT_HEARTBEAT);
+    });
+});
+
+describe("ManagedCurrentAggregatorOracle#setConfig", function () {
+    var oracle;
+
+    beforeEach(async function () {
+        const aggregatorDeployment = await deployDefaultCurrentAggregator();
+
+        oracle = aggregatorDeployment.aggregator;
+
+        const [owner] = await ethers.getSigners();
+
+        // Grant owner the updater admin role
+        await oracle.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+        // Grant owner the oracle updater role
+        await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+        // Grant owner the config admin role
+        await oracle.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+    });
+
+    it("Reverts if the caller is not the config admin", async function () {
+        const [_, notConfigAdmin] = await ethers.getSigners();
+
+        const config = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith("AccessControl");
+    });
+
+    it("Reverts if the caller is not the config admin (with the role being assigned to the zero address)", async function () {
+        const [_, notConfigAdmin] = await ethers.getSigners();
+
+        await oracle.grantRole(CONFIG_ADMIN_ROLE, ethers.constants.AddressZero);
+
+        const config = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith("AccessControl");
+    });
+
+    it("Works", async function () {
+        const oldConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD * 2,
+            updateDelay: DEFAULT_UPDATE_DELAY * 2,
+            heartbeat: DEFAULT_HEARTBEAT * 2,
+        };
+
+        await expect(oracle.setConfig(newConfig))
+            .to.emit(oracle, "ConfigUpdated")
+            .withArgs(Object.values(oldConfig), Object.values(newConfig));
+
+        expect(await oracle.updateThreshold()).to.equal(newConfig.updateThreshold);
+        expect(await oracle.updateDelay()).to.equal(newConfig.updateDelay);
+        expect(await oracle.heartbeat()).to.equal(newConfig.heartbeat);
+    });
+
+    it("Works when setting the config back to default", async function () {
+        const oldConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD * 2,
+            updateDelay: DEFAULT_UPDATE_DELAY * 2,
+            heartbeat: DEFAULT_HEARTBEAT * 2,
+        };
+
+        await oracle.setConfig(newConfig);
+
+        await expect(oracle.setConfig(oldConfig))
+            .to.emit(oracle, "ConfigUpdated")
+            .withArgs(Object.values(newConfig), Object.values(oldConfig));
+
+        expect(await oracle.updateThreshold()).to.equal(oldConfig.updateThreshold);
+        expect(await oracle.updateDelay()).to.equal(oldConfig.updateDelay);
+        expect(await oracle.heartbeat()).to.equal(oldConfig.heartbeat);
+    });
+
+    it("Reverts if the update delay is greater than the heartbeat", async function () {
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_HEARTBEAT + 1,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.setConfig(newConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if the update threshold is zero", async function () {
+        const newConfig = {
+            updateThreshold: 0,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.setConfig(newConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if the heartbeat is zero", async function () {
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: 0,
+            heartbeat: 0,
+        };
+
+        await expect(oracle.setConfig(newConfig)).to.be.revertedWith("InvalidConfig");
     });
 });
 
@@ -281,6 +483,16 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
         it("Reverts if the caller is not the config admin", async function () {
             const [_, notConfigAdmin] = await ethers.getSigners();
+
+            await expect(
+                oracle.connect(notConfigAdmin).setTokenConfig(WETH, alternativeTokenConfig.address)
+            ).to.be.revertedWith("AccessControl");
+        });
+
+        it("Reverts if the caller is not the config admin (with the role being assigned to the zero address)", async function () {
+            const [_, notConfigAdmin] = await ethers.getSigners();
+
+            await oracle.grantRole(CONFIG_ADMIN_ROLE, ethers.constants.AddressZero);
 
             await expect(
                 oracle.connect(notConfigAdmin).setTokenConfig(WETH, alternativeTokenConfig.address)
@@ -718,4 +930,5 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
     });
 }
 
-describeManagedAggregatorOracleTests("ManagedPeriodicAggregatorOracle", deployDefaultAggregator);
+describeManagedAggregatorOracleTests("ManagedPeriodicAggregatorOracle", deployDefaultPeriodicAggregator);
+describeManagedAggregatorOracleTests("ManagedCurrentAggregatorOracle", deployDefaultCurrentAggregator);
