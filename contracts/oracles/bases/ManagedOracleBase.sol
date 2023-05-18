@@ -4,7 +4,7 @@ pragma solidity =0.8.13;
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "../../access/Roles.sol";
 
-contract ManagedOracleBase is AccessControlEnumerable {
+abstract contract ManagedOracleBase is AccessControlEnumerable {
     /// @notice An error thrown when attempting to call a function that requires a certain role.
     /// @param account The account that is missing the role.
     /// @param role The role that is missing.
