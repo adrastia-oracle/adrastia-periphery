@@ -41,10 +41,14 @@ abstract contract ManagedOracleBase is AccessControlEnumerable {
         // ORACLE_UPDATER is managed by UPDATER_ADMIN
         _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
 
+        // UPDATE_PAUSE_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.UPDATE_PAUSE_ADMIN, Roles.ADMIN);
+
         // Hierarchy:
         // ADMIN
         //   - CONFIG_ADMIN
         //   - UPDATER_ADMIN
         //     - ORACLE_UPDATER
+        //   - UPDATE_PAUSE_ADMIN
     }
 }

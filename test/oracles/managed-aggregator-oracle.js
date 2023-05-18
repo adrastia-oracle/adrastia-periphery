@@ -20,8 +20,9 @@ const { BigNumber } = require("ethers");
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
+const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATE_PAUSE_ADMIN_ROLE"));
 
-const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const GRT = "0xc944E90C64B2c07662A292be6244BDf05Cda44a7";
 
@@ -324,6 +325,149 @@ describe("ManagedCurrentAggregatorOracle#setConfig", function () {
 });
 
 function describeManagedAggregatorOracleTests(contractName, deployFunction) {
+    describe(contractName + "#setUpdatesPaused", function () {
+        var oracle;
+        var underlyingOracle;
+
+        beforeEach(async function () {
+            const aggregatorDeployment = await deployFunction();
+
+            oracle = aggregatorDeployment.aggregator;
+            const underlyingOracles = aggregatorDeployment.oracles;
+
+            const [owner] = await ethers.getSigners();
+
+            // Grant owner the updater admin role
+            await oracle.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+            // Grant owner the oracle updater role
+            await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+            // Grant owner the config admin role
+            await oracle.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+            // Grant owner the update pause admin role
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, owner.address);
+
+            // Update the underlying oracle so that the aggregator can update
+            await underlyingOracles[0].stubSetObservation(
+                WETH,
+                ethers.utils.parseUnits("1.0", 6),
+                ethers.utils.parseUnits("2.0", 0),
+                ethers.utils.parseUnits("3.0", 0),
+                await currentBlockTimestamp()
+            );
+
+            underlyingOracle = underlyingOracles[0];
+        });
+
+        it("Updates are not paused by default (before any updates occur)", async function () {
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Updates are not paused by default (after an initial update)", async function () {
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Accounts with the update pause admin role can pause updates", async function () {
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, true);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+        });
+
+        it("Accounts with the update pause admin role can unpause updates", async function () {
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, true);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            await expect(oracle.setUpdatesPaused(WETH, false))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, false);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Accounts without the update pause admin role cannot pause updates", async function () {
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+        });
+
+        it("Accounts without the update pause admin role cannot unpause updates", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+        });
+
+        it("Accounts without the update pause admin role cannot pause updates (with the role being granted to the zero address)", async function () {
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, ethers.constants.AddressZero);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+        });
+
+        it("Accounts without the update pause admin role cannot unpause updates (with the role being granted to the zero address)", async function () {
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, ethers.constants.AddressZero);
+            await oracle.setUpdatesPaused(WETH, true);
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+        });
+
+        it("Reverts on initial update if updates are paused", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+                'UpdatesArePaused("' + WETH + '")'
+            );
+        });
+
+        it("Reverts on second update if updates are paused", async function () {
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+
+            await oracle.setUpdatesPaused(WETH, true);
+
+            // Advance time by 7 days so that the next update can occur
+            await hre.timeAndMine.increaseTime(60 * 60 * 24 * 7);
+            await hre.timeAndMine.mine(1);
+            // Update the timestamp of the underlying oracle
+            await underlyingOracle.stubSetObservation(
+                WETH,
+                ethers.utils.parseUnits("1.0", 6),
+                ethers.utils.parseUnits("2.0", 0),
+                ethers.utils.parseUnits("3.0", 0),
+                await currentBlockTimestamp()
+            );
+
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
+                'UpdatesArePaused("' + WETH + '")'
+            );
+
+            // Sanity check that an update can be performed after unpausing
+            await oracle.setUpdatesPaused(WETH, false);
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+        });
+
+        it("Can't update if updates are paused", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(false);
+
+            // Sanity check that we can update if unpaused
+            await oracle.setUpdatesPaused(WETH, false);
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
+        });
+    });
+
     describe(contractName + "#setTokenConfig", function () {
         var oracle;
         var underlyingOracles;

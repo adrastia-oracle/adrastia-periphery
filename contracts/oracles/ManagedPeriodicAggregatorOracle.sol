@@ -6,20 +6,55 @@ import "@adrastia-oracle/adrastia-core/contracts/oracles/PeriodicAggregatorOracl
 import "./bases/ManagedAggregatorOracleBase.sol";
 
 contract ManagedPeriodicAggregatorOracle is PeriodicAggregatorOracle, ManagedAggregatorOracleBase {
+    uint16 internal constant PAUSE_FLAG_MASK = 1;
+
+    /// @notice Event emitted when the pause status of updates for a token is changed.
+    /// @param token The token for which the pause status of updates was changed.
+    /// @param areUpdatesPaused Whether updates are paused for the token.
+    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
+
+    /// @notice An error that is thrown when updates are paused for a token.
+    /// @param token The token for which updates are paused.
+    error UpdatesArePaused(address token);
+
     constructor(
         AbstractAggregatorOracleParams memory params,
         uint256 period_,
         uint256 granularity_
     ) PeriodicAggregatorOracle(params, period_, granularity_) ManagedAggregatorOracleBase() {}
 
+    function setUpdatesPaused(address token, bool paused) external virtual onlyRole(Roles.UPDATE_PAUSE_ADMIN) {
+        uint16 flags = observationBufferMetadata[token].flags;
+
+        if (paused) {
+            flags |= PAUSE_FLAG_MASK;
+        } else {
+            flags &= ~PAUSE_FLAG_MASK;
+        }
+
+        observationBufferMetadata[token].flags = flags;
+
+        emit PauseStatusChanged(token, paused);
+    }
+
+    function areUpdatesPaused(address token) external view virtual returns (bool) {
+        return _areUpdatesPaused(token);
+    }
+
     function canUpdate(bytes memory data) public view virtual override returns (bool) {
         // Return false if the message sender is missing the required role
         if (!hasRole(Roles.ORACLE_UPDATER, address(0)) && !hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
+
+        address token = abi.decode(data, (address));
+        if (_areUpdatesPaused(token)) return false;
 
         return super.canUpdate(data);
     }
 
     function update(bytes memory data) public virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) returns (bool) {
+        address token = abi.decode(data, (address));
+        if (_areUpdatesPaused(token)) revert UpdatesArePaused(token);
+
         return super.update(data);
     }
 
@@ -75,5 +110,9 @@ contract ManagedPeriodicAggregatorOracle is PeriodicAggregatorOracle, ManagedAgg
         }
 
         return super._getOracles(token);
+    }
+
+    function _areUpdatesPaused(address token) internal view virtual returns (bool) {
+        return (observationBufferMetadata[token].flags & PAUSE_FLAG_MASK) != 0;
     }
 }
