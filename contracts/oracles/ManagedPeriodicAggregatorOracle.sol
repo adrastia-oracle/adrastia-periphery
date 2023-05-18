@@ -68,7 +68,7 @@ contract ManagedPeriodicAggregatorOracle is PeriodicAggregatorOracle, ManagedAgg
         return super._validationStrategy(token);
     }
 
-    function _getOracles(address token) internal view override returns (Oracle[] memory oracles) {
+    function _getOracles(address token) internal view virtual override returns (Oracle[] memory oracles) {
         IOracleAggregatorTokenConfig tokenConfig = tokenConfigs[token];
         if (address(tokenConfig) != address(0)) {
             return tokenConfig.oracles();
