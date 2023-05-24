@@ -1,19 +1,29 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/oracles/PeriodicAccumulationOracle.sol";
+import "@adrastia-oracle/adrastia-core/contracts/oracles/PeriodicPriceAccumulationOracle.sol";
 
 import "./bases/ManagedOracleBase.sol";
 
-contract ManagedPeriodicAccumulationOracle is PeriodicAccumulationOracle, ManagedOracleBase {
+contract ManagedPeriodicPriceAccumulationOracle is PeriodicPriceAccumulationOracle, ManagedOracleBase {
     constructor(
-        address liquidityAccumulator_,
         address priceAccumulator_,
         address quoteToken_,
         uint256 period_,
-        uint256 granularity_
+        uint256 granularity_,
+        uint112 staticTokenLiquidity_,
+        uint112 staticQuoteTokenLiquidity_,
+        uint8 liquidityDecimals_
     )
-        PeriodicAccumulationOracle(liquidityAccumulator_, priceAccumulator_, quoteToken_, period_, granularity_)
+        PeriodicPriceAccumulationOracle(
+            priceAccumulator_,
+            quoteToken_,
+            period_,
+            granularity_,
+            staticTokenLiquidity_,
+            staticQuoteTokenLiquidity_,
+            liquidityDecimals_
+        )
         ManagedOracleBase()
     {}
 
@@ -30,9 +40,9 @@ contract ManagedPeriodicAccumulationOracle is PeriodicAccumulationOracle, Manage
 
     function supportsInterface(
         bytes4 interfaceId
-    ) public view virtual override(AccessControlEnumerable, PeriodicAccumulationOracle) returns (bool) {
+    ) public view virtual override(AccessControlEnumerable, PeriodicPriceAccumulationOracle) returns (bool) {
         return
             AccessControlEnumerable.supportsInterface(interfaceId) ||
-            PeriodicAccumulationOracle.supportsInterface(interfaceId);
+            PeriodicPriceAccumulationOracle.supportsInterface(interfaceId);
     }
 }

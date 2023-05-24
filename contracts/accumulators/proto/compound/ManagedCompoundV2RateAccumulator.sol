@@ -1,34 +1,25 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/uniswap/UniswapV2LiquidityAccumulator.sol";
-
-import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/compound/CompoundV2RateAccumulator.sol";
 
 import "../../AccumulatorConfig.sol";
-import "../../../access/Roles.sol";
 
-contract ManagedUniswapV2LiquidityAccumulator is
-    AccessControlEnumerable,
-    UniswapV2LiquidityAccumulator,
-    AccumulatorConfig
-{
+contract ManagedCompoundV2RateAccumulator is CompoundV2RateAccumulator, AccumulatorConfig {
     constructor(
         IAveragingStrategy averagingStrategy_,
-        address uniswapFactory_,
-        bytes32 initCodeHash_,
+        uint256 blocksPerYear_,
+        address cToken_,
         address quoteToken_,
-        uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        UniswapV2LiquidityAccumulator(
+        CompoundV2RateAccumulator(
             averagingStrategy_,
-            uniswapFactory_,
-            initCodeHash_,
+            blocksPerYear_,
+            cToken_,
             quoteToken_,
-            decimals_,
             updateTheshold_,
             minUpdateDelay_,
             maxUpdateDelay_
@@ -49,10 +40,9 @@ contract ManagedUniswapV2LiquidityAccumulator is
 
     function supportsInterface(
         bytes4 interfaceId
-    ) public view virtual override(AccessControlEnumerable, LiquidityAccumulator) returns (bool) {
+    ) public view virtual override(AccessControlEnumerable, PriceAccumulator) returns (bool) {
         return
-            AccessControlEnumerable.supportsInterface(interfaceId) ||
-            LiquidityAccumulator.supportsInterface(interfaceId);
+            AccessControlEnumerable.supportsInterface(interfaceId) || PriceAccumulator.supportsInterface(interfaceId);
     }
 
     function _updateDelay() internal view virtual override returns (uint256) {

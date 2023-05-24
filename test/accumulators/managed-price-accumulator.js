@@ -1,6 +1,8 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+const BigNumber = ethers.BigNumber;
+
 const {
     abi: ARITHMETIC_AVERAGING_ABI,
     bytecode: ARITHMETIC_AVERAGING_BYTECODE,
@@ -11,6 +13,11 @@ const uniswapV2InitCodeHash = "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbe
 const uniswapV3FactoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const uniswapV3InitCodeHash = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
 
+const cUSDC = "0x39AA39c021dfbaE8faC545936693aC917d5E7563"; // Compound v2 on mainnet
+const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // cUSDCv3 on mainnet
+const aaveV2Pool = "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"; // Aave v2 on mainnet
+const aaveV3Pool = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // Aave v3 on mainnet
+
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
@@ -18,9 +25,14 @@ const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFI
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
+const SUPPLY_RATE_TOKEN = "0x0000000000000000000000000000000000000010";
+
 const MIN_UPDATE_DELAY = 1;
 const MAX_UPDATE_DELAY = 2;
 const TWO_PERCENT_CHANGE = 2000000;
+
+const SECONDS_PER_YEAR = BigNumber.from(365 * 24 * 60 * 60);
+const BLOCKS_PER_YEAR = SECONDS_PER_YEAR.div(12); // 12 seconds per block
 
 const DEFAULT_CONFIG = {
     updateThreshold: TWO_PERCENT_CHANGE,
@@ -43,7 +55,8 @@ function describePriceAccumulatorTests(
     deployFunction,
     generateUpdateDataFunction,
     updaterRoleCanBeOpen,
-    smartContractsCanUpdate
+    smartContractsCanUpdate,
+    token
 ) {
     describe(contractName + "#setConfig", function () {
         var accumulator;
@@ -124,7 +137,7 @@ function describePriceAccumulatorTests(
 
         describe("Only accounts with oracle updater role can update", function () {
             it("Accounts with oracle updater role can update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                const updateData = await generateUpdateDataFunction(accumulator, token);
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -138,13 +151,13 @@ function describePriceAccumulatorTests(
             });
 
             it("Accounts without oracle updater role cannot update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                const updateData = await generateUpdateDataFunction(accumulator, token);
 
                 const [, addr1] = await ethers.getSigners();
 
                 expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
 
-                const revertReason = updaterRoleCanBeOpen ? contractName + ": MISSING_ROLE" : "AccessControl";
+                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : "AccessControl";
 
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
 
@@ -170,7 +183,7 @@ function describePriceAccumulatorTests(
                 // Note: If the updater role is not open, we can't test this because we can't grant the role to the
                 // updateable caller before it's deployed
                 it((smartContractsCanUpdate ? "Can" : "Can't") + " update in the constructor", async function () {
-                    const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                    const updateData = await generateUpdateDataFunction(accumulator, token);
 
                     if (!smartContractsCanUpdate) {
                         await expect(
@@ -184,7 +197,7 @@ function describePriceAccumulatorTests(
             }
 
             it((smartContractsCanUpdate ? "Can" : "Can't") + " update in a function call", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                const updateData = await generateUpdateDataFunction(accumulator, token);
 
                 const updateableCaller = await updateableCallerFactory.deploy(accumulator.address, false, updateData);
                 await updateableCaller.deployed();
@@ -211,7 +224,7 @@ function describePriceAccumulatorTests(
                 });
 
                 it("Accounts with oracle updater role can still update", async function () {
-                    const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                    const updateData = await generateUpdateDataFunction(accumulator, token);
 
                     expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -227,7 +240,7 @@ function describePriceAccumulatorTests(
                 it(
                     "Accounts without oracle updater role " + (updaterRoleCanBeOpen ? "can" : "cannot") + " update",
                     async function () {
-                        const updateData = await generateUpdateDataFunction(accumulator, WETH);
+                        const updateData = await generateUpdateDataFunction(accumulator, token);
 
                         const [owner, addr1] = await ethers.getSigners();
 
@@ -392,12 +405,96 @@ async function deployUniswapV3PriceAccumulator() {
     );
 }
 
-async function generateDexBasedUpdateData(accumulator, token) {
-    const price = await accumulator["consultPrice(address,uint256)"](WETH, 0);
+async function deployCompoundV2RateAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedCompoundV2RateAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        BLOCKS_PER_YEAR,
+        cUSDC,
+        USDC,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployCometRateAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedCometRateAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        cometAddress,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployAaveV2RateAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAaveV2RateAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        aaveV2Pool,
+        USDC,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployAaveV3RateAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAaveV3RateAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        aaveV3Pool,
+        USDC,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function generateOnchainUpdateData(accumulator, token) {
+    const price = await accumulator["consultPrice(address,uint256)"](token, 0);
 
     const updateData = ethers.utils.defaultAbiCoder.encode(
         ["address", "uint", "uint"],
-        [WETH, price, await currentBlockTimestamp()]
+        [token, price, await currentBlockTimestamp()]
     );
 
     return updateData;
@@ -416,13 +513,14 @@ describePriceAccumulatorTests(
     Smart contracts can update the accumulator because there's no extra power that they would gain by being able to
     so. Updaters already have full control over the data that the accumulator stores.
     */
-    true
+    true,
+    WETH
 );
 
 describePriceAccumulatorTests(
     "ManagedCurvePriceAccumulator",
     deployCurvePriceAccumulator,
-    generateDexBasedUpdateData,
+    generateOnchainUpdateData,
     /*
     The role can be open because updaters don't have full control over the data that the accumulator stores. There are
     cases where it would be beneficial to allow anyone to update the accumulator.
@@ -431,13 +529,14 @@ describePriceAccumulatorTests(
     /*
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
-    false
+    false,
+    WETH
 );
 
 describePriceAccumulatorTests(
     "ManagedUniswapV2PriceAccumulator",
     deployUniswapV2PriceAccumulator,
-    generateDexBasedUpdateData,
+    generateOnchainUpdateData,
     /*
     The role can be open because updaters don't have full control over the data that the accumulator stores. There are
     cases where it would be beneficial to allow anyone to update the accumulator.
@@ -446,13 +545,14 @@ describePriceAccumulatorTests(
     /*
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
-    false
+    false,
+    WETH
 );
 
 describePriceAccumulatorTests(
     "ManagedUniswapV3PriceAccumulator",
     deployUniswapV3PriceAccumulator,
-    generateDexBasedUpdateData,
+    generateOnchainUpdateData,
     /*
     The role can be open because updaters don't have full control over the data that the accumulator stores. There are
     cases where it would be beneficial to allow anyone to update the accumulator.
@@ -461,5 +561,70 @@ describePriceAccumulatorTests(
     /*
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
-    false
+    false,
+    WETH
+);
+
+describePriceAccumulatorTests(
+    "ManagedCompoundV2RateAccumulator",
+    deployCompoundV2RateAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    SUPPLY_RATE_TOKEN
+);
+
+describePriceAccumulatorTests(
+    "ManagedCometRateAccumulator",
+    deployCometRateAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    SUPPLY_RATE_TOKEN
+);
+
+describePriceAccumulatorTests(
+    "ManagedAaveV2RateAccumulator",
+    deployAaveV2RateAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    SUPPLY_RATE_TOKEN
+);
+
+describePriceAccumulatorTests(
+    "ManagedAaveV3RateAccumulator",
+    deployAaveV3RateAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    SUPPLY_RATE_TOKEN
 );

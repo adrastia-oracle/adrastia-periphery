@@ -37,13 +37,14 @@ async function tryRevokeRole(contract, account, role) {
 }
 
 async function main() {
-    const period = 60 * 60 * 24; // One day
+    const period = 1 * 60 * 60; // One hour
     const initialBufferCardinality = 2;
-    const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484";
+    const updatersMustBeEoa = true;
+    const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin
     const assignAllRolesToAdmin = true;
 
-    const factory = await ethers.getContractFactory("RateController");
-    const rateController = await factory.deploy(period, initialBufferCardinality);
+    const factory = await ethers.getContractFactory("ManagedRateController");
+    const rateController = await factory.deploy(period, initialBufferCardinality, updatersMustBeEoa);
     await rateController.deployed();
 
     console.log("RateController deployed to:", rateController.address);
