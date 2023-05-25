@@ -4,6 +4,7 @@ pragma solidity =0.8.13;
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 
+import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
 
@@ -15,7 +16,7 @@ import "../IRateComputer.sol";
  * @notice Abstract contract for computing mutated values.
  * @dev Extend this contract and implement the getValue function to use it.
  */
-abstract contract MutatedValueComputer is IRateComputer, AccessControlEnumerable {
+abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlEnumerable {
     using SafeCast for uint256;
 
     struct Config {
@@ -103,6 +104,16 @@ abstract contract MutatedValueComputer is IRateComputer, AccessControlEnumerable
         clampedValue = (clampedValue < config.min) ? config.min : clampedValue;
 
         return clampedValue;
+    }
+
+    /// @inheritdoc IERC165
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view virtual override(AccessControlEnumerable, IERC165) returns (bool) {
+        return
+            interfaceId == type(IRateComputer).interfaceId ||
+            interfaceId == type(IERC165).interfaceId ||
+            AccessControlEnumerable.supportsInterface(interfaceId);
     }
 
     /**
