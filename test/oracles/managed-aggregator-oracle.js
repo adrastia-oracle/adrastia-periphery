@@ -230,7 +230,7 @@ describe("ManagedCurrentAggregatorOracle#setConfig", function () {
             heartbeat: DEFAULT_HEARTBEAT,
         };
 
-        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith("AccessControl");
+        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith(/AccessControl: .*/);
     });
 
     it("Reverts if the caller is not the config admin (with the role being assigned to the zero address)", async function () {
@@ -244,7 +244,7 @@ describe("ManagedCurrentAggregatorOracle#setConfig", function () {
             heartbeat: DEFAULT_HEARTBEAT,
         };
 
-        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith("AccessControl");
+        await expect(oracle.connect(notConfigAdmin).setConfig(config)).to.be.revertedWith(/AccessControl: .*/);
     });
 
     it("Works", async function () {
@@ -393,7 +393,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
         it("Accounts without the update pause admin role cannot pause updates", async function () {
             const [, other] = await ethers.getSigners();
 
-            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Accounts without the update pause admin role cannot unpause updates", async function () {
@@ -402,7 +402,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
             const [, other] = await ethers.getSigners();
 
-            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Accounts without the update pause admin role cannot pause updates (with the role being granted to the zero address)", async function () {
@@ -410,7 +410,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
             const [, other] = await ethers.getSigners();
 
-            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Accounts without the update pause admin role cannot unpause updates (with the role being granted to the zero address)", async function () {
@@ -420,15 +420,15 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
             const [, other] = await ethers.getSigners();
 
-            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith("AccessControl");
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Reverts on initial update if updates are paused", async function () {
             await oracle.setUpdatesPaused(WETH, true);
 
-            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
-                'UpdatesArePaused("' + WETH + '")'
-            );
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32)))
+                .to.be.revertedWith("UpdatesArePaused")
+                .withArgs(WETH);
         });
 
         it("Reverts on second update if updates are paused", async function () {
@@ -448,9 +448,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 await currentBlockTimestamp()
             );
 
-            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.be.revertedWith(
-                'UpdatesArePaused("' + WETH + '")'
-            );
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32)))
+                .to.be.revertedWith("UpdatesArePaused")
+                .withArgs(WETH);
 
             // Sanity check that an update can be performed after unpausing
             await oracle.setUpdatesPaused(WETH, false);
@@ -630,7 +630,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
             await expect(
                 oracle.connect(notConfigAdmin).setTokenConfig(WETH, alternativeTokenConfig.address)
-            ).to.be.revertedWith("AccessControl");
+            ).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Reverts if the caller is not the config admin (with the role being assigned to the zero address)", async function () {
@@ -640,7 +640,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
             await expect(
                 oracle.connect(notConfigAdmin).setTokenConfig(WETH, alternativeTokenConfig.address)
-            ).to.be.revertedWith("AccessControl");
+            ).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Only sets the config for the specified token", async function () {
@@ -686,13 +686,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 []
             );
 
-            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWith0Oracles.address)).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWith0Oracles.address +
-                    '", ' +
-                    ERROR_MISSING_ORACLES +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWith0Oracles.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(alternativeTokenConfigWith0Oracles.address, ERROR_MISSING_ORACLES);
         });
 
         it("Reverts if the new config has duplicate oracles", async function () {
@@ -703,15 +699,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address, oracleStub1.address]
             );
 
-            await expect(
-                oracle.setTokenConfig(GRT, alternativeTokenConfigWithDuplicateOracles.address)
-            ).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWithDuplicateOracles.address +
-                    '", ' +
-                    ERROR_DUPLICATE_ORACLES +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWithDuplicateOracles.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(alternativeTokenConfigWithDuplicateOracles.address, ERROR_DUPLICATE_ORACLES);
         });
 
         it("Reverts if the new config has a minimum responses value of zero", async function () {
@@ -722,15 +712,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address]
             );
 
-            await expect(
-                oracle.setTokenConfig(GRT, alternativeTokenConfigWith0MinimumResponses.address)
-            ).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWith0MinimumResponses.address +
-                    '", ' +
-                    ERROR_INVALID_MINIMUM_RESPONSES +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWith0MinimumResponses.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(alternativeTokenConfigWith0MinimumResponses.address, ERROR_INVALID_MINIMUM_RESPONSES);
         });
 
         it("Reverts if the new config has a minimum responses value greater than the number of oracles", async function () {
@@ -741,15 +725,12 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address]
             );
 
-            await expect(
-                oracle.setTokenConfig(GRT, alternativeTokenConfigWithMinimumResponsesTooLarge.address)
-            ).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWithMinimumResponsesTooLarge.address +
-                    '", ' +
-                    ERROR_MINIMUM_RESPONSES_TOO_LARGE +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWithMinimumResponsesTooLarge.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(
+                    alternativeTokenConfigWithMinimumResponsesTooLarge.address,
+                    ERROR_MINIMUM_RESPONSES_TOO_LARGE
+                );
         });
 
         it("Reverts if the new config has an invalid aggregation strategy", async function () {
@@ -760,15 +741,12 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address]
             );
 
-            await expect(
-                oracle.setTokenConfig(GRT, alternativeTokenConfigWithAnInvalidAggregationStrategy.address)
-            ).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWithAnInvalidAggregationStrategy.address +
-                    '", ' +
-                    ERROR_INVALID_AGGREGATION_STRATEGY +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWithAnInvalidAggregationStrategy.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(
+                    alternativeTokenConfigWithAnInvalidAggregationStrategy.address,
+                    ERROR_INVALID_AGGREGATION_STRATEGY
+                );
         });
 
         it("Reverts if the new config has a quote token decimal mismatch with the validation strategy", async function () {
@@ -792,15 +770,12 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address]
             );
 
-            await expect(
-                oracle.setTokenConfig(GRT, alternativeTokenConfigWithQuoteTokenDecimalsMismatch.address)
-            ).to.be.revertedWith(
-                'InvalidTokenConfig("' +
-                    alternativeTokenConfigWithQuoteTokenDecimalsMismatch.address +
-                    '", ' +
-                    ERROR_QUOTE_TOKEN_DECIMALS_MISMATCH +
-                    ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, alternativeTokenConfigWithQuoteTokenDecimalsMismatch.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(
+                    alternativeTokenConfigWithQuoteTokenDecimalsMismatch.address,
+                    ERROR_QUOTE_TOKEN_DECIMALS_MISMATCH
+                );
         });
 
         it("Reverts if the new config contains an oracle with the zero address", async function () {
@@ -812,9 +787,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 [oracleStub1.address] // This is not returned by the oracles() function
             );
 
-            await expect(oracle.setTokenConfig(GRT, invalidTokenConfig.address)).to.be.revertedWith(
-                'InvalidTokenConfig("' + invalidTokenConfig.address + '", ' + ERROR_INVALID_ORACLE + ")"
-            );
+            await expect(oracle.setTokenConfig(GRT, invalidTokenConfig.address))
+                .to.be.revertedWith("InvalidTokenConfig")
+                .withArgs(invalidTokenConfig.address, ERROR_INVALID_ORACLE);
         });
     });
 

@@ -75,7 +75,7 @@ function describePriceAccumulatorTests(
 
             expect(await accumulator.hasRole(CONFIG_ADMIN_ROLE, addr1.address)).to.equal(false);
 
-            await expect(accumulator.connect(addr1).setConfig(DEFAULT_CONFIG)).to.be.revertedWith("AccessControl");
+            await expect(accumulator.connect(addr1).setConfig(DEFAULT_CONFIG)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Works", async function () {
@@ -157,7 +157,7 @@ function describePriceAccumulatorTests(
 
                 expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
 
-                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : "AccessControl";
+                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : /AccessControl: .*/;
 
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
 

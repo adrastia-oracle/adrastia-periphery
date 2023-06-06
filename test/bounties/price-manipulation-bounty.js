@@ -119,7 +119,7 @@ describe("PriceManipulationBounty#setClaimConditions", function () {
         await expect(
             bounty.connect(other).setClaimConditions(lowerBound, upperBound, expiration),
             "other"
-        ).to.be.revertedWith("AccessControl");
+        ).to.be.revertedWith(/AccessControl: .*/);
 
         // Grant the ADMIN role to the other account
         await bounty.grantRole(ADMIN_ROLE, otherAdmin.address);
@@ -128,7 +128,7 @@ describe("PriceManipulationBounty#setClaimConditions", function () {
         await expect(
             bounty.connect(otherAdmin).setClaimConditions(lowerBound, upperBound, expiration),
             "otherAdmin"
-        ).to.be.revertedWith("AccessControl");
+        ).to.be.revertedWith(/AccessControl: .*/);
     });
 
     it("Should revert if the bounty has already been claimed", async function () {
@@ -393,7 +393,7 @@ describe("PriceManipulationBounty#removeBounty", function () {
         const [_, other] = await ethers.getSigners();
 
         // Account with no roles
-        await expect(bounty.connect(other).removeBounty(), "other").to.be.revertedWith("AccessControl");
+        await expect(bounty.connect(other).removeBounty(), "other").to.be.revertedWith(/AccessControl: .*/);
     });
 });
 
@@ -454,7 +454,7 @@ describe("PriceManipulationBounty#recoverERC20", function () {
 
         // Account with no roles
         await expect(bounty.connect(other).recoverERC20(rewardToken, rewardAmount), "other").to.be.revertedWith(
-            "AccessControl"
+            /AccessControl: .*/
         );
     });
 
