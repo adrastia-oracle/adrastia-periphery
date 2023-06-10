@@ -9,6 +9,7 @@ const {
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
+const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATE_PAUSE_ADMIN_ROLE"));
 
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -131,6 +132,143 @@ describe("ManagedPriceVolatilityOracle#constructor", function () {
 });
 
 function describeManagedHistoricalAggregatorOracleTests(contractName, deployFunction) {
+    describe(contractName + "#setUpdatesPaused", function () {
+        var oracle;
+        var source;
+
+        beforeEach(async function () {
+            const deployment = await deployFunction();
+
+            oracle = deployment.oracle;
+            source = deployment.source;
+
+            const [owner] = await ethers.getSigners();
+
+            // Grant owner the updater admin role
+            await oracle.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+            // Grant owner the oracle updater role
+            await oracle.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+            // Grant owner the config admin role
+            await oracle.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+            // Grant owner the update pause admin role
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, owner.address);
+
+            // Push enough data to the source so that the oracle can update
+            const amountToPush =
+                DEFAULT_OBSERVATION_AMOUNT * DEFAULT_OBSERVATION_INCREMENT + DEFAULT_OBSERVATION_OFFSET + 1;
+            for (var i = 0; i < amountToPush; i++) {
+                const price = ethers.utils.parseUnits("2.0", DEFAULT_QUOTE_TOKEN_DECIMALS);
+                const tokenLiquidity = ethers.utils.parseUnits("3.0", DEFAULT_LIQUIDITY_DECIMALS);
+                const quoteTokenLiquidity = ethers.utils.parseUnits("5.0", DEFAULT_LIQUIDITY_DECIMALS);
+
+                await source.stubPushNow(WETH, price, tokenLiquidity, quoteTokenLiquidity);
+            }
+        });
+
+        it("Updates are not paused by default (before any updates occur)", async function () {
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Updates are not paused by default (after an initial update)", async function () {
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Accounts with the update pause admin role can pause updates", async function () {
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, true);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+        });
+
+        it("Accounts with the update pause admin role can unpause updates", async function () {
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, true);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            await expect(oracle.setUpdatesPaused(WETH, false))
+                .to.emit(oracle, "PauseStatusChanged")
+                .withArgs(WETH, false);
+
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+        });
+
+        it("Accounts without the update pause admin role cannot pause updates", async function () {
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Accounts without the update pause admin role cannot unpause updates", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Accounts without the update pause admin role cannot pause updates (with the role being granted to the zero address)", async function () {
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, ethers.constants.AddressZero);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Accounts without the update pause admin role cannot unpause updates (with the role being granted to the zero address)", async function () {
+            await oracle.grantRole(UPDATE_PAUSE_ADMIN_ROLE, ethers.constants.AddressZero);
+            await oracle.setUpdatesPaused(WETH, true);
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            const [, other] = await ethers.getSigners();
+
+            await expect(oracle.connect(other).setUpdatesPaused(WETH, true)).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Reverts on initial update if updates are paused", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32)))
+                .to.be.revertedWith("UpdatesArePaused")
+                .withArgs(WETH);
+        });
+
+        it("Reverts on second update if updates are paused", async function () {
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+
+            await oracle.setUpdatesPaused(WETH, true);
+
+            // Push an observation to the source so that an update is needed
+            const price = ethers.utils.parseUnits("2.0", DEFAULT_QUOTE_TOKEN_DECIMALS);
+            const tokenLiquidity = ethers.utils.parseUnits("3.0", DEFAULT_LIQUIDITY_DECIMALS);
+            const quoteTokenLiquidity = ethers.utils.parseUnits("5.0", DEFAULT_LIQUIDITY_DECIMALS);
+            await source.stubPushNow(WETH, price, tokenLiquidity, quoteTokenLiquidity);
+
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32)))
+                .to.be.revertedWith("UpdatesArePaused")
+                .withArgs(WETH);
+
+            // Sanity check that an update can be performed after unpausing
+            await oracle.setUpdatesPaused(WETH, false);
+            await expect(oracle.update(ethers.utils.hexZeroPad(WETH, 32))).to.emit(oracle, "Updated");
+        });
+
+        it("Can't update if updates are paused", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(false);
+
+            // Sanity check that we can update if unpaused
+            await oracle.setUpdatesPaused(WETH, false);
+            expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
+        });
+    });
+
     describe(contractName + "#setConfig", function () {
         var oracle;
         var source;
