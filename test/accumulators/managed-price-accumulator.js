@@ -18,12 +18,18 @@ const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // cUSDCv3 on
 const aaveV2Pool = "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"; // Aave v2 on mainnet
 const aaveV3Pool = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // Aave v3 on mainnet
 
+const balancerV2Vault = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"; // Balancer v2 on mainnet
+const balancerV2StablePoolId = "0x32296969ef14eb0c6d29669c550d4a0449130230000200000000000000000080"; // wstETH/WETH on mainnet
+const balancerV2WeightedPoolId = "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"; // BAL/WETH on mainnet
+
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const wstETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+const BAL = "0xba100000625a3754423978a60c9317c58a424e3D";
 
 const SUPPLY_RATE_TOKEN = "0x0000000000000000000000000000000000000010";
 
@@ -75,7 +81,7 @@ function describePriceAccumulatorTests(
 
             expect(await accumulator.hasRole(CONFIG_ADMIN_ROLE, addr1.address)).to.equal(false);
 
-            await expect(accumulator.connect(addr1).setConfig(DEFAULT_CONFIG)).to.be.revertedWith("AccessControl");
+            await expect(accumulator.connect(addr1).setConfig(DEFAULT_CONFIG)).to.be.revertedWith(/AccessControl: .*/);
         });
 
         it("Works", async function () {
@@ -157,7 +163,7 @@ function describePriceAccumulatorTests(
 
                 expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(false);
 
-                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : "AccessControl";
+                const revertReason = updaterRoleCanBeOpen ? "MissingRole" : /AccessControl: .*/;
 
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
 
@@ -489,6 +495,50 @@ async function deployAaveV3RateAccumulator() {
     );
 }
 
+async function deployBalancerV2StablePriceAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedBalancerV2StablePriceAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        balancerV2Vault,
+        balancerV2StablePoolId,
+        WETH,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployBalancerV2WeightedPriceAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedBalancerV2WeightedPriceAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        balancerV2Vault,
+        balancerV2WeightedPoolId,
+        WETH,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function generateOnchainUpdateData(accumulator, token) {
     const price = await accumulator["consultPrice(address,uint256)"](token, 0);
 
@@ -627,4 +677,36 @@ describePriceAccumulatorTests(
     */
     false,
     SUPPLY_RATE_TOKEN
+);
+
+describePriceAccumulatorTests(
+    "ManagedBalancerV2StablePriceAccumulator",
+    deployBalancerV2StablePriceAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    wstETH
+);
+
+describePriceAccumulatorTests(
+    "ManagedBalancerV2WeightedPriceAccumulator",
+    deployBalancerV2WeightedPriceAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    BAL
 );

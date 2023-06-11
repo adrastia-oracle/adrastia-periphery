@@ -185,7 +185,7 @@ describe("RateController#setUpdatesPaused", function () {
     });
 
     it("Should revert if the token is missing a config", async function () {
-        await expect(controller.setUpdatesPaused(USDC, true)).to.be.revertedWith('MissingConfig("' + USDC + '")');
+        await expect(controller.setUpdatesPaused(USDC, true)).to.be.revertedWith("MissingConfig").withArgs(USDC);
 
         // Sanity check that we can successfully call the function if we have the config
         await controller.setConfig(USDC, DEFAULT_CONFIG);
@@ -290,7 +290,7 @@ describe("RateController#setConfig", function () {
             components: [],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if there's a component length mismatch (componentWeights.length = 0, components.length = 1)", async function () {
@@ -303,7 +303,7 @@ describe("RateController#setConfig", function () {
             components: [computer.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if the max rate is less than the min rate", async function () {
@@ -313,7 +313,7 @@ describe("RateController#setConfig", function () {
             min: ethers.utils.parseUnits("2", 18),
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if the max percent decrease is greater than 100%", async function () {
@@ -322,7 +322,7 @@ describe("RateController#setConfig", function () {
             maxPercentDecrease: BigNumber.from(10001),
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if the sum of the component weights is greater than 10000 (with one component)", async function () {
@@ -335,7 +335,7 @@ describe("RateController#setConfig", function () {
             components: [computer.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if the sum of the component weights is greater than 10000 (with two components)", async function () {
@@ -348,7 +348,7 @@ describe("RateController#setConfig", function () {
             components: [computer.address, computer.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert if a rate overflow is possible", async function () {
@@ -361,7 +361,7 @@ describe("RateController#setConfig", function () {
             components: [computer.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert when a component with the zero address is provided", async function () {
@@ -374,7 +374,7 @@ describe("RateController#setConfig", function () {
             components: [AddressZero],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert when a component that doesn't implement ERC165 is provided", async function () {
@@ -393,7 +393,7 @@ describe("RateController#setConfig", function () {
             components: [badComputerInstance.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should revert when a component that doesn't implement IRateComputer (ERC165) is provided", async function () {
@@ -412,7 +412,7 @@ describe("RateController#setConfig", function () {
             components: [badComputerInstance.address],
         };
 
-        await expect(controller.setConfig(GRT, config)).to.be.revertedWith('InvalidConfig("' + GRT + '")');
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
@@ -1483,7 +1483,7 @@ describe("RateController#update", function () {
 
         const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-        await expect(controller.update(updateData)).to.be.revertedWith('MissingRole("' + ORACLE_UPDATER_ROLE + '")');
+        await expect(controller.update(updateData)).to.be.revertedWith("MissingRole").withArgs(ORACLE_UPDATER_ROLE);
     });
 
     it("Works if the caller has the ORACLE_UPDATER_ROLE", async function () {
@@ -2128,9 +2128,9 @@ describe("RateController - IHistoricalRates implementation", function () {
         it("Can't be called twice", async function () {
             await controller.stubInitializeBuffers(USDC);
 
-            await expect(controller.stubInitializeBuffers(USDC)).to.be.revertedWith(
-                'BufferAlreadyInitialized("' + USDC + '")'
-            );
+            await expect(controller.stubInitializeBuffers(USDC))
+                .to.be.revertedWith("BufferAlreadyInitialized")
+                .withArgs(USDC);
         });
 
         it("Emits the correct event", async function () {
@@ -2160,7 +2160,7 @@ describe("RateController - IHistoricalRates implementation", function () {
         });
 
         it("Should revert if the token is missing a config", async function () {
-            await expect(controller.setRatesCapacity(USDC, 2)).to.be.revertedWith('MissingConfig("' + USDC + '")');
+            await expect(controller.setRatesCapacity(USDC, 2)).to.be.revertedWith("MissingConfig").withArgs(USDC);
         });
 
         it("Should revert if the amount is less than the existing capacity", async function () {
@@ -2911,9 +2911,9 @@ describe("RateController#manuallyPushRate", function () {
     it("Should revert if the token doesn't have a config", async function () {
         const rate = ethers.utils.parseUnits("0.1234", 18);
 
-        await expect(controller.manuallyPushRate(USDC, rate, rate, 1)).to.be.revertedWith(
-            'MissingConfig("' + USDC + '")'
-        );
+        await expect(controller.manuallyPushRate(USDC, rate, rate, 1))
+            .to.be.revertedWith("MissingConfig")
+            .withArgs(USDC);
 
         // Sanity check that it works if we set a config
         await controller.setConfig(USDC, DEFAULT_CONFIG);

@@ -4,7 +4,7 @@ const hre = require("hardhat");
 const ethers = hre.ethers;
 
 async function main() {
-    const token = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619";
+    const token = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"; // WETH on Polygon
 
     // The following configuration assumes that 1e18 = 100% for rates
 
@@ -26,7 +26,7 @@ async function main() {
     const dynamicRateComponents = [
         /*{
             address: ethers.constants.AddressZero,
-            weight: ethers.utils.parseUnits("0.05", 18), // 5%
+            weight: BigNumber.from(10000), // 100%
         },*/
     ];
 

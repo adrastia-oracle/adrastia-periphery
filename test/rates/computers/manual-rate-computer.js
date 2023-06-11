@@ -116,7 +116,9 @@ describe("ManagedManualRateComputer#setRate", function () {
         // Sanity check that other doesn't have the ADMIN role
         expect(await computer.hasRole(ADMIN_ROLE, other.address)).to.be.false;
 
-        await computer.setRate(GRT, A_GOOD_RATE);
+        expect(await computer.setRate(GRT, A_GOOD_RATE))
+            .to.emit(computer, "RateUpdated")
+            .withArgs(GRT, A_GOOD_RATE);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
@@ -129,9 +131,46 @@ describe("ManagedManualRateComputer#setRate", function () {
         expect(await computer.hasRole(RATE_ADMIN_ROLE, deployer.address)).to.be.true;
         expect(await computer.hasRole(ADMIN_ROLE, deployer.address)).to.be.true;
 
-        await computer.setRate(GRT, A_GOOD_RATE);
+        expect(await computer.setRate(GRT, A_GOOD_RATE))
+            .to.emit(computer, "RateUpdated")
+            .withArgs(GRT, A_GOOD_RATE);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
+    });
+});
+
+describe("ManagedManualRateComputer#supportsInterface", function () {
+    var interfaceIds;
+    var computer;
+
+    beforeEach(async function () {
+        const [deployer] = await ethers.getSigners();
+
+        const computerFactory = await ethers.getContractFactory("ManagedManualRateComputer");
+        computer = await computerFactory.deploy();
+
+        const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+        interfaceIds = await interfaceIdsFactory.deploy();
+    });
+
+    it("Should support IERC165", async () => {
+        const interfaceId = await interfaceIds.iERC165();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IRateComputer", async () => {
+        const interfaceId = await interfaceIds.iRateComputer();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IAccessControlEnumerable", async () => {
+        const interfaceId = await interfaceIds.iAccessControlEnumerable();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IAccessControl", async () => {
+        const interfaceId = await interfaceIds.iAccessControl();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
 });

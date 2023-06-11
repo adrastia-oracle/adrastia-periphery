@@ -1,8 +1,10 @@
+require("dotenv").config();
 require("@nomiclabs/hardhat-waffle");
 require("solidity-coverage");
 require("hardhat-gas-reporter");
 require("hardhat-tracer");
 require("@atixlabs/hardhat-time-n-mine");
+require("@nomiclabs/hardhat-etherscan");
 
 const SOLC_8 = {
     version: "0.8.13",
@@ -23,11 +25,8 @@ module.exports = {
     },
     networks: {
         hardhat: {
-            hardfork: "london",
-            gasPrice: "auto",
             forking: {
-                url: "https://eth-mainnet.alchemyapi.io/v2/VCgYDancQJkTUUroC021s8qizSktMDQJ",
-                //blockNumber: 13567142,
+                url: process.env.ETHEREUM_URL || "",
             },
             mining: {
                 auto: true,
@@ -35,6 +34,16 @@ module.exports = {
                     order: "fifo",
                 },
             },
+        },
+        polygon: {
+            chainId: 137,
+            url: process.env.POLYGON_URL || "",
+        },
+    },
+    etherscan: {
+        apiKey: {
+            etherscan: process.env.ETHERSCAN_API_KEY,
+            polygon: process.env.POLYGONSCAN_API_KEY,
         },
     },
 };

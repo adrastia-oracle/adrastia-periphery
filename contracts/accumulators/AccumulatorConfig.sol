@@ -6,7 +6,7 @@ import "../access/Roles.sol";
 
 /// @title AccumulatorConfig
 /// @notice A contract for managing the configuration of an accumulator.
-contract AccumulatorConfig is AccessControlEnumerable {
+abstract contract AccumulatorConfig is AccessControlEnumerable {
     /// @dev A struct that holds configuration values for the accumulator.
     struct Config {
         uint32 updateThreshold;
