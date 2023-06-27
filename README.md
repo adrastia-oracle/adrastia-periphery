@@ -10,7 +10,7 @@ Adrastia Periphery is a set of Solidity smart contracts that complement the [Adr
 
 ### Requirements
 
-- node: v14 or later
+- node: v16 or later
 - yarn
 - git
 

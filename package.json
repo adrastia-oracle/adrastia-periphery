@@ -1,6 +1,6 @@
 {
   "name": "@adrastia-oracle/adrastia-periphery",
-  "version": "4.0.0-beta.3",
+  "version": "4.0.0-beta.4",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "MIT",
@@ -24,13 +24,13 @@
     "!artifacts/contracts/**/*.dbg.json"
   ],
   "engines": {
-    "node": ">=14"
+    "node": ">=16"
   },
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "4.0.0-beta.4",
+    "@adrastia-oracle/adrastia-core": "4.0.0-beta.5",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },
