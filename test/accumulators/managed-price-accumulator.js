@@ -13,6 +13,8 @@ const uniswapV2InitCodeHash = "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbe
 const uniswapV3FactoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const uniswapV3InitCodeHash = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
 
+const algebraInitCodeHash = "0x6ec6c9c8091d160c0aa74b2b14ba9c1717e95093bd3ac085cee99a49aab294a4";
+
 const cUSDC = "0x39AA39c021dfbaE8faC545936693aC917d5E7563"; // Compound v2 on mainnet
 const cometAddress = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // cUSDCv3 on mainnet
 const aaveV2Pool = "0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"; // Aave v2 on mainnet
@@ -411,6 +413,28 @@ async function deployUniswapV3PriceAccumulator() {
     );
 }
 
+async function deployAlgebraPriceAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("AlgebraPriceAccumulatorStub");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        ethers.constants.AddressZero,
+        algebraInitCodeHash,
+        USDC,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function deployCompoundV2RateAccumulator() {
     // Deploy the averaging strategy
     const averagingStrategyFactory = await ethers.getContractFactory(
@@ -602,6 +626,22 @@ describePriceAccumulatorTests(
 describePriceAccumulatorTests(
     "ManagedUniswapV3PriceAccumulator",
     deployUniswapV3PriceAccumulator,
+    generateOnchainUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    WETH
+);
+
+describePriceAccumulatorTests(
+    "ManagedAlgebraPriceAccumulator",
+    deployAlgebraPriceAccumulator,
     generateOnchainUpdateData,
     /*
     The role can be open because updaters don't have full control over the data that the accumulator stores. There are

@@ -15,6 +15,7 @@
 - Add ManagedOffchainPriceAccumulator and ManagedOffchainLiquidityAccumulator.
 - Add managed interest rate accumulators for Compound v2, Compound III, Aave v2, and Aave v3.
 - Add managed price and liquidity accumulators for Balancer v2.
+- Add managed price and liquidity accumulators for Algebra DEX.
 
 ### Bounties
 - Add PriceManipulationBounty: A contract for setting up and claiming bounties against price manipulation.
