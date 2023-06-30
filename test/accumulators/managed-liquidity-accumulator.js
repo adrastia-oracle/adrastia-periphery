@@ -11,6 +11,8 @@ const uniswapV2InitCodeHash = "0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbe
 const uniswapV3FactoryAddress = "0x1F98431c8aD98523631AE4a59f267346ea31F984";
 const uniswapV3InitCodeHash = "0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54";
 
+const algebraInitCodeHash = "0x6ec6c9c8091d160c0aa74b2b14ba9c1717e95093bd3ac085cee99a49aab294a4";
+
 const balancerV2Vault = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"; // Balancer v2 on mainnet
 const balancerV2WeightedPoolId = "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"; // BAL/WETH on mainnet
 
@@ -404,6 +406,29 @@ async function deployUniswapV3LiquidityAccumulator() {
     );
 }
 
+async function deployAlgebraLiquidityAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("AlgebraLiquidityAccumulatorStub");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        ethers.constants.AddressZero,
+        algebraInitCodeHash,
+        USDC,
+        0, // Liquidity decimals
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function deployBalancerV2LiquidityAccumulator() {
     // Deploy the averaging strategy
     const averagingStrategyFactory = await ethers.getContractFactory(
@@ -490,6 +515,22 @@ describeLiquidityAccumulatorTests(
 describeLiquidityAccumulatorTests(
     "ManagedUniswapV3LiquidityAccumulator",
     deployUniswapV3LiquidityAccumulator,
+    generateDexBasedUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    WETH
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedAlgebraLiquidityAccumulator",
+    deployAlgebraLiquidityAccumulator,
     generateDexBasedUpdateData,
     /*
     The role can be open because updaters don't have full control over the data that the accumulator stores. There are
