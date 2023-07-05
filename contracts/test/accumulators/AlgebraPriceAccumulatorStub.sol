@@ -24,22 +24,7 @@ contract AlgebraPriceAccumulatorStub is ManagedAlgebraPriceAccumulator {
         )
     {}
 
-    /// @inheritdoc PriceAccumulator
-    function canUpdate(bytes memory data) public view virtual override returns (bool) {
-        // Return false if the message sender is missing the required role
-        if (!hasRole(Roles.ORACLE_UPDATER, address(0)) && !hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
-
-        address token = abi.decode(data, (address));
-
-        if (token == address(0) || token == quoteToken) {
-            // Invalid token
-            return false;
-        }
-
-        return needsUpdate(data);
-    }
-
-    function fetchPrice(bytes memory) internal view virtual override returns (uint112) {
-        return 1e18;
+    function calculatePrice(address) internal view virtual override returns (bool hasLiquidity, uint256 price) {
+        return (true, 1e18);
     }
 }
