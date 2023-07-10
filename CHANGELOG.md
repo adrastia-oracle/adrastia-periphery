@@ -2,7 +2,7 @@
 
 ## v4.0.0
 ### Dependencies
-- Upgrade adrastia-core to v4.0.0-beta.4.
+- Upgrade adrastia-core to v4.0.0.
 
 ### Accumulators
 - Add AccumulatorConfig: A base contract for managing the configuration of an accumulator.
