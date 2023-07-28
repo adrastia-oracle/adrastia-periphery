@@ -8,8 +8,6 @@ import "../configs/IOracleAggregatorTokenConfig.sol";
 /// @notice A base contract for aggregators that are managed by access control with support for token-specific
 /// configurations.
 abstract contract ManagedAggregatorOracleBase is ManagedOracleBase {
-    uint16 internal constant PAUSE_FLAG_MASK = 1;
-
     uint256 internal constant ERROR_MISSING_ORACLES = 1;
     uint256 internal constant ERROR_INVALID_MINIMUM_RESPONSES = 2;
     uint256 internal constant ERROR_INVALID_AGGREGATION_STRATEGY = 3;
@@ -30,15 +28,6 @@ abstract contract ManagedAggregatorOracleBase is ManagedOracleBase {
         IOracleAggregatorTokenConfig oldConfig,
         IOracleAggregatorTokenConfig newConfig
     );
-
-    /// @notice Event emitted when the pause status of updates for a token is changed.
-    /// @param token The token for which the pause status of updates was changed.
-    /// @param areUpdatesPaused Whether updates are paused for the token.
-    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
-
-    /// @notice An error that is thrown when updates are paused for a token.
-    /// @param token The token for which updates are paused.
-    error UpdatesArePaused(address token);
 
     error InvalidTokenConfig(IOracleAggregatorTokenConfig config, uint256 errorCode);
 

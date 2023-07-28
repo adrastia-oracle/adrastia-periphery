@@ -6,6 +6,7 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IAccumulator.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IOracle.sol";
 import "@adrastia-oracle/adrastia-core/contracts/oracles/IOracleAggregator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/interfaces/IHistoricalOracle.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin-v4/contracts/access/IAccessControl.sol";
@@ -58,5 +59,9 @@ contract InterfaceIds {
 
     function iOracleAggregator() external pure returns (bytes4) {
         return type(IOracleAggregator).interfaceId;
+    }
+
+    function iHistoricalOracle() external pure returns (bytes4) {
+        return type(IHistoricalOracle).interfaceId;
     }
 }

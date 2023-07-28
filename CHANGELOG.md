@@ -2,7 +2,7 @@
 
 ## v4.0.0
 ### Dependencies
-- Upgrade adrastia-core to v4.0.0-beta.2.
+- Upgrade adrastia-core to v4.0.0.
 
 ### Accumulators
 - Add AccumulatorConfig: A base contract for managing the configuration of an accumulator.
@@ -14,8 +14,22 @@
       - ORACLE_UPDATER
 - Add ManagedOffchainPriceAccumulator and ManagedOffchainLiquidityAccumulator.
 - Add managed interest rate accumulators for Compound v2, Compound III, Aave v2, and Aave v3.
+- Add managed price and liquidity accumulators for Balancer v2.
+- Add managed price and liquidity accumulators for Algebra DEX.
 
-### Rates
+### Bounties
+- Add PriceManipulationBounty: A contract for setting up and claiming bounties against price manipulation.
+
+
+### Oracles
+- Add ManagedPeriodicPriceAccumulationOracle.
+- Add IOracleAggregatorTokenConfig and OracleAggregatorTokenConfig: These config contracts allow config admins to update oracle aggregator configurations.
+- Add ManagedCurrentAggregatorOracle.
+- Add the ability to pause updates to the aggregators.
+- Add ManagedMedianFilteringOracle.
+- Add ManagedPriceVolatilityOracle.
+
+### Rates (Prudentia)
 - Add RateController and related contracts: A contract that periodically computes and stores rates for tokens.
 - Add ManualRateComputer: A contract that computes rates based on manual input by an authorized rate configurator.
 

@@ -114,7 +114,7 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
     }
 
     it("Reverts if no oracles are provided", async function () {
-        await expect(deployDefaultTokenConfig(0)).to.be.revertedWith("InvalidConfig(" + ERROR_MISSING_ORACLES + ")");
+        await expect(deployDefaultTokenConfig(0)).to.be.revertedWith("InvalidConfig").withArgs(ERROR_MISSING_ORACLES);
     });
 
     it("Revets if the minimum responses is too small", async function () {
@@ -122,7 +122,9 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(1, {
                 minimumResponses: 0,
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_MINIMUM_RESPONSES_TOO_SMALL + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_MINIMUM_RESPONSES_TOO_SMALL);
     });
 
     it("Reverts if the aggregation strategy is invalid", async function () {
@@ -130,7 +132,9 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(1, {
                 aggregationStrategy: ethers.constants.AddressZero,
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_INVALID_AGGREGATION_STRATEGY + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_INVALID_AGGREGATION_STRATEGY);
     });
 
     it("Reverts if there are duplicate oracles", async function () {
@@ -142,7 +146,9 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(2, {
                 oracles: [oracleStub.address, oracleStub.address],
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_DUPLICATE_ORACLES + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_DUPLICATE_ORACLES);
     });
 
     it("Reverts if the minimum responses is too large", async function () {
@@ -152,7 +158,9 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(numOracles, {
                 minimumResponses: numOracles + 1,
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_MINIMUM_RESPONSES_TOO_LARGE + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_MINIMUM_RESPONSES_TOO_LARGE);
     });
 
     it("Reverts if an oracle has a zero address (with one oracle)", async function () {
@@ -160,7 +168,9 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(1, {
                 oracles: [ethers.constants.AddressZero],
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_INVALID_ORACLE + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_INVALID_ORACLE);
     });
 
     it("Reverts if an oracle has a zero address (with two oracles and one is valid)", async function () {
@@ -172,14 +182,16 @@ describe("OracleAggregatorTokenConfig#constructor", function () {
             deployDefaultTokenConfig(1, {
                 oracles: [oracleStub.address, ethers.constants.AddressZero],
             })
-        ).to.be.revertedWith("InvalidConfig(" + ERROR_INVALID_ORACLE + ")");
+        )
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_INVALID_ORACLE);
     });
 
     it("Reverts if there are too many oracles", async function () {
         const numOracles = maxOracles + 1;
 
-        await expect(deployDefaultTokenConfig(numOracles)).to.be.revertedWith(
-            "InvalidConfig(" + ERROR_TOO_MANY_ORACLES + ")"
-        );
+        await expect(deployDefaultTokenConfig(numOracles))
+            .to.be.revertedWith("InvalidConfig")
+            .withArgs(ERROR_TOO_MANY_ORACLES);
     });
 });

@@ -5,6 +5,17 @@ import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "../../access/Roles.sol";
 
 abstract contract ManagedOracleBase is AccessControlEnumerable {
+    uint16 internal constant PAUSE_FLAG_MASK = 1;
+
+    /// @notice Event emitted when the pause status of updates for a token is changed.
+    /// @param token The token for which the pause status of updates was changed.
+    /// @param areUpdatesPaused Whether updates are paused for the token.
+    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
+
+    /// @notice An error that is thrown when updates are paused for a token.
+    /// @param token The token for which updates are paused.
+    error UpdatesArePaused(address token);
+
     /// @notice An error thrown when attempting to call a function that requires a certain role.
     /// @param account The account that is missing the role.
     /// @param role The role that is missing.
