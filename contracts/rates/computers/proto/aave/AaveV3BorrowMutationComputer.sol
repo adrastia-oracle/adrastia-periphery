@@ -40,10 +40,6 @@ interface ILendingPool {
     function getReserveData(address asset) external view returns (ReserveData memory);
 }
 
-interface IDebtToken {
-    function totalSupply() external view returns (uint256);
-}
-
 /**
  * @title AaveV3BorrowMutationComputer
  * @notice An Erc20MutationComputer implementation that computes mutated values using the total borrowed amount
@@ -76,8 +72,8 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
     function extractValueFromToken(address token) internal view virtual override returns (uint256) {
         ILendingPool.ReserveData memory reserve = ILendingPool(lendingPool).getReserveData(token);
 
-        uint256 stableDebt = IDebtToken(reserve.stableDebtTokenAddress).totalSupply();
-        uint256 variableDebt = IDebtToken(reserve.variableDebtTokenAddress).totalSupply();
+        uint256 stableDebt = IERC20(reserve.stableDebtTokenAddress).totalSupply();
+        uint256 variableDebt = IERC20(reserve.variableDebtTokenAddress).totalSupply();
 
         return stableDebt + variableDebt;
     }
