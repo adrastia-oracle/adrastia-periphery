@@ -2,43 +2,7 @@
 pragma solidity =0.8.13;
 
 import "../../Erc20MutationComputer.sol";
-
-interface ILendingPool {
-    struct ReserveData {
-        //stores the reserve configuration
-        uint256 configuration;
-        //the liquidity index. Expressed in ray
-        uint128 liquidityIndex;
-        //the current supply rate. Expressed in ray
-        uint128 currentLiquidityRate;
-        //variable borrow index. Expressed in ray
-        uint128 variableBorrowIndex;
-        //the current variable borrow rate. Expressed in ray
-        uint128 currentVariableBorrowRate;
-        //the current stable borrow rate. Expressed in ray
-        uint128 currentStableBorrowRate;
-        //timestamp of last update
-        uint40 lastUpdateTimestamp;
-        //the id of the reserve. Represents the position in the list of the active reserves
-        uint16 id;
-        //aToken address
-        address aTokenAddress;
-        //stableDebtToken address
-        address stableDebtTokenAddress;
-        //variableDebtToken address
-        address variableDebtTokenAddress;
-        //address of the interest rate strategy
-        address interestRateStrategyAddress;
-        //the current treasury balance, scaled
-        uint128 accruedToTreasury;
-        //the outstanding unbacked aTokens minted through the bridging feature
-        uint128 unbacked;
-        //the outstanding debt borrowed against this asset in isolation mode
-        uint128 isolationModeTotalDebt;
-    }
-
-    function getReserveData(address asset) external view returns (ReserveData memory);
-}
+import "../../../../vendor/aave/IAaveV3LendingPool.sol";
 
 /**
  * @title AaveV3BorrowMutationComputer
@@ -70,7 +34,7 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
      * @return The extracted total borrowed amount across both stable and variable rate markets.
      */
     function extractValueFromToken(address token) internal view virtual override returns (uint256) {
-        ILendingPool.ReserveData memory reserve = ILendingPool(lendingPool).getReserveData(token);
+        IAaveV3LendingPool.ReserveData memory reserve = IAaveV3LendingPool(lendingPool).getReserveData(token);
 
         uint256 stableDebt = IERC20(reserve.stableDebtTokenAddress).totalSupply();
         uint256 variableDebt = IERC20(reserve.variableDebtTokenAddress).totalSupply();
