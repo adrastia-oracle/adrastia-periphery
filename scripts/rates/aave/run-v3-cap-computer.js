@@ -2,6 +2,10 @@ const hre = require("hardhat");
 
 const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_ADMIN_ROLE"));
 
+// The type of market to compute the rate for
+const BORROW = "Borrow";
+const SUPPLY = "Supply";
+
 async function main() {
     // Replace this address with the address of the Aave Lending Pool on your desired network
     const lendingPoolAddress = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // v3 mainnet
@@ -10,7 +14,9 @@ async function main() {
     // 1x scalar
     const oneXScalar = ethers.BigNumber.from(10).pow(6);
     // Aave version
-    const aaveVersion = 3; // Either 2 or 3
+    const aaveVersion = 3;
+    // The type of market to compute the rate for (BORROW or SUPPLY)
+    const type = SUPPLY;
 
     // The config to set for the token
     const maxRate = ethers.BigNumber.from(2).pow(64).sub(1);
@@ -20,29 +26,29 @@ async function main() {
 
     const [deployer] = await hre.ethers.getSigners();
 
-    console.log("Deploying AaveBorrowMutationComputer with account:", deployer.address);
+    const contractName = "AaveV" + aaveVersion + type + "MutationComputer";
 
-    const AaveBorrowMutationComputer = await hre.ethers.getContractFactory(
-        "AaveV" + aaveVersion + "BorrowMutationComputer"
-    );
-    const aaveBorrowMutationComputer = await AaveBorrowMutationComputer.deploy(oneXScalar, 18, 0, lendingPoolAddress);
+    console.log("Deploying " + contractName + " with account:", deployer.address);
 
-    await aaveBorrowMutationComputer.deployed();
+    const computerFactory = await hre.ethers.getContractFactory(contractName);
+    const computer = await computerFactory.deploy(oneXScalar, 18, 0, lendingPoolAddress);
 
-    console.log("AaveBorrowMutationComputer deployed to:", aaveBorrowMutationComputer.address);
+    await computer.deployed();
+
+    console.log(contractName + " deployed to:", computer.address);
 
     console.log("Granting RATE_ADMIN role to deployer...");
 
     // Grant the deployer the RATE_ADMIN role
-    await aaveBorrowMutationComputer.grantRole(RATE_ADMIN_ROLE, deployer.address);
+    await computer.grantRole(RATE_ADMIN_ROLE, deployer.address);
 
     console.log("Setting config...");
 
     // Set the configuration for the token
-    await aaveBorrowMutationComputer.setConfig(token, maxRate, minRate, offset, scalar);
+    await computer.setConfig(token, maxRate, minRate, offset, scalar);
 
     // Get the current rate
-    const rate = await aaveBorrowMutationComputer.computeRate(token);
+    const rate = await computer.computeRate(token);
 
     console.log("Current rate for " + token + ":", ethers.utils.commify(rate.toString()));
 
