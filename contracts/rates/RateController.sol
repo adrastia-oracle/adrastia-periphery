@@ -30,6 +30,9 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         IRateComputer[] components;
     }
 
+    /// @notice The flag that indicates whether rate updates are paused.
+    uint16 internal constant PAUSE_FLAG_MASK = 0x0000000000000001;
+
     /// @notice The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     uint256 public immutable override period;
 
@@ -192,7 +195,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The token for which to determine whether rate updates are paused.
     /// @return Whether rate updates are paused for the given token.
     function areUpdatesPaused(address token) external view virtual returns (bool) {
-        return rateBufferMetadata[token].pauseUpdates;
+        return _areUpdatesPaused(token);
     }
 
     /// @notice Changes the pause state of rate updates for a token. This can only be called by the update pause admin.
@@ -205,12 +208,20 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         if (meta.maxSize == 0) {
             // Uninitialized buffer means that the rate config is missing
             // It doesn't make sense to pause updates if they can't occur in the first place
-            // Plus, buffer initialization sets the pause state to false, so setting it beforehand can cause confusion
             revert MissingConfig(token);
         }
 
-        if (meta.pauseUpdates != paused) {
-            meta.pauseUpdates = paused;
+        uint16 flags = rateBufferMetadata[token].flags;
+
+        bool currentlyPaused = (flags & PAUSE_FLAG_MASK) != 0;
+        if (currentlyPaused != paused) {
+            if (paused) {
+                flags |= PAUSE_FLAG_MASK;
+            } else {
+                flags &= ~PAUSE_FLAG_MASK;
+            }
+
+            rateBufferMetadata[token].flags = flags;
 
             emit PauseStatusChanged(token, paused);
         }
@@ -247,7 +258,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         //   2. Updates are not paused.
         //   3. Something will change. Otherwise, updating is a waste of gas.
         return
-            timeSinceLastUpdate(data) >= period && meta.maxSize > 0 && !meta.pauseUpdates && willAnythingChange(data);
+            timeSinceLastUpdate(data) >= period &&
+            meta.maxSize > 0 &&
+            !_areUpdatesPaused(token) &&
+            willAnythingChange(data);
     }
 
     /// @inheritdoc IUpdateable
@@ -299,6 +313,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         super._setRatesCapacity(token, amount);
+    }
+
+    /// @notice Determines if rate updates are paused for a token.
+    /// @return bool A boolean value indicating whether rate updates are paused for the given token.
+    function _areUpdatesPaused(address token) internal view virtual returns (bool) {
+        return (rateBufferMetadata[token].flags & PAUSE_FLAG_MASK) != 0;
     }
 
     /// @notice Determines if any changes will occur in the rate buffer after a new rate is added.

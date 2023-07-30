@@ -15,11 +15,14 @@ import "./IHistoricalRates.sol";
  */
 abstract contract HistoricalRates is IHistoricalRates {
     struct BufferMetadata {
-        uint8 start;
-        uint8 end;
-        uint8 size;
-        uint8 maxSize;
-        bool pauseUpdates; // Note: this is left for extentions, but is not used in this contract.
+        uint16 start;
+        uint16 end;
+        uint16 size;
+        uint16 maxSize;
+        uint16 flags; // Bit flags
+        uint32 changeThreshold;
+        uint80 __reserved; // Reserved for future use
+        uint64 extra; // For user extensions
     }
 
     /// @notice Event emitted when a rate buffer's capacity is increased past the initial capacity.
@@ -70,7 +73,7 @@ abstract contract HistoricalRates is IHistoricalRates {
     error InsufficientData(address token, uint256 size, uint256 minSizeRequired);
 
     /// @notice The initial capacity of the rate buffer.
-    uint8 internal immutable initialBufferCardinality;
+    uint16 internal immutable initialBufferCardinality;
 
     /// @notice Maps a token to its metadata.
     mapping(address => BufferMetadata) internal rateBufferMetadata;
@@ -82,7 +85,7 @@ abstract contract HistoricalRates is IHistoricalRates {
      * @notice Constructs the HistoricalRates contract with a specified initial buffer capacity.
      * @param initialBufferCardinality_ The initial capacity of the rate buffer.
      */
-    constructor(uint8 initialBufferCardinality_) {
+    constructor(uint16 initialBufferCardinality_) {
         initialBufferCardinality = initialBufferCardinality_;
     }
 
@@ -147,7 +150,7 @@ abstract contract HistoricalRates is IHistoricalRates {
         BufferMetadata storage meta = rateBufferMetadata[token];
 
         if (amount < meta.maxSize) revert CapacityCannotBeDecreased(token, amount, meta.maxSize);
-        if (amount > type(uint8).max) revert CapacityTooLarge(token, amount, type(uint8).max);
+        if (amount > type(uint16).max) revert CapacityTooLarge(token, amount, type(uint16).max);
 
         RateLibrary.Rate[] storage rateBuffer = rateBuffers[token];
 
@@ -162,7 +165,7 @@ abstract contract HistoricalRates is IHistoricalRates {
             emit RatesCapacityIncreased(token, meta.maxSize, amount);
 
             // Update the metadata
-            meta.maxSize = uint8(amount);
+            meta.maxSize = uint16(amount);
         }
     }
 
@@ -224,7 +227,6 @@ abstract contract HistoricalRates is IHistoricalRates {
         meta.end = 0;
         meta.size = 0;
         meta.maxSize = initialBufferCardinality;
-        meta.pauseUpdates = false;
 
         emit RatesCapacityInitialized(token, meta.maxSize);
     }
