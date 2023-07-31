@@ -14,7 +14,8 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
     /// @notice The Aave ACL Manager instance.
     IACLManager public immutable aclManager;
 
-    address public immutable lendingPool;
+    /// @notice The Aave Lending Pool instance.
+    IAaveV3LendingPool public immutable lendingPool;
 
     /// @notice An error that is thrown if the account is not authorized for the required role.
     /// @param account The account that is not authorized.
@@ -30,10 +31,10 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
      */
     constructor(
         IACLManager aclManager_,
+        IAaveV3LendingPool lendingPool_,
         uint32 defaultOneXScalar_,
         uint8 defaultDecimals_,
-        int8 decimalsOffset_,
-        address lendingPool_
+        int8 decimalsOffset_
     ) Erc20MutationComputer(defaultOneXScalar_, defaultDecimals_, decimalsOffset_) {
         aclManager = aclManager_;
         lendingPool = lendingPool_;
@@ -45,7 +46,7 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
      * @return The extracted total borrowed amount across both stable and variable rate markets.
      */
     function extractValueFromToken(address token) internal view virtual override returns (uint256) {
-        IAaveV3LendingPool.ReserveData memory reserve = IAaveV3LendingPool(lendingPool).getReserveData(token);
+        IAaveV3LendingPool.ReserveData memory reserve = lendingPool.getReserveData(token);
 
         uint256 stableDebt = IERC20(reserve.stableDebtTokenAddress).totalSupply();
         uint256 variableDebt = IERC20(reserve.variableDebtTokenAddress).totalSupply();
