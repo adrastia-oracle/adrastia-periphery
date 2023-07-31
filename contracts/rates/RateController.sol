@@ -229,7 +229,9 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
     /// @inheritdoc IRateComputer
     function computeRate(address token) external view virtual override returns (uint64) {
-        return computeRateInternal(token);
+        (, uint64 newRate) = computeRateAndClamp(token);
+
+        return newRate;
     }
 
     /// @inheritdoc IPeriodic

@@ -795,6 +795,80 @@ describe("RateController#computeRate", function () {
 
         expect(rate).to.equal(config.base);
     });
+
+    it("Should clamp the computed rate based on the last stored rate (upwards)", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
+            maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
+            base: ethers.utils.parseUnits("0.05", 18), // 5%
+            componentWeights: [],
+            components: [],
+        };
+
+        // Set the config
+        await controller.setConfig(GRT, config);
+
+        // Update. Current rate = 5%
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        await controller.update(updateData);
+
+        // Change the rate from 5% to 50%
+        const newConfig = {
+            ...config,
+            base: ethers.utils.parseUnits("0.5", 18), // 50%
+        };
+        await controller.setConfig(GRT, newConfig);
+
+        // Compute the rate
+        const rate = await controller.computeRate(GRT);
+
+        // The rate should be clamped to 5% + 3% = 8%
+        const expectedRate = config.base.add(config.maxIncrease);
+
+        // Check the rate
+        expect(rate).to.equal(expectedRate);
+
+        // Sanity check that the expected rate and the new target rate are different
+        expect(expectedRate).to.not.equal(newConfig.base);
+    });
+
+    it("Should clamp the computed rate based on the last stored rate (downwards)", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
+            maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
+            base: ethers.utils.parseUnits("0.05", 18), // 5%
+            componentWeights: [],
+            components: [],
+        };
+
+        // Set the config
+        await controller.setConfig(GRT, config);
+
+        // Update. Current rate = 5%
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        await controller.update(updateData);
+
+        // Change the rate from 5% to 0.5%
+        const newConfig = {
+            ...config,
+            base: ethers.utils.parseUnits("0.005", 18), // 0.5%
+        };
+        await controller.setConfig(GRT, newConfig);
+
+        // Compute the rate
+        const rate = await controller.computeRate(GRT);
+
+        // The rate should be clamped to 5% - 4% = 1%
+        const expectedRate = config.base.sub(config.maxDecrease);
+
+        // Check the rate
+        expect(rate).to.equal(expectedRate);
+
+        // Sanity check that the expected rate and the new target rate are different
+        expect(expectedRate).to.not.equal(newConfig.base);
+    });
 });
 
 describe("RateController#timeSinceLastUpdate", function () {
