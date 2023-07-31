@@ -5,10 +5,8 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
-import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
 
-import "../../access/Roles.sol";
 import "../IRateComputer.sol";
 
 /**
@@ -16,7 +14,7 @@ import "../IRateComputer.sol";
  * @notice Abstract contract for computing mutated values.
  * @dev Extend this contract and implement the getValue function to use it.
  */
-abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlEnumerable {
+abstract contract MutatedValueComputer is IERC165, IRateComputer {
     using SafeCast for uint256;
 
     struct Config {
@@ -44,8 +42,6 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlE
      */
     constructor(uint32 defaultOneXScalar_) {
         defaultOneXScalar = defaultOneXScalar_;
-
-        initializeRoles();
     }
 
     /**
@@ -59,20 +55,16 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlE
 
     /**
      * @notice Sets the configuration for a specific token.
-     * @dev Callable only by the RATE_ADMIN role.
+     * @dev Override `checkSetConfig` to control the access to this function.
      * @param token The token address.
      * @param max The maximum value for the token's rate.
      * @param min The minimum value for the token's rate.
      * @param offset The offset to apply to the computed value.
      * @param scalar The scalar value to apply to the computed value.
      */
-    function setConfig(
-        address token,
-        uint64 max,
-        uint64 min,
-        int64 offset,
-        uint32 scalar
-    ) external virtual onlyRole(Roles.RATE_ADMIN) {
+    function setConfig(address token, uint64 max, uint64 min, int64 offset, uint32 scalar) external virtual {
+        checkSetConfig();
+
         Config memory oldConfig = configs[token];
         configs[token] = Config({max: max, min: min, offset: offset, scalar: scalar});
         emit ConfigUpdated(token, oldConfig, configs[token]);
@@ -107,13 +99,8 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlE
     }
 
     /// @inheritdoc IERC165
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(AccessControlEnumerable, IERC165) returns (bool) {
-        return
-            interfaceId == type(IRateComputer).interfaceId ||
-            interfaceId == type(IERC165).interfaceId ||
-            AccessControlEnumerable.supportsInterface(interfaceId);
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return interfaceId == type(IRateComputer).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
     /**
@@ -125,22 +112,7 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer, AccessControlE
      */
     function getValue(address token) internal view virtual returns (uint256);
 
-    /**
-     * @notice Initializes the role-based access control hierarchy.
-     * @dev This internal virtual function sets up the initial access control roles and their hierarchy. The function
-     *   creates the ADMIN and RATE_ADMIN roles and defines their relationships. By default, the msg.sender is assigned
-     *   the ADMIN role upon contract deployment.
-     */
-    function initializeRoles() internal virtual {
-        // Setup admin role, setting msg.sender as admin
-        _setupRole(Roles.ADMIN, msg.sender);
-        _setRoleAdmin(Roles.ADMIN, Roles.ADMIN);
-
-        // Set admin of RATE_ADMIN as ADMIN
-        _setRoleAdmin(Roles.RATE_ADMIN, Roles.ADMIN);
-
-        // Hierarchy:
-        // ADMIN
-        //   - RATE_ADMIN
-    }
+    /// @notice Checks if the caller is authorized to set the configuration.
+    /// @dev This function should contain the access control logic for the setConfig function.
+    function checkSetConfig() internal view virtual;
 }
