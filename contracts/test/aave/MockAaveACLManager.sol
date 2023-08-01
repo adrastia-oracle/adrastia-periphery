@@ -15,11 +15,21 @@ contract MockAaveACLManager is AccessControlEnumerable, IACLManager {
 
     address public immutable ADDRESSES_PROVIDER;
 
-    constructor() {
+    constructor(address admin, bool grantAdminAllRoles) {
         ADDRESSES_PROVIDER = address(0);
-        address aclAdmin = msg.sender; //provider.getACLAdmin();
+        address aclAdmin = admin; //provider.getACLAdmin();
         // require(aclAdmin != address(0), Errors.ACL_ADMIN_CANNOT_BE_ZERO);
         _setupRole(DEFAULT_ADMIN_ROLE, aclAdmin);
+
+        _setRoleAdmin(POOL_ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(EMERGENCY_ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
+        _setRoleAdmin(RISK_ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
+
+        if (grantAdminAllRoles) {
+            grantRole(POOL_ADMIN_ROLE, admin);
+            grantRole(EMERGENCY_ADMIN_ROLE, admin);
+            grantRole(RISK_ADMIN_ROLE, admin);
+        }
     }
 
     /// @inheritdoc IACLManager
