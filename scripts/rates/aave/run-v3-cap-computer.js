@@ -1,7 +1,5 @@
 const hre = require("hardhat");
 
-const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_ADMIN_ROLE"));
-
 // The type of market to compute the rate for
 const BORROW = "Borrow";
 const SUPPLY = "Supply";
@@ -16,7 +14,7 @@ async function main() {
     // Aave version
     const aaveVersion = 3;
     // The type of market to compute the rate for (BORROW or SUPPLY)
-    const type = SUPPLY;
+    const type = BORROW;
 
     // The config to set for the token
     const maxRate = ethers.BigNumber.from(2).pow(64).sub(1);
@@ -26,21 +24,20 @@ async function main() {
 
     const [deployer] = await hre.ethers.getSigners();
 
+    const aclManagerFactory = await hre.ethers.getContractFactory("MockAaveACLManager");
+    const aclManager = await aclManagerFactory.deploy(deployer.address, true);
+    await aclManager.deployed();
+
     const contractName = "AaveV" + aaveVersion + type + "MutationComputer";
 
     console.log("Deploying " + contractName + " with account:", deployer.address);
 
     const computerFactory = await hre.ethers.getContractFactory(contractName);
-    const computer = await computerFactory.deploy(oneXScalar, 18, 0, lendingPoolAddress);
+    const computer = await computerFactory.deploy(aclManager.address, lendingPoolAddress, oneXScalar, 18, 0);
 
     await computer.deployed();
 
     console.log(contractName + " deployed to:", computer.address);
-
-    console.log("Granting RATE_ADMIN role to deployer...");
-
-    // Grant the deployer the RATE_ADMIN role
-    await computer.grantRole(RATE_ADMIN_ROLE, deployer.address);
 
     console.log("Setting config...");
 

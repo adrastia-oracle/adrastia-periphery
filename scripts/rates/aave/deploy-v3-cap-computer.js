@@ -88,25 +88,16 @@ const SUPPLY = "Supply";
 async function main() {
     // START OF USER CONFIGURATION
 
+    // Replace this address with the address of the Aave ACL Manager on your desired network
+    const aclManager = "0x5f77FceAB2fdf1839f00453Ede3E884810F51146"; // MockAaveACLManager on Polygon
     // Replace this address with the address of the Aave Lending Pool on your desired network
     const lendingPoolAddress = "0x794a61358D6845594F94dc1DB02A252b5b4814aD"; // v3 Polygon
-    // Replace this address with the address of the token you want to compute the rate for
-    const token = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"; // WETH
     // 1x scalar
     const oneXScalar = ethers.BigNumber.from(10).pow(6);
     // Aave version
     const aaveVersion = 3;
     // The type of market to compute the rate for (BORROW or SUPPLY)
     const type = BORROW;
-
-    // The config to set for the token
-    const maxRate = ethers.BigNumber.from(2).pow(64).sub(1); // Unrestricted
-    const minRate = ethers.BigNumber.from(0); // Unrestricted
-    const offset = ethers.BigNumber.from(100); // Add 100 to the scaled rate
-    const scalar = oneXScalar.add(oneXScalar.div(10)); // 1.1x scalar
-
-    const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin
-    const assignAllRolesToAdmin = true;
 
     // END OF USER CONFIGURATION
 
@@ -117,45 +108,11 @@ async function main() {
     console.log("Deploying " + contractName + " with account:", deployer.address);
 
     const computerFactory = await hre.ethers.getContractFactory(contractName);
-    const computer = await computerFactory.deploy(oneXScalar, 18, 0, lendingPoolAddress);
+    const computer = await computerFactory.deploy(aclManager, lendingPoolAddress, oneXScalar, 18, 0);
 
     await computer.deployed();
 
     console.log(contractName + " deployed to:", computer.address);
-
-    console.log("Granting RATE_ADMIN role to deployer...");
-
-    // Grant the deployer the RATE_ADMIN role
-    await tryGrantRole(computer, deployer.address, RATE_ADMIN_ROLE);
-
-    console.log("Setting config...");
-
-    // Set the configuration for the token
-    await computer.setConfig(token, maxRate, minRate, offset, scalar);
-
-    // Get the current rate
-    const rate = await computer.computeRate(token);
-
-    console.log("Current rate for " + token + ":", ethers.utils.commify(rate.toString()));
-
-    if (newAdmin !== "") {
-        console.log("Granting roles to the new admin...");
-
-        await tryGrantRole(computer, newAdmin, ADMIN_ROLE);
-
-        // Get our address
-        const [deployer] = await ethers.getSigners();
-
-        if (assignAllRolesToAdmin) {
-            await tryGrantRole(computer, newAdmin, RATE_ADMIN_ROLE);
-        }
-
-        // Revoke the deployer's rate admin role
-        await tryRevokeRole(computer, deployer.address, RATE_ADMIN_ROLE);
-
-        // Revoke the deployer's admin role
-        await tryRevokeRole(computer, deployer.address, ADMIN_ROLE);
-    }
 
     console.log("Done");
 }
