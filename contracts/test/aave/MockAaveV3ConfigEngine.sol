@@ -4,13 +4,15 @@ pragma solidity =0.8.13;
 import "../../vendor/aave/IAaveV3ConfigEngine.sol";
 
 contract MockAaveV3ConfigEngine is IAaveV3ConfigEngine {
-    CapsUpdate[] public updates;
+    CapsUpdate public lastUpdate;
 
-    event UpdateCaps(CapsUpdate[] updates);
+    event CapsUpdated(address asset, uint256 supplyCap, uint256 borrowCap);
 
     function updateCaps(CapsUpdate[] memory _updates) external override {
-        updates = _updates;
+        require(_updates.length == 1, "Only one update allowed");
 
-        emit UpdateCaps(_updates);
+        lastUpdate = _updates[0];
+
+        emit CapsUpdated(_updates[0].asset, _updates[0].supplyCap, _updates[0].borrowCap);
     }
 }
