@@ -11,33 +11,81 @@ const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(
 async function tryGrantRole(contract, account, role) {
     console.log("Granting role", role, "to", account, "on", contract.address);
 
-    const tx = await contract.grantRole(role, account);
+    var executed = false;
 
-    console.log("  - Tx hash", tx.hash);
+    for (var i = 0; i < 10; i++) {
+        try {
+            const tx = await contract.grantRole(role, account);
 
-    const receipt = await tx.wait();
+            console.log("  - Tx hash", tx.hash);
 
-    if (receipt.status === 0) {
-        console.error("Failed to grant role", role, "to", account, "on", contract.address);
+            const receipt = await tx.wait();
+
+            if (receipt.status) {
+                executed = true;
+
+                break;
+            }
+        } catch (e) {
+            console.error(e);
+            console.log("Failed to grant role, retrying...");
+            await new Promise((r) => setTimeout(r, 10000));
+        }
+    }
+
+    if (!executed) {
+        throw new Error(
+            "Failed to grant role for contract " +
+                contract.address +
+                " and account " +
+                account +
+                " and role " +
+                role +
+                " after 10 attempts"
+        );
     }
 }
 
 async function tryRevokeRole(contract, account, role) {
     console.log("Revoking role", role, "to", account, "on", contract.address);
 
-    const tx = await contract.revokeRole(role, account);
+    var executed = false;
 
-    console.log("  - Tx hash", tx.hash);
+    for (var i = 0; i < 10; i++) {
+        try {
+            const tx = await contract.revokeRole(role, account);
 
-    const receipt = await tx.wait();
+            console.log("  - Tx hash", tx.hash);
 
-    if (receipt.status === 0) {
-        console.error("Failed to revoke role", role, "to", account, "on", contract.address);
+            const receipt = await tx.wait();
+
+            if (receipt.status) {
+                executed = true;
+
+                break;
+            }
+        } catch (e) {
+            console.error(e);
+            console.log("Failed to grant role, retrying...");
+            await new Promise((r) => setTimeout(r, 10000));
+        }
+    }
+
+    if (!executed) {
+        throw new Error(
+            "Failed to grant role for contract " +
+                contract.address +
+                " and account " +
+                account +
+                " and role " +
+                role +
+                " after 10 attempts"
+        );
     }
 }
 
 async function main() {
-    const period = 1 * 60 * 60; // One hour
+    const period = 24 * 60 * 60; // 24 hours
     const initialBufferCardinality = 2;
     const updatersMustBeEoa = true;
     const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin

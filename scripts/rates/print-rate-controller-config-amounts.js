@@ -11,21 +11,21 @@ async function main() {
     // The maximum rate
     const max = ethers.utils.parseUnits("1", 9); // 1,000,000,000 WETH
     // The minimum rate
-    const min = ethers.utils.parseUnits("0", 18); // 0 WETH
+    const min = ethers.utils.parseUnits("1", 0); // 1 WETH
     // The maximum increase in the rate per update
     const maxIncrease = BigNumber.from(10000); // 10,000 WETH
     // The maximum decrease in the rate per update
-    const maxDecrease = BigNumber.from(5000); // 5,000 WETH
+    const maxDecrease = BigNumber.from(0); // 0 WETH
     // The maximum percent increase in the rate per update
-    const maxPercentIncrease = BigNumber.from(1000); // 10%
+    const maxPercentIncrease = BigNumber.from(2000); // 20%
     // The maximum percent decrease in the rate per update
-    const maxPercentDecrease = BigNumber.from(500); // 5%
+    const maxPercentDecrease = BigNumber.from(0); // 0%
     // The base rate
     const baseRate = BigNumber.from(0); // 0 WETH
     // Dynamic rate components
     const dynamicRateComponents = [
         {
-            address: "0x427359f2c891a35Eff7b32a45cFa49984d74c528", // Open manual rate computer demo on Polygon
+            address: "0xB2384aa8EA7374d5558e1d09c93304C086609821", // AaveV3SupplyMutationComputer on Polygon
             weight: BigNumber.from(10000), // 100%
         },
     ];
