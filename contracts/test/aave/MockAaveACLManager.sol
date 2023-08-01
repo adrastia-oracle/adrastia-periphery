@@ -26,9 +26,9 @@ contract MockAaveACLManager is AccessControlEnumerable, IACLManager {
         _setRoleAdmin(RISK_ADMIN_ROLE, DEFAULT_ADMIN_ROLE);
 
         if (grantAdminAllRoles) {
-            grantRole(POOL_ADMIN_ROLE, admin);
-            grantRole(EMERGENCY_ADMIN_ROLE, admin);
-            grantRole(RISK_ADMIN_ROLE, admin);
+            _setupRole(POOL_ADMIN_ROLE, admin);
+            _setupRole(EMERGENCY_ADMIN_ROLE, admin);
+            _setupRole(RISK_ADMIN_ROLE, admin);
         }
     }
 
