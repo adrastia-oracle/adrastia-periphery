@@ -25,7 +25,8 @@ abstract contract Erc20MutationComputer is MutatedValueComputer {
      * @notice Constructs a new CTokenMutationComputer instance.
      * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
      * @param defaultDecimals_ The default number of decimals for the tokens.
-     * @param decimalsOffset_ The offset to apply when scaling the value from the token.
+     * @param decimalsOffset_ The decimal offset to apply when scaling the value from the token. Positive values scale
+     *   up, negative values scale down. Measured in numbers of decimals places (powers of 10).
      */
     constructor(
         uint32 defaultOneXScalar_,
@@ -49,7 +50,29 @@ abstract contract Erc20MutationComputer is MutatedValueComputer {
 
         // Scale value by decimalsOffset
         if (decimalsOffset >= 0) {
-            value = value * (10 ** uint256(int256(decimalsOffset)));
+            // Overflow is possible, let's take some extra steps to prevent this
+            uint256 scaledValue;
+            unchecked {
+                scaledValue = value * (10 ** uint256(int256(decimalsOffset)));
+            }
+            if (scaledValue < value) {
+                // Overflow occured. Let's first scale down the value by token decimals
+                value = scaleValueByTokenDecimals(token, value);
+                // Then scale up by decimalsOffset
+                unchecked {
+                    scaledValue = value * (10 ** uint256(int256(decimalsOffset)));
+                }
+                if (scaledValue < value) {
+                    // Overflow occurred again. Return max value
+                    return type(uint256).max;
+                } else {
+                    // No overflow occured, so let's return the scaled value
+                    return scaledValue;
+                }
+            } else {
+                // No overflow occured, let's continue
+                value = scaledValue;
+            }
         } else {
             value = value / (10 ** uint256(int256(-decimalsOffset)));
         }
