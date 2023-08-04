@@ -3,6 +3,7 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
+import "@adrastia-oracle/adrastia-core/contracts/libraries/uniswap-lib/FullMath.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
@@ -36,11 +37,25 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
     /// @param newConfig The new configuration.
     event ConfigUpdated(address indexed token, Config oldConfig, Config newConfig);
 
+    /// @notice An error thrown when the specified one x scalar is invalid.
+    /// @param oneXScalar The invalid one x scalar.
+    error InvalidOneXScalar(uint32 oneXScalar);
+
+    /// @notice An error thrown when trying to set a configuration, but the config is invalid.
+    /// @param token The token address that the config is for.
+    error InvalidConfig(address token);
+
+    /// @notice An error that is thrown if we require a configuration that has not been set.
+    /// @param token The token for which we require a configuration.
+    error MissingConfig(address token);
+
     /**
      * @notice Constructs a new MutatedValueComputer instance.
      * @param defaultOneXScalar_ The default scalar value to represent 1x.
      */
     constructor(uint32 defaultOneXScalar_) {
+        if (defaultOneXScalar_ == 0) revert InvalidOneXScalar(defaultOneXScalar_);
+
         defaultOneXScalar = defaultOneXScalar_;
     }
 
@@ -65,6 +80,13 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
     function setConfig(address token, uint64 max, uint64 min, int64 offset, uint32 scalar) external virtual {
         checkSetConfig();
 
+        // This just doesn't make sense, so we revert
+        if (max < min) revert InvalidConfig(token);
+
+        // We use this check to determine if a token has been configured yet. It doesn't make sense to use a scalar of
+        // 0 because at that point, the calculated value will always be constant, and a simpler contract can be used.
+        if (scalar == 0) revert InvalidConfig(token);
+
         Config memory oldConfig = configs[token];
         configs[token] = Config({max: max, min: min, offset: offset, scalar: scalar});
         emit ConfigUpdated(token, oldConfig, configs[token]);
@@ -75,16 +97,18 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
         uint256 value = getValue(token);
 
         Config memory config = configs[token];
+        if (config.scalar == 0) revert MissingConfig(token);
 
-        // Apply the configured parameters
-        uint256 scaledValue = (value * config.scalar) / defaultOneXScalar;
+        if (value > type(uint224).max) {
+            // Overflow is possible at this point and with the smallest scalar and offsets possible, it's impossible
+            // for the result to be greater than the configured max value. Therefore, we can just return the max value
 
-        // Check that scaledValue is within the range of int256
-        if (scaledValue > uint256(type(int256).max)) {
-            scaledValue = uint256(type(int256).max);
+            return config.max;
+        } else {
+            value = (value * config.scalar) / defaultOneXScalar;
         }
 
-        int256 adjustedValue = int256(scaledValue) + config.offset;
+        int256 adjustedValue = int256(value) + config.offset;
 
         // Ensure adjustedValue is not negative
         adjustedValue = adjustedValue < int256(0) ? int256(0) : adjustedValue;
