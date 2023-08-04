@@ -3,7 +3,6 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
-import "@adrastia-oracle/adrastia-core/contracts/libraries/uniswap-lib/FullMath.sol";
 
 import "@openzeppelin-v4/contracts/utils/introspection/IERC165.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
