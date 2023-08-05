@@ -51,6 +51,11 @@ contract AaveV3BorrowMutationComputer is Erc20MutationComputer {
         uint256 stableDebt = IERC20(reserve.stableDebtTokenAddress).totalSupply();
         uint256 variableDebt = IERC20(reserve.variableDebtTokenAddress).totalSupply();
 
+        if ((variableDebt > 0) && (stableDebt > type(uint256).max - variableDebt)) {
+            // Overflow will occur. We return the maximum value.
+            return type(uint256).max;
+        }
+
         return stableDebt + variableDebt;
     }
 
