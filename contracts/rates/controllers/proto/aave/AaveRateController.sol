@@ -55,7 +55,7 @@ contract AaveRateController is RateController {
      * @notice Checks if the sender has the required role to [un]pause updates, namely, the EMERGENCY_ADMIN role.
      */
     function checkSetUpdatesPaused() internal view virtual override {
-        if (!aclManager.isEmergencyAdmin(msg.sender)) {
+        if (!aclManager.isPoolAdmin(msg.sender) && !aclManager.isEmergencyAdmin(msg.sender)) {
             revert NotAuthorized(msg.sender, aclManager.EMERGENCY_ADMIN_ROLE());
         }
     }
