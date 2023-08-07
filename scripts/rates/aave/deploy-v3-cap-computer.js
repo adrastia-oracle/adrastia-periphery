@@ -3,10 +3,7 @@ const hre = require("hardhat");
 const ethers = hre.ethers;
 
 const ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ADMIN_ROLE"));
-const ORACLE_UPDATER_MANAGER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
-const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_ADMIN_ROLE"));
-const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATE_PAUSE_ADMIN_ROLE"));
 
 async function tryGrantRole(contract, account, role) {
     console.log("Granting role", role, "to", account, "on", contract.address);
@@ -84,41 +81,38 @@ async function tryRevokeRole(contract, account, role) {
     }
 }
 
+// The type of market to compute the rate for
+const BORROW = "Borrow";
+const SUPPLY = "Supply";
+
 async function main() {
-    const period = 24 * 60 * 60; // 24 hours
-    const initialBufferCardinality = 2;
-    const updatersMustBeEoa = true;
-    const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin
-    const assignAllRolesToAdmin = true;
+    // START OF USER CONFIGURATION
 
-    const factory = await ethers.getContractFactory("ManagedRateController");
-    const rateController = await factory.deploy(period, initialBufferCardinality, updatersMustBeEoa);
-    await rateController.deployed();
+    // Replace this address with the address of the Aave ACL Manager on your desired network
+    const aclManager = "0x5f77FceAB2fdf1839f00453Ede3E884810F51146"; // MockAaveACLManager on Polygon
+    // Replace this address with the address of the Aave Lending Pool on your desired network
+    const lendingPoolAddress = "0x794a61358D6845594F94dc1DB02A252b5b4814aD"; // v3 Polygon
+    // 1x scalar
+    const oneXScalar = ethers.BigNumber.from(10).pow(6);
+    // Aave version
+    const aaveVersion = 3;
+    // The type of market to compute the rate for (BORROW or SUPPLY)
+    const type = BORROW;
 
-    console.log("RateController deployed to:", rateController.address);
+    // END OF USER CONFIGURATION
 
-    if (newAdmin !== "") {
-        await tryGrantRole(rateController, newAdmin, ADMIN_ROLE);
+    const [deployer] = await hre.ethers.getSigners();
 
-        // Get our address
-        const [deployer] = await ethers.getSigners();
+    const contractName = "AaveV" + aaveVersion + type + "MutationComputer";
 
-        if (assignAllRolesToAdmin) {
-            // Grant the deployer the updater admin role
-            await tryGrantRole(rateController, deployer.address, ORACLE_UPDATER_MANAGER_ROLE);
+    console.log("Deploying " + contractName + " with account:", deployer.address);
 
-            await tryGrantRole(rateController, newAdmin, ORACLE_UPDATER_MANAGER_ROLE);
-            await tryGrantRole(rateController, newAdmin, ORACLE_UPDATER_ROLE);
-            await tryGrantRole(rateController, newAdmin, RATE_ADMIN_ROLE);
-            await tryGrantRole(rateController, newAdmin, UPDATE_PAUSE_ADMIN_ROLE);
+    const computerFactory = await hre.ethers.getContractFactory(contractName);
+    const computer = await computerFactory.deploy(aclManager, lendingPoolAddress, oneXScalar, 18, 0);
 
-            // Revoke the deployer's updater admin role
-            await tryRevokeRole(rateController, deployer.address, ORACLE_UPDATER_MANAGER_ROLE);
-        }
+    await computer.deployed();
 
-        // Revoke the deployer's admin role
-        await tryRevokeRole(rateController, deployer.address, ADMIN_ROLE);
-    }
+    console.log(contractName + " deployed to:", computer.address);
 
     console.log("Done");
 }

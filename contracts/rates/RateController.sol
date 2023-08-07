@@ -420,6 +420,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     newRate = last + config.maxIncrease;
                 }
 
+                if (last == 0 && config.maxPercentIncrease > 0) {
+                    // If the last rate was zero, we don't want to clamp the rate to the maximum percentage increase
+                    // because that would prevent the rate from ever increasing. Instead, we clamp it to the maximum
+                    // constant increase, without taking into account the maximum percentage increase.
+                    return (target, newRate);
+                }
                 // Clamp the rate to the maximum percentage increase
                 uint256 maxIncreaseAbsolute = (uint256(last) * config.maxPercentIncrease) / 10000;
                 if (newRate - last > maxIncreaseAbsolute) {
