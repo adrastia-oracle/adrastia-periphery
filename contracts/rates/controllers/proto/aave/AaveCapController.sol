@@ -23,6 +23,14 @@ contract AaveCapController is AaveRateController {
     bool public immutable forSupplyCaps;
 
     /**
+     * @notice An event emitted when the change threshold for a token is updated.
+     * @param token The token whose change threshold was updated.
+     * @param oldChangeThreshold The old change threshold.
+     * @param newChangeThreshold The new change threshold.
+     */
+    event ChangeThresholdUpdated(address indexed token, uint256 oldChangeThreshold, uint256 newChangeThreshold);
+
+    /**
      * @notice Constructs the AaveCapController contract.
      * @param configEngine_ The Aave Config Engine instance.
      * @param forSupplyCaps_ True if this controller updates supply caps, false if it updates borrow caps.
@@ -54,7 +62,15 @@ contract AaveCapController is AaveRateController {
     function setChangeThreshold(address token, uint32 changeThreshold) external virtual {
         checkSetChangeThreshold();
 
-        rateBufferMetadata[token].changeThreshold = changeThreshold;
+        BufferMetadata storage metadata = rateBufferMetadata[token];
+
+        uint256 oldChangeThreshold = metadata.changeThreshold;
+
+        if (oldChangeThreshold != changeThreshold) {
+            metadata.changeThreshold = changeThreshold;
+
+            emit ChangeThresholdUpdated(token, oldChangeThreshold, changeThreshold);
+        }
     }
 
     /**
