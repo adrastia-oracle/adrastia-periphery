@@ -833,6 +833,43 @@ describe("RateController#computeRate", function () {
         expect(expectedRate).to.not.equal(newConfig.base);
     });
 
+    it("Should clamp the computed rate based on the last stored rate (upwards, from zero)", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
+            maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
+            base: ethers.utils.parseUnits("0", 18), // 0%
+            componentWeights: [],
+            components: [],
+        };
+
+        // Set the config
+        await controller.setConfig(GRT, config);
+
+        // Update. Current rate = 0%
+        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+        await controller.update(updateData);
+
+        // Change the rate from 0% to 50%
+        const newConfig = {
+            ...config,
+            base: ethers.utils.parseUnits("0.5", 18), // 50%
+        };
+        await controller.setConfig(GRT, newConfig);
+
+        // Compute the rate
+        const rate = await controller.computeRate(GRT);
+
+        // The rate should be clamped to 0% + 3% = 3%
+        const expectedRate = config.base.add(config.maxIncrease);
+
+        // Check the rate
+        expect(rate).to.equal(expectedRate);
+
+        // Sanity check that the expected rate and the new target rate are different
+        expect(expectedRate).to.not.equal(newConfig.base);
+    });
+
     it("Should clamp the computed rate based on the last stored rate (downwards)", async function () {
         const config = {
             ...DEFAULT_CONFIG,
