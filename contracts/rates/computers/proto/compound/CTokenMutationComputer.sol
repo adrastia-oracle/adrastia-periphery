@@ -44,7 +44,9 @@ abstract contract CTokenMutationComputer is Erc20MutationComputer, AccessControl
     function supportsInterface(
         bytes4 interfaceId
     ) public view virtual override(AccessControlEnumerable, MutatedValueComputer) returns (bool) {
-        return super.supportsInterface(interfaceId);
+        return
+            AccessControlEnumerable.supportsInterface(interfaceId) ||
+            MutatedValueComputer.supportsInterface(interfaceId);
     }
 
     /**
