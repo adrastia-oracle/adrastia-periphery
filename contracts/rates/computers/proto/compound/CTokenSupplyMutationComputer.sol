@@ -29,6 +29,47 @@ contract CTokenSupplyMutationComputer is CTokenMutationComputer {
     function extractValueFromToken(address cToken) internal view virtual override returns (uint256) {
         ICToken token = ICToken(cToken);
 
-        return token.getCash() + token.totalBorrows() - token.totalReserves();
+        uint256 cash = token.getCash();
+        uint256 totalBorrows = token.totalBorrows();
+        uint256 totalReserves = token.totalReserves();
+
+        uint256 sum;
+
+        if ((cash > 0) && (totalBorrows > type(uint256).max - cash)) {
+            // Overflow will occur if we add cash and total borrows. Let's try subtracting reserves first.
+            if (totalReserves <= totalBorrows) {
+                // we can safely subtract total reserves from total borrows
+                totalBorrows -= totalReserves;
+                totalReserves = 0;
+            } else if (totalReserves <= cash) {
+                // we can safely subtract total reserves from cash
+                cash -= totalReserves;
+                totalReserves = 0;
+            } else {
+                // totalReserves > cash
+                totalReserves -= cash;
+                cash = 0; // this allows us to safely add cash and total borrows
+            }
+
+            // Let's check if we can safely add cash and total borrows
+            if ((cash > 0) && (totalBorrows > type(uint256).max - cash)) {
+                // Still overflows. Just set sum to the max value.
+                sum = type(uint256).max;
+            } else {
+                // No overflow. We can safely add cash and total borrows.
+                sum = cash + totalBorrows;
+            }
+        } else {
+            // No overflow will occur if we add cash and total borrows. Let's do it.
+            sum = cash + totalBorrows;
+        }
+
+        if (sum < totalReserves) {
+            // cash + total borrows is less than total reserves. This is an underflow.
+            // Return the lowest possible value.
+            return 0;
+        }
+
+        return sum - totalReserves;
     }
 }
