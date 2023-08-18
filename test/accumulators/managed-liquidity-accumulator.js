@@ -16,6 +16,9 @@ const algebraInitCodeHash = "0x6ec6c9c8091d160c0aa74b2b14ba9c1717e95093bd3ac085c
 const balancerV2Vault = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"; // Balancer v2 on mainnet
 const balancerV2WeightedPoolId = "0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"; // BAL/WETH on mainnet
 
+const cometUSDC = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // USDC market on mainnet
+const aaveV3Pool = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // Aave v3 on mainnet
+
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
@@ -452,6 +455,48 @@ async function deployBalancerV2LiquidityAccumulator() {
     );
 }
 
+async function deployCometSBAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedCometSBAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        cometUSDC,
+        0, // Liquidity decimals
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployAaveV3SBAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAaveV3SBAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        aaveV3Pool,
+        0, // Liquidity decimals
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function generateDexBasedUpdateData(accumulator, token) {
     const liquidity = await accumulator["consultLiquidity(address,uint256)"](token, 0);
 
@@ -558,4 +603,36 @@ describeLiquidityAccumulatorTests(
     */
     false,
     BAL
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedCometSBAccumulator",
+    deployCometSBAccumulator,
+    generateDexBasedUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    USDC
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedAaveV3SBAccumulator",
+    deployAaveV3SBAccumulator,
+    generateDexBasedUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    USDC
 );
