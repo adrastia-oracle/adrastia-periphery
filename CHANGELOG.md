@@ -1,5 +1,28 @@
 # Changelog
 
+## v4.1.0
+### Accumulators
+- Add ManagedCometSBAccumulator and ManagedAaveV3SBAccumulator
+  - Allows for calculations of time-weighted average total supply and borrow amounts for Aave V3 and Compound III (Comet) pools.
+
+### Prudentia
+#### Controllers
+- Make RateController#computeRate return a clamped rate.
+- Add 64 bits of config storage space for user extensions.
+- Add [Managed]CapController: A special-purpose rate controller for supply&borrow cap management.
+- Add AaveCapController: A special-purpose rate controller for Aave V3 supply&borrow cap management that feeds into the Aave v3 config engine and uses the Aave ACL manager for permissioning.
+- Add AaveRateController: A rate controller that uses the Aave ACL manager for permissioning.
+#### Computers
+- Add MutatedValueComputer: An abstract contract for computing mutated values.
+- Add [Managed]ERC20MutationComputer: An abstract contract for computing mutated values from tokens, with decimal trimming and scaling.
+- Add AaveV3BorrowMutationComputer: A contract for computing Aave v3 total borrow mutated values.
+- Add AaveV3SupplyMutationComputer: A contract for computing Aave v3 total supply mutated values.
+- Add CTokenBorrowMutationComputer: A contract for computing Compound v2 total borrow mutated values.
+- Add CTokenSupplyMutationComputer: A contract for computing Compound v2 total supply mutated values.
+- Add CometBorrowMutationComputer: A contract for computing Compound III (Comet) total borrow mutated values.
+- Add CometSupplyMutationComputer: A contract for computing Compound III (Comet) total supply mutated values.
+- Add CometCollateralMutationComputer: A contract for computing Compound III (Comet) total collateral mutated values.
+
 ## v4.0.0
 ### Dependencies
 - Upgrade adrastia-core to v4.0.0.
