@@ -36,8 +36,8 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
         oracle = oracle_;
         dataSlot = dataSlot_;
 
-        liquidityDecimals = oracle_.liquidityDecimals();
-        priceDecimals = oracle_.quoteTokenDecimals();
+        liquidityDecimals = dataSlot_ == DATA_SLOT_PRICE ? 0 : oracle_.liquidityDecimals();
+        priceDecimals = dataSlot_ == DATA_SLOT_PRICE ? oracle_.quoteTokenDecimals() : 0;
     }
 
     function getTokenDecimalsOrDefault(address) internal view virtual override returns (uint8) {
