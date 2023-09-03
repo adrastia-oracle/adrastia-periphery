@@ -224,6 +224,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             rateBufferMetadata[token].flags = flags;
 
             emit PauseStatusChanged(token, paused);
+
+            onPaused(token, paused);
         }
     }
 
@@ -471,6 +473,11 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         return true;
     }
+
+    /// @notice Called after the pause state is changed.
+    /// @param token The token for which the pause state was changed.
+    /// @param paused Whether rate updates are paused.
+    function onPaused(address token, bool paused) internal virtual {}
 
     /// @notice Checks if the caller is authorized to set the configuration.
     /// @dev This function should contain the access control logic for the setConfig function.

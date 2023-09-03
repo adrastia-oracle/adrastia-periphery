@@ -9,7 +9,14 @@ contract RateControllerStub is ManagedRateController {
         bool needsUpdate;
     }
 
+    struct OnPauseCall {
+        bool paused;
+        uint256 callCount;
+    }
+
     Config public config;
+
+    mapping(address => OnPauseCall) public onPauseCalls;
 
     constructor(
         uint32 period_,
@@ -43,6 +50,13 @@ contract RateControllerStub is ManagedRateController {
     function needsUpdate(bytes memory data) public view virtual override returns (bool) {
         if (config.needsUpdateOverridden) return config.needsUpdate;
         else return super.needsUpdate(data);
+    }
+
+    function onPaused(address token, bool paused) internal virtual override {
+        OnPauseCall storage call = onPauseCalls[token];
+
+        call.paused = paused;
+        ++call.callCount;
     }
 }
 
