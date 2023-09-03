@@ -394,6 +394,18 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function computeRateAndClamp(address token) internal view virtual returns (uint64 target, uint64 newRate) {
         // Compute the target rate
         target = computeRateInternal(token);
+        // Clamp it
+        newRate = clamp(token, target);
+    }
+
+    /// @notice Clamps a rate based on the specified token's rate configuration.
+    /// @dev Clamps the new rate to ensure it is within the specified bounds for maximum constant and percentage
+    /// increases or decreases. This helps to prevent sudden or extreme rate fluctuations.
+    /// @param token The address of the token for which to compute the clamped rate.
+    /// @param target The computed target rate for the given token.
+    /// @return newRate The clamped rate for the given token, taking into account the maximum increase and decrease
+    /// constraints.
+    function clamp(address token, uint64 target) internal view virtual returns (uint64 newRate) {
         newRate = target;
 
         RateConfig memory config = rateConfigs[token];
@@ -426,7 +438,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     // If the last rate was zero, we don't want to clamp the rate to the maximum percentage increase
                     // because that would prevent the rate from ever increasing. Instead, we clamp it to the maximum
                     // constant increase, without taking into account the maximum percentage increase.
-                    return (target, newRate);
+                    return newRate;
                 }
                 // Clamp the rate to the maximum percentage increase
                 uint256 maxIncreaseAbsolute = (uint256(last) * config.maxPercentIncrease) / 10000;
