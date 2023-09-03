@@ -463,6 +463,11 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    function updateAndCompute(address token) internal virtual returns (uint64 target, uint64 newRate) {
+        // Compute the new rate and clamp it
+        (target, newRate) = computeRateAndClamp(token);
+    }
+
     /// @notice Performs an update of the token's rate based on the provided data.
     /// @dev This function ensures that only EOAs (Externally Owned Accounts) can update the rate
     /// if `updatersMustBeEoa` is set to true. It decodes the token address from the input data, computes
@@ -477,8 +482,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         address token = abi.decode(data, (address));
 
-        // Compute the new target rate and clamp it
-        (uint64 target, uint64 newRate) = computeRateAndClamp(token);
+        // Compute the new rates and do any other necessary work
+        (uint64 target, uint64 newRate) = updateAndCompute(token);
 
         // Push the new rate
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));
