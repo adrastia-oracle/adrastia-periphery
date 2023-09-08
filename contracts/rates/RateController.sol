@@ -398,14 +398,22 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         newRate = clamp(token, target);
     }
 
-    /// @notice Clamps a rate based on the specified token's rate configuration.
+    /// @notice Clamps a rate based on the specified token's rate configuration, with respect to the provided last rate
+    ///   if clampChange is true.
     /// @dev Clamps the new rate to ensure it is within the specified bounds for maximum constant and percentage
     /// increases or decreases. This helps to prevent sudden or extreme rate fluctuations.
     /// @param token The address of the token for which to compute the clamped rate.
     /// @param target The computed target rate for the given token.
+    /// @param clampChange Whether to clamp the rate change. If false, only min and max are used.
+    /// @param last The last rate for the given token. Ignored if clampChange is false.
     /// @return newRate The clamped rate for the given token, taking into account the maximum increase and decrease
     /// constraints.
-    function clamp(address token, uint64 target) internal view virtual returns (uint64 newRate) {
+    function clampWrtLast(
+        address token,
+        uint64 target,
+        bool clampChange,
+        uint64 last
+    ) internal view virtual returns (uint64 newRate) {
         newRate = target;
 
         RateConfig memory config = rateConfigs[token];
@@ -421,12 +429,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             newRate = config.max;
         }
 
-        BufferMetadata memory meta = rateBufferMetadata[token];
-        if (meta.size > 0) {
+        if (clampChange) {
             // We have a previous rate, so let's make sure we don't change it too much
-
-            uint64 last = rateBuffers[token][meta.end].current;
-
             if (newRate > last) {
                 // Clamp the rate to the maximum constant increase
                 if (newRate - last > config.maxIncrease) {
@@ -460,6 +464,26 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     newRate = last - uint64(maxDecreaseAbsolute);
                 }
             }
+        }
+    }
+
+    /// @notice Clamps a rate based on the specified token's rate configuration.
+    /// @dev Clamps the new rate to ensure it is within the specified bounds for maximum constant and percentage
+    /// increases or decreases. This helps to prevent sudden or extreme rate fluctuations.
+    /// @param token The address of the token for which to compute the clamped rate.
+    /// @param target The computed target rate for the given token.
+    /// @return newRate The clamped rate for the given token, taking into account the maximum increase and decrease
+    /// constraints.
+    function clamp(address token, uint64 target) internal view virtual returns (uint64 newRate) {
+        BufferMetadata memory meta = rateBufferMetadata[token];
+        if (meta.size > 0) {
+            // We have a previous rate, so let's make sure we don't change it too much
+            uint64 last = rateBuffers[token][meta.end].current;
+
+            return clampWrtLast(token, target, true, last);
+        } else {
+            // We don't have a previous rate, so we don't need to clamp the rate change
+            return clampWrtLast(token, target, false, 0);
         }
     }
 
