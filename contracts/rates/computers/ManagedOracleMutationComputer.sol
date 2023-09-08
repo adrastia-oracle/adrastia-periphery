@@ -6,7 +6,23 @@ import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "./OracleMutationComputer.sol";
 import "../../access/Roles.sol";
 
+/**
+ * @title ManagedOracleMutationComputer
+ * @notice A contract that computes mutated values from an Adrastia oracle contract with access control enforced by the
+ * OpenZeppelin AccessControlEnumerable contract.
+ * @dev Inherits from OracleMutationComputer and AccessControlEnumerable. The contract enforces the RATE_ADMIN role for
+ * setting config.
+ */
 contract ManagedOracleMutationComputer is OracleMutationComputer, AccessControlEnumerable {
+    /**
+     * @notice Constructs a new ManagedOracleMutationComputer instance.
+     * @dev Initializes the roles hierarchy with the message sender as the initial admin.
+     * @param oracle_ The address of the oracle contract.
+     * @param dataSlot_  The data slot to use when consulting the oracle. See the DATA_SLOT_* constants.
+     * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
+     * @param decimalsOffset_ The decimal offset to apply when scaling the value from the token. Positive values scale
+     *   up, negative values scale down. Measured in numbers of decimals places (powers of 10).
+     */
     constructor(
         IOracle oracle_,
         uint256 dataSlot_,
