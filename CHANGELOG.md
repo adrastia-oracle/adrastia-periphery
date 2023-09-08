@@ -4,6 +4,9 @@
 ### Accumulators
 - Add ManagedCometSBAccumulator and ManagedAaveV3SBAccumulator
   - Allows for calculations of time-weighted average total supply and borrow amounts for Aave V3 and Compound III (Comet) pools.
+### Prudentia
+#### Computers
+- Add [Managed/Aave]OracleMutationComputer: A contract that computes mutated values from Adrastia oracles.
 
 ### Prudentia
 #### Controllers

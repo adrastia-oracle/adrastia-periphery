@@ -1,6 +1,6 @@
 {
   "name": "@adrastia-oracle/adrastia-periphery",
-  "version": "4.1.0-rc.1",
+  "version": "4.1.0",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "MIT",
@@ -30,7 +30,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "4.1.0-rc.1",
+    "@adrastia-oracle/adrastia-core": "4.1.0",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },

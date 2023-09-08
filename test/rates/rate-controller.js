@@ -230,6 +230,60 @@ describe("RateController#setUpdatesPaused", function () {
         // Sanity check that the status is the same
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
     });
+
+    it("Should call onPaused when the updates are paused", async function () {
+        await controller.setUpdatesPaused(GRT, true);
+
+        // Sanity check that the changes were made
+        expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
+
+        // Sanity check that the onPaused function was called
+        const call = await controller.onPauseCalls(GRT);
+        expect(call.paused).to.equal(true);
+        expect(call.callCount).to.equal(1);
+    });
+
+    it("Should not call onPaused when the updates are paused, but they're already paused", async function () {
+        await controller.setUpdatesPaused(GRT, true);
+        await controller.setUpdatesPaused(GRT, true);
+
+        // Sanity check that the changes were made
+        expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
+
+        // Sanity check that the onPaused function was called
+        const call = await controller.onPauseCalls(GRT);
+        expect(call.paused).to.equal(true);
+        expect(call.callCount).to.equal(1);
+    });
+
+    it("Should call onPaused when the updates are unpaused", async function () {
+        await controller.setUpdatesPaused(GRT, true);
+
+        // Sanity check that the changes were made
+        expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
+
+        await controller.setUpdatesPaused(GRT, false);
+
+        // Sanity check that the changes were made
+        expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
+
+        // Sanity check that the onPaused function was called
+        const call = await controller.onPauseCalls(GRT);
+        expect(call.paused).to.equal(false);
+        expect(call.callCount).to.equal(2);
+    });
+
+    it("Should not call onPaused when the updates are unpaused, but they're already unpaused", async function () {
+        await controller.setUpdatesPaused(GRT, false);
+
+        // Sanity check that the changes were made
+        expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
+
+        // Sanity check that the onPaused function was called
+        const call = await controller.onPauseCalls(GRT);
+        expect(call.paused).to.equal(false);
+        expect(call.callCount).to.equal(0);
+    });
 });
 
 describe("RateController#setConfig", function () {
