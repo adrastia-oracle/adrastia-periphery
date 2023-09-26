@@ -1,6 +1,6 @@
 const hre = require("hardhat");
 
-const contractAddress = "0x514eD25bBbf51811eBDFa42b150c4d6f0e2255B3";
+const contractAddress = "0x7Edc9806dB4Cda54681cFe09D31d12341eafb675";
 
 const aclManager = "0x5f77FceAB2fdf1839f00453Ede3E884810F51146";
 
