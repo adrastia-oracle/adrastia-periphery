@@ -64,8 +64,11 @@ Please refer to the [contributing guide](CONTRIBUTING.md).
 
 ## License
 
-Adrastia Periphery is licensed under the [MIT License](LICENSE).
+Adrastia Periphery is licensed under the [Business Source License 1.1 (BUSL-1.1)](LICENSE).
 
 ### Exceptions
 
-- The files located at [contracts/vendor/chainlink](contracts/vendor/chainlink/) is licensed under a different [MIT License](contracts/vendor/chainlink/LICENSE_MIT).
+- Some interfaces and libraries located at [contracts/rates/](contracts/rates/) are licensed under the [MIT License](contracts/rates/LICENSE_MIT).
+- The files located at [contracts/compatibility/](contracts/compatibility/) are licensed under the [MIT License](contracts/compatibility/LICENSE_MIT).
+- The files located at [contracts/vendor/chainlink](contracts/vendor/chainlink/) are licensed under a different [MIT License](contracts/vendor/chainlink/LICENSE_MIT).
+- The files located at [contracts/vendor/aave](contracts/vendor/aave/) are licensed under various licenses as specified in the files.
