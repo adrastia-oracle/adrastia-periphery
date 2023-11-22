@@ -3,6 +3,7 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/ILiquidityOracle.sol";
 
+import "./IInputAndErrorTransformer.sol";
 import "../RateController.sol";
 
 import "hardhat/console.sol";
@@ -15,6 +16,7 @@ abstract contract PidController is RateController {
         uint32 kIDenominator;
         uint32 kDNumerator;
         uint32 kDDenominator;
+        IInputAndErrorTransformer transformer;
     }
 
     struct PidState {
@@ -103,15 +105,34 @@ abstract contract PidController is RateController {
         }
     }
 
+    /// @dev Returned values have not been transformed.
     function getInputAndError(address token) internal view virtual returns (uint112, uint112) {
         return _inputAndErrorOracle(token).consultLiquidity(token);
     }
 
+    function transformSignedInputAndError(address token, int256 input, int256 err)
+        internal
+        view
+        virtual
+        returns (int256 transformedInput, int256 transformedError)
+    {
+        PidConfig memory config = pidData[token].config;
+        if (address(config.transformer) != address(0)) {
+            (transformedInput, transformedError) = config.transformer.transformInputAndError(input, err);
+        } else {
+            transformedInput = input;
+            transformedError = err;
+        }
+    }
+
+    /// @dev Returned values have been transformed as per the token's config.
     function getSignedInputAndError(address token) internal view virtual returns (int256 input, int256 err) {
         (uint112 uInput, uint112 uErr) = getInputAndError(token);
 
         input = int256(uint256(uInput));
         err = int256(uint256(uErr)) - int256(uint256(ERROR_ZERO));
+
+        (input, err) = transformSignedInputAndError(token, input, err);
     }
 
     function initializePid(address token) internal virtual {

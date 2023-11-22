@@ -99,44 +99,54 @@ const MAX_UINT64 = ethers.BigNumber.from(2).pow(64).sub(1);
 const MAX_UINT32 = ethers.BigNumber.from(2).pow(32).sub(1);
 
 async function handleInput(
-    decreaseInput,
-    increaseInput,
-    increaseKPNum,
-    increaseKPDen,
-    increaseKINum,
-    increaseKIDen,
-    increaseKDNumerator,
-    increaseKDDenominator,
-    pause
+    actions
 ) {
     const ac = new AbortController();
     const signal = ac.signal;
 
-    rl.question("Select an option ", { signal }, async (answer) => {
-        if (answer === "[") {
-            await increaseKPNum();
-        } else if (answer === "]") {
-            await increaseKPDen();
-        } else if (answer === "+") {
-            await increaseInput();
-        } else if (answer === "-") {
-            await decreaseInput();
-        } else if (answer === ";") {
-            await increaseKINum();
-        } else if (answer === "'") {
-            await increaseKIDen();
-        } else if (answer === ",") {
-            await increaseKDNumerator();
-        } else if (answer === ".") {
-            await increaseKDDenominator();
-        } else if (answer == "p") {
-            await pause();
+    var hasAnswer = false;
+
+    rl.question("Select an option: ", { signal }, async (answer) => {
+         if (answer.toLocaleLowerCase() === "pn+") {
+            await actions['increaseKPNum']();
+        } else if (answer.toLocaleLowerCase()  === "pn-") {
+            await actions['decreaseKPNum']();
+        } else if (answer.toLocaleLowerCase()  === "pd+") {
+            await actions['increaseKPDen']();
+        } else if (answer.toLocaleLowerCase()  === "pd-") {
+            await actions['decreaseKPDen']();
+        } else if (answer.toLocaleLowerCase()  === "in+") {
+            await actions['increaseKINum']();
+        } else if (answer.toLocaleLowerCase()  === "in-") {
+            await actions['decreaseKINum']();
+        } else if (answer.toLocaleLowerCase()  === "id+") {
+            await actions['increaseKIDen']();
+        } else if (answer.toLocaleLowerCase()  === "id-") {
+            await actions['decreaseKIDen']();
+        } else if (answer.toLocaleLowerCase()  === "dn+") {
+            await actions['increaseKDNum']();
+        } else if (answer.toLocaleLowerCase()  === "dn-") {
+            await actions['decreaseKDNum']();
+        } else if (answer.toLocaleLowerCase()  === "dd+") {
+            await actions['increaseKDDen']();
+        } else if (answer.toLocaleLowerCase()  === "dd-") {
+            await actions['decreaseKDDen']();
+        } else if (answer.toLocaleLowerCase() === "+") {
+            await actions['increaseInput']();
+        } else if (answer.toLocaleLowerCase()  === "-") {
+            await actions['decreaseInput']();
+        } else if (answer.toLocaleLowerCase()  === "pause") {
+            await actions['pause']();
+        } else if (answer.toLocaleLowerCase()  === "unpause") {
+            await actions['unpause']();
         }
+
+        hasAnswer = true;
     });
 
-    signal.addEventListener("abort", () => {}, { once: true });
-
-    await setTimeout(() => ac.abort(), 10000);
+    while (!hasAnswer && !signal.aborted) {
+        await sleep(100);
+    }
 }
 
 async function main() {
@@ -240,6 +250,7 @@ async function main() {
             kIDenominator: kIDenominator,
             kDNumerator: kDNumerator,
             kDDenominator: kDDenominator,
+            transformer: ethers.constants.AddressZero,
         });
     };
 
@@ -278,59 +289,107 @@ async function main() {
             await hre.network.provider.send("evm_increaseTime", [period]);
             await hre.network.provider.send("evm_mine");
 
-            await handleInput(
-                async () => {
-                    input = input.sub(ethers.utils.parseUnits("0.1", 8));
-
-                    await oracle.setInput(coin, input);
-                },
-                async () => {
-                    input = input.add(ethers.utils.parseUnits("0.1", 8));
-
-                    await oracle.setInput(coin, input);
-                },
-                async () => {
+            const actions = {
+                "increaseKPNum": async () => {
                     kPNumerator += 10;
                     console.log("kPNumerator:", kPNumerator);
 
                     await updatePidConfig();
                 },
-                async () => {
+                "decreaseKPNum": async () => {
+                    kPNumerator -= 10;
+                    console.log("kPNumerator:", kPNumerator);
+
+                    await updatePidConfig();
+                },
+                "increaseKPDen": async () => {
                     kPDenominator += 1;
                     console.log("kPDenominator:", kPDenominator);
 
                     await updatePidConfig();
                 },
-                async () => {
+                "decreaseKPDen": async () => {
+                    kPDenominator -= 1;
+                    console.log("kPDenominator:", kPDenominator);
+
+                    await updatePidConfig();
+                },
+                "increaseKINum": async () => {
                     kINumerator += 10;
                     console.log("kINumerator:", kINumerator);
 
                     await updatePidConfig();
                 },
-                async () => {
+                "decreaseKINum": async () => {
+                    kINumerator -= 10;
+                    console.log("kINumerator:", kINumerator);
+
+                    await updatePidConfig();
+                },
+                "increaseKIDen": async () => {
                     kIDenominator += 1;
                     console.log("kIDenominator:", kIDenominator);
 
                     await updatePidConfig();
                 },
-                async () => {
+                "decreaseKIDen": async () => {
+                    kIDenominator -= 1;
+                    console.log("kIDenominator:", kIDenominator);
+
+                    await updatePidConfig();
+                },
+                "increaseKDNum": async () => {
                     kDNumerator += 10;
                     console.log("kDNumerator:", kDNumerator);
 
                     await updatePidConfig();
                 },
-                async () => {
+                "decreaseKDNum": async () => {
+                    kDNumerator -= 10;
+                    console.log("kDNumerator:", kDNumerator);
+
+                    await updatePidConfig();
+                },
+                "increaseKDDen": async () => {
                     kDDenominator += 1;
                     console.log("kDDenominator:", kDDenominator);
 
                     await updatePidConfig();
                 },
-                async () => {
-                    paused = !paused;
+                "decreaseKDDen": async () => {
+                    kDDenominator -= 1;
+                    console.log("kDDenominator:", kDDenominator);
+
+                    await updatePidConfig();
+                },
+                "increaseInput": async () => {
+                    input = input.add(ethers.utils.parseUnits("0.1", 8));
+                    console.log("Input:", ethers.utils.formatUnits(input, 8));
+
+                    await oracle.setInput(coin, input);
+                },
+                "decreaseInput": async () => {
+                    input = input.sub(ethers.utils.parseUnits("0.1", 8));
+                    console.log("Input:", ethers.utils.formatUnits(input, 8));
+
+                    await oracle.setInput(coin, input);
+                },
+                "pause": async () => {
+                    paused = true;
                     console.log("Paused:", paused);
 
                     await rateController.setUpdatesPaused(coin, paused);
-                }
+                },
+                "unpause": async () => {
+                    paused = false;
+                    console.log("Paused:", paused);
+
+                    await rateController.setUpdatesPaused(coin, paused);
+                },
+            };
+
+            await handleInput(
+                actions
             );
         } catch (e) {
             console.error(e);
