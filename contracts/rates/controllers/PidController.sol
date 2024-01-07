@@ -3,7 +3,7 @@ pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/ILiquidityOracle.sol";
 
-import "./IInputAndErrorTransformer.sol";
+import "../transformers/IInputAndErrorTransformer.sol";
 import "../RateController.sol";
 
 import "hardhat/console.sol";
@@ -16,6 +16,7 @@ abstract contract PidController is RateController {
         uint32 kIDenominator;
         uint32 kDNumerator;
         uint32 kDDenominator;
+        bool reverseError;
         IInputAndErrorTransformer transformer;
     }
 
@@ -110,12 +111,11 @@ abstract contract PidController is RateController {
         return _inputAndErrorOracle(token).consultLiquidity(token);
     }
 
-    function transformSignedInputAndError(address token, int256 input, int256 err)
-        internal
-        view
-        virtual
-        returns (int256 transformedInput, int256 transformedError)
-    {
+    function transformSignedInputAndError(
+        address token,
+        int256 input,
+        int256 err
+    ) internal view virtual returns (int256 transformedInput, int256 transformedError) {
         PidConfig memory config = pidData[token].config;
         if (address(config.transformer) != address(0)) {
             (transformedInput, transformedError) = config.transformer.transformInputAndError(input, err);
@@ -131,6 +131,11 @@ abstract contract PidController is RateController {
 
         input = int256(uint256(uInput));
         err = int256(uint256(uErr)) - int256(uint256(ERROR_ZERO));
+
+        if (pidData[token].config.reverseError) {
+            // If we're reversing the error, we need to negate it.
+            err = -err;
+        }
 
         (input, err) = transformSignedInputAndError(token, input, err);
     }
@@ -156,24 +161,33 @@ abstract contract PidController is RateController {
         bool clampChange,
         int256 last
     ) internal view virtual returns (int256) {
-        if (value >= int256(uint256(type(uint64).max))) return int256(uint256(type(uint64).max));
-        else if (value <= int256(0)) return int256(0);
-        else {
+        uint64 valueAsUint;
+        if (value >= int256(uint256(type(uint64).max))) {
+            valueAsUint = type(uint64).max;
+        } else if (value < int256(0)) {
+            valueAsUint = 0;
+        } else {
+            valueAsUint = uint64(uint256(value));
+        }
+
+        uint64 clamped;
+
+        if (isOutput) {
+            clamped = clamp(token, valueAsUint); // clamp wrt. last output rate
+        } else {
             uint64 lastAsUint;
-            if (last <= int256(0)) lastAsUint = uint64(0);
-            else if (last >= int256(uint256(type(uint64).max))) lastAsUint = type(uint64).max;
-            else lastAsUint = uint64(uint256(last));
-
-            uint64 clamped;
-
-            if (isOutput) {
-                clamped = clamp(token, uint64(uint256(value)));
+            if (last <= int256(0)) {
+                lastAsUint = uint64(0);
+            } else if (last >= int256(uint256(type(uint64).max))) {
+                lastAsUint = type(uint64).max;
             } else {
-                clamped = clampWrtLast(token, uint64(uint256(value)), clampChange, lastAsUint);
+                lastAsUint = uint64(uint256(last));
             }
 
-            return int256(uint256(clamped));
+            clamped = clampWrtLast(token, valueAsUint, clampChange, lastAsUint);
         }
+
+        return int256(uint256(clamped));
     }
 
     function updateAndCompute(address token) internal virtual override returns (uint64 target, uint64 current) {
@@ -195,8 +209,9 @@ abstract contract PidController is RateController {
         pidState.iTerm = clampBigSignedRate(token, pidState.iTerm, false, meta.size > 0, previousITerm);
 
         // Compute derivative
-        int256 dInput = (input - pidState.lastInput) / deltaTime;
-        int256 dTerm = (int256(uint256(pidConfig.kDNumerator)) * dInput) / int256(uint256(pidConfig.kDDenominator));
+        int256 deltaInput = input - pidState.lastInput;
+        int256 dTerm = (int256(uint256(pidConfig.kDNumerator)) * deltaInput) /
+            (int256(uint256(pidConfig.kDDenominator)) * deltaTime);
 
         // Compute output
         int256 output = pTerm + pidState.iTerm - dTerm;
