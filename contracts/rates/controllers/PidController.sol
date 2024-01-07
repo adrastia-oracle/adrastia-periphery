@@ -78,7 +78,7 @@ abstract contract PidController is RateController {
     /// @notice Sets the PID configuration for a specific token.
     /// @param token The address of the token for which to set the configuration.
     /// @param pidConfig The PID configuration to set.
-    function setPidConfig(address token, PidConfig memory pidConfig) external {
+    function setPidConfig(address token, PidConfig memory pidConfig) external virtual {
         checkSetPidConfig();
 
         BufferMetadata storage meta = rateBufferMetadata[token];
