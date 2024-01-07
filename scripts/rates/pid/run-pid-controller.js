@@ -1,3 +1,4 @@
+const { BigNumber } = require("ethers");
 const hre = require("hardhat");
 
 const rl = require("readline").createInterface({
@@ -98,47 +99,59 @@ async function tryRevokeRole(contract, account, role) {
 const MAX_UINT64 = ethers.BigNumber.from(2).pow(64).sub(1);
 const MAX_UINT32 = ethers.BigNumber.from(2).pow(32).sub(1);
 
-async function handleInput(
-    actions
-) {
+async function handleInput(actions) {
     const ac = new AbortController();
     const signal = ac.signal;
 
     var hasAnswer = false;
 
     rl.question("Select an option: ", { signal }, async (answer) => {
-         if (answer.toLocaleLowerCase() === "pn+") {
-            await actions['increaseKPNum']();
-        } else if (answer.toLocaleLowerCase()  === "pn-") {
-            await actions['decreaseKPNum']();
-        } else if (answer.toLocaleLowerCase()  === "pd+") {
-            await actions['increaseKPDen']();
-        } else if (answer.toLocaleLowerCase()  === "pd-") {
-            await actions['decreaseKPDen']();
-        } else if (answer.toLocaleLowerCase()  === "in+") {
-            await actions['increaseKINum']();
-        } else if (answer.toLocaleLowerCase()  === "in-") {
-            await actions['decreaseKINum']();
-        } else if (answer.toLocaleLowerCase()  === "id+") {
-            await actions['increaseKIDen']();
-        } else if (answer.toLocaleLowerCase()  === "id-") {
-            await actions['decreaseKIDen']();
-        } else if (answer.toLocaleLowerCase()  === "dn+") {
-            await actions['increaseKDNum']();
-        } else if (answer.toLocaleLowerCase()  === "dn-") {
-            await actions['decreaseKDNum']();
-        } else if (answer.toLocaleLowerCase()  === "dd+") {
-            await actions['increaseKDDen']();
-        } else if (answer.toLocaleLowerCase()  === "dd-") {
-            await actions['decreaseKDDen']();
+        if (answer.toLocaleLowerCase() === "pn+") {
+            await actions["increaseKPNum"]();
+        } else if (answer.toLocaleLowerCase() === "pn-") {
+            await actions["decreaseKPNum"]();
+        } else if (answer.toLocaleLowerCase() === "pd+") {
+            await actions["increaseKPDen"]();
+        } else if (answer.toLocaleLowerCase() === "pd-") {
+            await actions["decreaseKPDen"]();
+        } else if (answer.toLocaleLowerCase() === "in+") {
+            await actions["increaseKINum"]();
+        } else if (answer.toLocaleLowerCase() === "in-") {
+            await actions["decreaseKINum"]();
+        } else if (answer.toLocaleLowerCase() === "id+") {
+            await actions["increaseKIDen"]();
+        } else if (answer.toLocaleLowerCase() === "id-") {
+            await actions["decreaseKIDen"]();
+        } else if (answer.toLocaleLowerCase() === "dn+") {
+            await actions["increaseKDNum"]();
+        } else if (answer.toLocaleLowerCase() === "dn-") {
+            await actions["decreaseKDNum"]();
+        } else if (answer.toLocaleLowerCase() === "dd+") {
+            await actions["increaseKDDen"]();
+        } else if (answer.toLocaleLowerCase() === "dd-") {
+            await actions["decreaseKDDen"]();
         } else if (answer.toLocaleLowerCase() === "+") {
-            await actions['increaseInput']();
-        } else if (answer.toLocaleLowerCase()  === "-") {
-            await actions['decreaseInput']();
-        } else if (answer.toLocaleLowerCase()  === "pause") {
-            await actions['pause']();
-        } else if (answer.toLocaleLowerCase()  === "unpause") {
-            await actions['unpause']();
+            await actions["increaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "++") {
+            await actions["increaseInput"]();
+            await actions["increaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "+++") {
+            await actions["increaseInput"]();
+            await actions["increaseInput"]();
+            await actions["increaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "-") {
+            await actions["decreaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "--") {
+            await actions["decreaseInput"]();
+            await actions["decreaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "---") {
+            await actions["decreaseInput"]();
+            await actions["decreaseInput"]();
+            await actions["decreaseInput"]();
+        } else if (answer.toLocaleLowerCase() === "pause") {
+            await actions["pause"]();
+        } else if (answer.toLocaleLowerCase() === "unpause") {
+            await actions["unpause"]();
         }
 
         hasAnswer = true;
@@ -155,33 +168,39 @@ async function main() {
     const initialBufferCardinality = 2;
     const updatersMustBeEoa = true;
     const [signer] = await ethers.getSigners();
-    const newAdmin = signer.address;
+    const newAdmin = "";
     const assignAllRolesToAdmin = true;
+    const inputPrecisionDecimals = 8;
+    const outputPrecisionDecimals = 4;
+    const deltaTerm = 20;
+    const errorScalarNumerator = BigNumber.from(2);
+    const errorScalarDenominator = BigNumber.from(1);
 
-    var target = ethers.utils.parseUnits("0.9", 8);
-    var input = ethers.utils.parseUnits("0.1", 8);
+    const startingRate = ethers.utils.parseUnits("0.08", outputPrecisionDecimals); // 8% APY
+    var target = ethers.utils.parseUnits("0.9", inputPrecisionDecimals);
+    var input = ethers.utils.parseUnits("1.0", inputPrecisionDecimals);
 
     // The following configuration assumes that 1e18 = 100% for rates
 
     // The maximum rate
-    const max = MAX_UINT64;
+    const max = ethers.utils.parseUnits("0.2", outputPrecisionDecimals); // 20%
     // The minimum rate
-    const min = ethers.BigNumber.from(0);
+    const min = ethers.utils.parseUnits("0.01", outputPrecisionDecimals); // 1%
     // The maximum increase in the rate per update
-    const maxIncrease = MAX_UINT64;
+    const maxIncrease = ethers.utils.parseUnits("0.1", outputPrecisionDecimals); // 10%
     // The maximum decrease in the rate per update
-    const maxDecrease = MAX_UINT64;
+    const maxDecrease = ethers.utils.parseUnits("0.1", outputPrecisionDecimals); // 10%
     // The maximum percent increase in the rate per update
-    const maxPercentIncrease = MAX_UINT32;
+    const maxPercentIncrease = BigNumber.from(10000); // 100%
     // The maximum percent decrease in the rate per update
-    const maxPercentDecrease = ethers.BigNumber.from(5000); // 50%
+    const maxPercentDecrease = BigNumber.from(10000); // 100%
 
-    var kPNumerator = 0;
-    var kPDenominator = 100;
-    var kINumerator = 0;
-    var kIDenominator = 100;
-    var kDNumerator = 0;
-    var kDDenominator = 100;
+    var kPNumerator = -500;
+    var kPDenominator = 100_000_000;
+    var kINumerator = -100;
+    var kIDenominator = 100_000_000;
+    var kDNumerator = -3_000;
+    var kDDenominator = 10_000;
     var paused = false;
 
     const rateConfig = {
@@ -195,6 +214,17 @@ async function main() {
         componentWeights: [],
         components: [],
     };
+
+    var transformerAddress = ethers.constants.AddressZero;
+    if (errorScalarNumerator !== undefined && errorScalarDenominator !== undefined) {
+        const transformerFactory = await ethers.getContractFactory("NegativeErrorScalingTransformer");
+        const transformer = await transformerFactory.deploy(errorScalarNumerator, errorScalarDenominator);
+        await transformer.deployed();
+
+        transformerAddress = transformer.address;
+
+        console.log("Transformer deployed to:", transformerAddress);
+    }
 
     const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
     const oracle = await oracleFactory.deploy();
@@ -210,7 +240,7 @@ async function main() {
 
     console.log(contractName + " deployed to:", rateController.address);
 
-    if (newAdmin !== "") {
+    if (newAdmin) {
         await tryGrantRole(rateController, newAdmin, ADMIN_ROLE);
 
         // Get our address
@@ -231,6 +261,17 @@ async function main() {
 
         // Revoke the deployer's admin role
         await tryRevokeRole(rateController, deployer.address, ADMIN_ROLE);
+    } else {
+        if (assignAllRolesToAdmin) {
+            // Get our address
+            const [deployer] = await ethers.getSigners();
+
+            // Grant the deployer all roles
+            await tryGrantRole(rateController, deployer.address, ORACLE_UPDATER_MANAGER_ROLE);
+            await tryGrantRole(rateController, deployer.address, ORACLE_UPDATER_ROLE);
+            await tryGrantRole(rateController, deployer.address, RATE_ADMIN_ROLE);
+            await tryGrantRole(rateController, deployer.address, UPDATE_PAUSE_ADMIN_ROLE);
+        }
     }
 
     console.log(contractName + " access control configured");
@@ -238,6 +279,10 @@ async function main() {
     // Set the rate config
     console.log("Setting rate config...", rateConfig);
     await rateController.setConfig(coin, rateConfig);
+
+    // Set the starting rate
+    console.log("Setting starting rate...");
+    await rateController.manuallyPushRate(coin, startingRate, startingRate, 1);
 
     // Set the PID parameters
     console.log("Setting PID config...");
@@ -250,7 +295,7 @@ async function main() {
             kIDenominator: kIDenominator,
             kDNumerator: kDNumerator,
             kDDenominator: kDDenominator,
-            transformer: ethers.constants.AddressZero,
+            transformer: transformerAddress,
         });
     };
 
@@ -281,106 +326,106 @@ async function main() {
                 );
             }
 
-            console.log("Target:", ethers.utils.formatUnits(target, 8));
-            console.log("Input:", ethers.utils.formatUnits(input, 8));
-            console.log("Output:", ethers.utils.formatUnits(output, 8));
+            console.log("Target: %s%", ethers.utils.formatUnits(target, inputPrecisionDecimals - 2));
+            console.log("Input: %s%", ethers.utils.formatUnits(input, inputPrecisionDecimals - 2));
+            console.log("Output: %s%", ethers.utils.formatUnits(output, outputPrecisionDecimals - 2));
 
             // Advance the time by period seconds
             await hre.network.provider.send("evm_increaseTime", [period]);
             await hre.network.provider.send("evm_mine");
 
             const actions = {
-                "increaseKPNum": async () => {
-                    kPNumerator += 10;
+                increaseKPNum: async () => {
+                    kPNumerator += deltaTerm;
                     console.log("kPNumerator:", kPNumerator);
 
                     await updatePidConfig();
                 },
-                "decreaseKPNum": async () => {
-                    kPNumerator -= 10;
+                decreaseKPNum: async () => {
+                    kPNumerator -= deltaTerm;
                     console.log("kPNumerator:", kPNumerator);
 
                     await updatePidConfig();
                 },
-                "increaseKPDen": async () => {
-                    kPDenominator += 1;
+                increaseKPDen: async () => {
+                    kPDenominator += deltaTerm;
                     console.log("kPDenominator:", kPDenominator);
 
                     await updatePidConfig();
                 },
-                "decreaseKPDen": async () => {
-                    kPDenominator -= 1;
+                decreaseKPDen: async () => {
+                    kPDenominator -= deltaTerm;
                     console.log("kPDenominator:", kPDenominator);
 
                     await updatePidConfig();
                 },
-                "increaseKINum": async () => {
-                    kINumerator += 10;
+                increaseKINum: async () => {
+                    kINumerator += deltaTerm;
                     console.log("kINumerator:", kINumerator);
 
                     await updatePidConfig();
                 },
-                "decreaseKINum": async () => {
-                    kINumerator -= 10;
+                decreaseKINum: async () => {
+                    kINumerator -= deltaTerm;
                     console.log("kINumerator:", kINumerator);
 
                     await updatePidConfig();
                 },
-                "increaseKIDen": async () => {
-                    kIDenominator += 1;
+                increaseKIDen: async () => {
+                    kIDenominator += deltaTerm;
                     console.log("kIDenominator:", kIDenominator);
 
                     await updatePidConfig();
                 },
-                "decreaseKIDen": async () => {
-                    kIDenominator -= 1;
+                decreaseKIDen: async () => {
+                    kIDenominator -= deltaTerm;
                     console.log("kIDenominator:", kIDenominator);
 
                     await updatePidConfig();
                 },
-                "increaseKDNum": async () => {
-                    kDNumerator += 10;
+                increaseKDNum: async () => {
+                    kDNumerator += deltaTerm;
                     console.log("kDNumerator:", kDNumerator);
 
                     await updatePidConfig();
                 },
-                "decreaseKDNum": async () => {
-                    kDNumerator -= 10;
+                decreaseKDNum: async () => {
+                    kDNumerator -= deltaTerm;
                     console.log("kDNumerator:", kDNumerator);
 
                     await updatePidConfig();
                 },
-                "increaseKDDen": async () => {
-                    kDDenominator += 1;
+                increaseKDDen: async () => {
+                    kDDenominator += deltaTerm;
                     console.log("kDDenominator:", kDDenominator);
 
                     await updatePidConfig();
                 },
-                "decreaseKDDen": async () => {
-                    kDDenominator -= 1;
+                decreaseKDDen: async () => {
+                    kDDenominator -= deltaTerm;
                     console.log("kDDenominator:", kDDenominator);
 
                     await updatePidConfig();
                 },
-                "increaseInput": async () => {
-                    input = input.add(ethers.utils.parseUnits("0.1", 8));
-                    console.log("Input:", ethers.utils.formatUnits(input, 8));
+                increaseInput: async () => {
+                    input = input.add(ethers.utils.parseUnits("0.1", inputPrecisionDecimals));
+                    console.log("Input:", ethers.utils.formatUnits(input, inputPrecisionDecimals));
 
                     await oracle.setInput(coin, input);
                 },
-                "decreaseInput": async () => {
-                    input = input.sub(ethers.utils.parseUnits("0.1", 8));
-                    console.log("Input:", ethers.utils.formatUnits(input, 8));
+                decreaseInput: async () => {
+                    input = input.sub(ethers.utils.parseUnits("0.1", inputPrecisionDecimals));
+                    console.log("Input:", ethers.utils.formatUnits(input, inputPrecisionDecimals));
 
                     await oracle.setInput(coin, input);
                 },
-                "pause": async () => {
+                pause: async () => {
                     paused = true;
                     console.log("Paused:", paused);
 
                     await rateController.setUpdatesPaused(coin, paused);
                 },
-                "unpause": async () => {
+                unpause: async () => {
                     paused = false;
                     console.log("Paused:", paused);
 
@@ -388,9 +433,7 @@ async function main() {
                 },
             };
 
-            await handleInput(
-                actions
-            );
+            await handleInput(actions);
         } catch (e) {
             console.error(e);
         }
