@@ -6,6 +6,9 @@ import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 import "./PidController.sol";
 import "../../access/Roles.sol";
 
+/// @title ManagedPidController - Managed PID Controller
+/// @notice An extension of PidController that adds access control.
+/// @custom:see PidController
 contract ManagedPidController is PidController, AccessControlEnumerable {
     /// @notice An error that is thrown if we're missing a required role.
     /// @dev A different error is thrown when using the `onlyRole` modifier.
@@ -25,6 +28,11 @@ contract ManagedPidController is PidController, AccessControlEnumerable {
         _;
     }
 
+    /// @notice Constructs the ManagedPidController.
+    /// @param inputAndErrorOracle_ Oracle to provide input and error values.
+    /// @param period_ The period for the rate controller.
+    /// @param initialBufferCardinality_ Initial size of the buffer for rate storage.
+    /// @param updatersMustBeEoa_ Flag to determine if updaters must be externally owned accounts.
     constructor(
         ILiquidityOracle inputAndErrorOracle_,
         uint32 period_,
