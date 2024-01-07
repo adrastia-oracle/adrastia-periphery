@@ -10,13 +10,12 @@ import "hardhat/console.sol";
 
 abstract contract PidController is RateController {
     struct PidConfig {
-        uint32 kPNumerator;
+        int32 kPNumerator;
         uint32 kPDenominator;
-        uint32 kINumerator;
+        int32 kINumerator;
         uint32 kIDenominator;
-        uint32 kDNumerator;
+        int32 kDNumerator;
         uint32 kDDenominator;
-        bool reverseError;
         IInputAndErrorTransformer transformer;
     }
 
@@ -132,11 +131,6 @@ abstract contract PidController is RateController {
         input = int256(uint256(uInput));
         err = int256(uint256(uErr)) - int256(uint256(ERROR_ZERO));
 
-        if (pidData[token].config.reverseError) {
-            // If we're reversing the error, we need to negate it.
-            err = -err;
-        }
-
         (input, err) = transformSignedInputAndError(token, input, err);
     }
 
@@ -201,16 +195,16 @@ abstract contract PidController is RateController {
         (int256 input, int256 err) = getSignedInputAndError(token);
 
         // Compute proportional
-        int256 pTerm = (int256(uint256(pidConfig.kPNumerator)) * err) / int256(uint256(pidConfig.kPDenominator));
+        int256 pTerm = (int256(pidConfig.kPNumerator) * err) / int256(uint256(pidConfig.kPDenominator));
 
         // Compute integral
         int256 previousITerm = pidState.iTerm;
-        pidState.iTerm += (int256(uint256(pidConfig.kINumerator)) * err) / int256(uint256(pidConfig.kIDenominator));
+        pidState.iTerm += (int256(pidConfig.kINumerator) * err) / int256(uint256(pidConfig.kIDenominator));
         pidState.iTerm = clampBigSignedRate(token, pidState.iTerm, false, meta.size > 0, previousITerm);
 
         // Compute derivative
         int256 deltaInput = input - pidState.lastInput;
-        int256 dTerm = (int256(uint256(pidConfig.kDNumerator)) * deltaInput) /
+        int256 dTerm = (int256(pidConfig.kDNumerator) * deltaInput) /
             (int256(uint256(pidConfig.kDDenominator)) * deltaTime);
 
         // Compute output
