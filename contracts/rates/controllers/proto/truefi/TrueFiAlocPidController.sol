@@ -23,7 +23,10 @@ contract TrueFiAlocPidController is ManagedPidController {
     /// @dev Overridden to accrue interest for the prior rate before pushing the new rate.
     function push(address alocAddress, RateLibrary.Rate memory rate) internal virtual override {
         // Accrue interest for the prior rate before pushing the new rate
-        IAutomatedLineOfCredit(alocAddress).updateAndPayFee();
+        if (rateBufferMetadata[alocAddress].size > 0) {
+            // We have a rate to accrue interest for. Let's perform the update.
+            IAutomatedLineOfCredit(alocAddress).updateAndPayFee();
+        }
 
         super.push(alocAddress, rate);
     }
