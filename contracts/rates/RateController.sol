@@ -119,9 +119,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         // Ensure that the sum of the component weights less than or equal to 10000 (100%)
-        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%). It's also possible
-        // to have the component weights be 100% and the base rate be non-zero. This is intentional because we don't
-        // have a hard cap on the rate.
+        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%).
         uint256 sum = 0;
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
             if (
