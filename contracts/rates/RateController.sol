@@ -369,16 +369,13 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function computeRateInternal(address token) internal view virtual returns (uint64) {
         RateConfig memory config = rateConfigs[token];
 
-        uint64 rate = config.base;
+        uint256 componentRateNumerator;
 
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
-            uint64 componentRate = ((uint256(config.components[i].computeRate(token)) * config.componentWeights[i]) /
-                10000).toUint64();
-
-            rate += componentRate;
+            componentRateNumerator += uint256(config.components[i].computeRate(token)) * config.componentWeights[i];
         }
 
-        return rate;
+        return (config.base + (componentRateNumerator / 10000)).toUint64();
     }
 
     /// @notice Computes the target rate and clamps it based on the specified token's rate configuration.
