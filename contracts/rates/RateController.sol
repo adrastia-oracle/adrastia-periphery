@@ -129,6 +129,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                 revert InvalidConfig(token);
             }
 
+            // Check for duplicate components
+            for (uint256 j = i + 1; j < config.componentWeights.length; ++j) {
+                if (config.components[i] == config.components[j]) {
+                    // The same component cannot be used more than once.
+                    revert InvalidConfig(token);
+                }
+            }
+
             sum += config.componentWeights[i];
         }
         if (sum > 10000) {
