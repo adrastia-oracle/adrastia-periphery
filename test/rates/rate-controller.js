@@ -469,6 +469,16 @@ describe("RateController#setConfig", function () {
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
+    it("Should revert when a duplicate component is provided", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            componentWeights: [1, 1],
+            components: [computer.address, computer.address],
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+    });
+
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
         const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
