@@ -195,11 +195,11 @@ async function main() {
     // The maximum percent decrease in the rate per update
     const maxPercentDecrease = BigNumber.from(10000); // 100%
 
-    var kPNumerator = -500;
+    var kPNumerator = -100;
     var kPDenominator = 100_000_000;
     var kINumerator = -100;
     var kIDenominator = 100_000_000;
-    var kDNumerator = -3_000;
+    var kDNumerator = -0;
     var kDDenominator = 10_000;
     var paused = false;
 

@@ -72,7 +72,7 @@ async function printRateControllerConfig(token) {
 
 async function printRateControllerPidConfig(token) {
     // The following configuration is based on using 8 decimals for the input and 4 decimals for the output
-    var kPNumerator = 500;
+    var kPNumerator = 100;
     var kPDenominator = 100_000_000;
     var kINumerator = 100;
     var kIDenominator = 100_000_000;
