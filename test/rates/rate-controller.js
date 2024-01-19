@@ -793,14 +793,19 @@ describe("RateController#computeRate", function () {
             components: [ethers.utils.parseUnits("0", 18), ethers.utils.parseUnits("0", 18)], // 0%, 0%
             componentWeights: [2500, 2500], // 25%, 25%
         },
+        {
+            base: ethers.utils.parseUnits("0", 18), // 0%
+            components: [BigNumber.from(1), BigNumber.from(1), BigNumber.from(1), BigNumber.from(1)],
+            componentWeights: [2500, 2500, 2500, 2500], // 25%, 25%, 25%, 25%
+        },
     ];
 
     function getRate(base, components, componentWeights) {
-        var rate = base;
+        var rateNum = BigNumber.from(0);
         for (var i = 0; i < components.length; ++i) {
-            rate = rate.add(components[i].mul(componentWeights[i]).div(10000));
+            rateNum = rateNum.add(components[i].mul(componentWeights[i]));
         }
-        return rate;
+        return base.add(rateNum.div(10000));
     }
 
     for (var i = 0; i < tests.length; ++i) {
