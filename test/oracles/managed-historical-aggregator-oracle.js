@@ -451,6 +451,19 @@ function describeManagedHistoricalAggregatorOracleTests(contractName, deployFunc
                 .to.be.revertedWith("InvalidConfig")
                 .withArgs(Object.values(config), ERROR_INVALID_SOURCE_DECIMAL_MISMATCH);
         });
+
+        it("Reverts if the new config is the same as the current one", async function () {
+            const config = {
+                source: source.address,
+                observationAmount: DEFAULT_OBSERVATION_AMOUNT,
+                observationOffset: DEFAULT_OBSERVATION_OFFSET,
+                observationIncrement: DEFAULT_OBSERVATION_INCREMENT,
+            };
+
+            await expect(oracle.setConfig(config))
+                .to.be.revertedWith("ConfigUnchanged")
+                .withArgs(Object.values(config));
+        });
     });
 
     describe(contractName + "#update", function () {
