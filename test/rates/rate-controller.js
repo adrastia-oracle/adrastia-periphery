@@ -489,6 +489,32 @@ describe("RateController#setConfig", function () {
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
+    it("Should update the config even if no components are specified", async function () {
+        // The default config has no components, but we explicitly set them to be empty here just to be sure.
+        const tx = await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            componentWeights: [],
+            components: [],
+        });
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+
+        // Sanity check that the new config is set
+        const newConfig = await controller.getConfig(GRT);
+        expect(newConfig.maxIncrease).to.equal(DEFAULT_CONFIG.maxIncrease);
+        expect(newConfig.maxDecrease).to.equal(DEFAULT_CONFIG.maxDecrease);
+        expect(newConfig.base).to.equal(DEFAULT_CONFIG.base);
+        expect(newConfig.componentWeights).to.deep.equal(DEFAULT_CONFIG.componentWeights);
+        expect(newConfig.components).to.deep.equal(DEFAULT_CONFIG.components);
+    });
+
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
         const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
@@ -497,7 +523,6 @@ describe("RateController#setConfig", function () {
         // Check the event args
         const receipt = await tx.wait();
         const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
-        console.log(event?.args?.oldConfig);
         expect(event?.args?.token).to.equal(GRT);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
