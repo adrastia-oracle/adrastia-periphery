@@ -129,6 +129,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                 revert InvalidConfig(token);
             }
 
+            if (config.componentWeights[i] == 0) {
+                // The component weight cannot be zero. Such a scenario would be a waste of gas and likely to be a
+                // human error in setting the config.
+                revert InvalidConfig(token);
+            }
+
             // Check for duplicate components
             for (uint256 j = i + 1; j < config.componentWeights.length; ++j) {
                 if (config.components[i] == config.components[j]) {

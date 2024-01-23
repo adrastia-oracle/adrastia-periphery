@@ -479,6 +479,16 @@ describe("RateController#setConfig", function () {
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
+    it("Should revert if a component weight is zero", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            componentWeights: [0],
+            components: [computer.address],
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+    });
+
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
         const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
