@@ -15,15 +15,20 @@ contract ManagedPeriodicAggregatorOracle is PeriodicAggregatorOracle, ManagedAgg
     function setUpdatesPaused(address token, bool paused) external virtual onlyRole(Roles.UPDATE_PAUSE_ADMIN) {
         uint16 flags = observationBufferMetadata[token].flags;
 
-        if (paused) {
-            flags |= PAUSE_FLAG_MASK;
+        bool currentlyPaused = (flags & PAUSE_FLAG_MASK) != 0;
+        if (currentlyPaused != paused) {
+            if (paused) {
+                flags |= PAUSE_FLAG_MASK;
+            } else {
+                flags &= ~PAUSE_FLAG_MASK;
+            }
+
+            observationBufferMetadata[token].flags = flags;
+
+            emit PauseStatusChanged(token, paused);
         } else {
-            flags &= ~PAUSE_FLAG_MASK;
+            revert PauseStatusUnchanged(token, paused);
         }
-
-        observationBufferMetadata[token].flags = flags;
-
-        emit PauseStatusChanged(token, paused);
     }
 
     function areUpdatesPaused(address token) external view virtual returns (bool) {

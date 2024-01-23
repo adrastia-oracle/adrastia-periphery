@@ -267,6 +267,26 @@ function describeManagedHistoricalAggregatorOracleTests(contractName, deployFunc
             await oracle.setUpdatesPaused(WETH, false);
             expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
         });
+
+        it("Reverts when the pause status remains unchanged (paused = false)", async function () {
+            // Sanity check that the pause status is false
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+
+            await expect(oracle.setUpdatesPaused(WETH, false))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, false);
+        });
+
+        it("Reverts when the pause status remains unchanged (paused = true)", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            // Sanity check that the pause status is true
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, true);
+        });
     });
 
     describe(contractName + "#setConfig", function () {
