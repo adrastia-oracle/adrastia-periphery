@@ -212,20 +212,20 @@ describe("RateController#setUpdatesPaused", function () {
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
     });
 
-    it("Should not emit an event when the update status is unchanged (paused = false)", async function () {
-        await expect(controller.setUpdatesPaused(GRT, false)).to.not.emit(controller, "PauseStatusChanged");
+    it("Should revert when the update status is unchanged (paused = false)", async function () {
+        await expect(controller.setUpdatesPaused(GRT, false)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the status is the same
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
     });
 
-    it("Should not emit an event when the update status is unchanged (paused = true)", async function () {
+    it("Should revert when the update status is unchanged (paused = true)", async function () {
         await controller.setUpdatesPaused(GRT, true);
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
 
-        await expect(controller.setUpdatesPaused(GRT, true)).to.not.emit(controller, "PauseStatusChanged");
+        await expect(controller.setUpdatesPaused(GRT, true)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the status is the same
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -245,7 +245,7 @@ describe("RateController#setUpdatesPaused", function () {
 
     it("Should not call onPaused when the updates are paused, but they're already paused", async function () {
         await controller.setUpdatesPaused(GRT, true);
-        await controller.setUpdatesPaused(GRT, true);
+        await expect(controller.setUpdatesPaused(GRT, true)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -274,7 +274,7 @@ describe("RateController#setUpdatesPaused", function () {
     });
 
     it("Should not call onPaused when the updates are unpaused, but they're already unpaused", async function () {
-        await controller.setUpdatesPaused(GRT, false);
+        await expect(controller.setUpdatesPaused(GRT, false)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);

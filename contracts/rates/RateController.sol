@@ -73,6 +73,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param updater The address of the rate updater.
     error UpdaterMustBeEoa(address txOrigin, address updater);
 
+    /// @notice An error that is thrown when we try to change the pause state for a token, but the current pause state
+    /// is the same as the new pause state.
+    /// @dev This error is thrown to make it easier to notice when we try to change the pause state but nothing changes.
+    /// This is useful in preventing human error, in the case that we expect a change when there is none.
+    /// @param token The token for which we tried to change the pause state.
+    /// @param paused The pause state we tried to set.
+    error PauseStatusUnchanged(address token, bool paused);
+
     /// @notice Creates a new rate controller.
     /// @param period_ The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     /// @param initialBufferCardinality_ The initial capacity of the rate buffer.
@@ -238,6 +246,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             emit PauseStatusChanged(token, paused);
 
             onPaused(token, paused);
+        } else {
+            revert PauseStatusUnchanged(token, paused);
         }
     }
 
