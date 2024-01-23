@@ -121,6 +121,7 @@ function describeLiquidityAccumulatorTests(
         it("Reverts if the heartbeat is zero", async function () {
             const config = {
                 ...DEFAULT_CONFIG,
+                updateDelay: 0,
                 heartbeat: 0,
             };
 
