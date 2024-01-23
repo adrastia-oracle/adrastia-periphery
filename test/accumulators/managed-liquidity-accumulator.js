@@ -117,6 +117,15 @@ function describeLiquidityAccumulatorTests(
 
             await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
         });
+
+        it("Reverts if the heartbeat is zero", async function () {
+            const config = {
+                ...DEFAULT_CONFIG,
+                heartbeat: 0,
+            };
+
+            await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
+        });
     });
 
     describe(contractName + "#update", function () {

@@ -59,9 +59,10 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
     function setConfig(Config calldata newConfig) external virtual onlyRole(Roles.CONFIG_ADMIN) {
         // Ensure that updateDelay is not greater than heartbeat
         if (newConfig.updateDelay > newConfig.heartbeat) revert InvalidConfig(newConfig);
-
         // Ensure that updateThreshold is not zero
         if (newConfig.updateThreshold == 0) revert InvalidConfig(newConfig);
+        // Ensure that the heartbeat is not zero
+        if (newConfig.heartbeat == 0) revert InvalidConfig(newConfig);
 
         Config memory oldConfig = config;
         config = newConfig;
