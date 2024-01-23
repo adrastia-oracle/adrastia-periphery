@@ -801,6 +801,22 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 .to.be.revertedWith("InvalidTokenConfig")
                 .withArgs(invalidTokenConfig.address, ERROR_INVALID_ORACLE);
         });
+
+        it("Reverts if the token config remains unchanged (with a non-zero config address)", async function () {
+            await expect(oracle.setTokenConfig(WETH, alternativeTokenConfig.address))
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(WETH, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            await expect(oracle.setTokenConfig(WETH, alternativeTokenConfig.address)).to.be.revertedWith(
+                "TokenConfigUnchanged"
+            );
+        });
+
+        it("Reverts if the token config remains unchanged (with a zero config address)", async function () {
+            await expect(oracle.setTokenConfig(WETH, ethers.constants.AddressZero)).to.be.revertedWith(
+                "TokenConfigUnchanged"
+            );
+        });
     });
 
     describe(contractName + "#update", function () {
