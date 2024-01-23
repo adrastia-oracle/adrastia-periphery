@@ -322,6 +322,16 @@ describe("ManagedCurrentAggregatorOracle#setConfig", function () {
 
         await expect(oracle.setConfig(newConfig)).to.be.revertedWith("InvalidConfig");
     });
+
+    it("Reverts if the new config is the same as the old config", async function () {
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.setConfig(newConfig)).to.be.revertedWith("ConfigUnchanged");
+    });
 });
 
 function describeManagedAggregatorOracleTests(contractName, deployFunction) {
