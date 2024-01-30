@@ -267,6 +267,26 @@ function describeManagedHistoricalAggregatorOracleTests(contractName, deployFunc
             await oracle.setUpdatesPaused(WETH, false);
             expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
         });
+
+        it("Reverts when the pause status remains unchanged (paused = false)", async function () {
+            // Sanity check that the pause status is false
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+
+            await expect(oracle.setUpdatesPaused(WETH, false))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, false);
+        });
+
+        it("Reverts when the pause status remains unchanged (paused = true)", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            // Sanity check that the pause status is true
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, true);
+        });
     });
 
     describe(contractName + "#setConfig", function () {
@@ -450,6 +470,19 @@ function describeManagedHistoricalAggregatorOracleTests(contractName, deployFunc
             await expect(oracle.setConfig(config))
                 .to.be.revertedWith("InvalidConfig")
                 .withArgs(Object.values(config), ERROR_INVALID_SOURCE_DECIMAL_MISMATCH);
+        });
+
+        it("Reverts if the new config is the same as the current one", async function () {
+            const config = {
+                source: source.address,
+                observationAmount: DEFAULT_OBSERVATION_AMOUNT,
+                observationOffset: DEFAULT_OBSERVATION_OFFSET,
+                observationIncrement: DEFAULT_OBSERVATION_INCREMENT,
+            };
+
+            await expect(oracle.setConfig(config))
+                .to.be.revertedWith("ConfigUnchanged")
+                .withArgs(Object.values(config));
         });
     });
 

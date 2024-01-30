@@ -1,8 +1,8 @@
 const hre = require("hardhat");
 
-const contractAddress = "0xd0F50989e14f022E24398eE13b1833373D452629";
+const contractAddress = "0x8B2B7321FC5C5EA2d185c6fb2Bf526c043166891";
 
-const configEngine = "0x514eD25bBbf51811eBDFa42b150c4d6f0e2255B3";
+const configEngine = "0x7Edc9806dB4Cda54681cFe09D31d12341eafb675";
 const forSupplyCaps = false;
 const aclManager = "0x5f77FceAB2fdf1839f00453Ede3E884810F51146";
 const period = 24 * 60 * 60; // 24 hours

@@ -32,6 +32,12 @@ abstract contract ManagedHistoricalAggregatorOracleBase is ManagedOracleBase {
     /// @param errorCode The error code.
     error InvalidConfig(Config config, uint256 errorCode);
 
+    /// @notice An error thrown when attempting to set a new configuration that is the same as the current
+    /// configuration.
+    /// @dev This is thrown to make it more noticeable when nothing changes. It's probably a mistake.
+    /// @param config The unchanged configuration.
+    error ConfigUnchanged(Config config);
+
     /// @notice The current configuration for the source, observation amount, observation offset, and observation
     /// increment.
     Config internal config;
@@ -71,6 +77,16 @@ abstract contract ManagedHistoricalAggregatorOracleBase is ManagedOracleBase {
         ) revert InvalidConfig(newConfig, ERROR_INVALID_SOURCE_DECIMAL_MISMATCH);
 
         Config memory oldConfig = config;
+
+        if (
+            oldConfig.source == newConfig.source &&
+            oldConfig.observationAmount == newConfig.observationAmount &&
+            oldConfig.observationOffset == newConfig.observationOffset &&
+            oldConfig.observationIncrement == newConfig.observationIncrement
+        ) {
+            revert ConfigUnchanged(newConfig);
+        }
+
         config = newConfig;
         emit ConfigUpdated(oldConfig, newConfig);
     }

@@ -31,6 +31,13 @@ abstract contract ManagedAggregatorOracleBase is ManagedOracleBase {
 
     error InvalidTokenConfig(IOracleAggregatorTokenConfig config, uint256 errorCode);
 
+    /// @notice An error thrown when attempting to set a new token configuration that is the same as the current
+    /// configuration (using a only shallow check to allow for implementation changes).
+    /// @dev This is thrown to make it more noticeable when nothing changes. It's probably a mistake.
+    /// @param token The token whose configuration was unchanged.
+    /// @param config The unchanged configuration.
+    error TokenConfigUnchanged(address token, IOracleAggregatorTokenConfig config);
+
     /// @notice Constructs a new ManagedAggregatorOracleBase.
     constructor() ManagedOracleBase() {}
 
@@ -81,6 +88,10 @@ abstract contract ManagedAggregatorOracleBase is ManagedOracleBase {
         }
 
         IOracleAggregatorTokenConfig oldConfig = tokenConfigs[token];
+
+        // Ensure that the new config is different from the current config
+        if (oldConfig == newConfig) revert TokenConfigUnchanged(token, newConfig);
+
         tokenConfigs[token] = newConfig;
         emit TokenConfigUpdated(token, oldConfig, newConfig);
     }

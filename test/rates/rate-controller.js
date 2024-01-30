@@ -212,20 +212,20 @@ describe("RateController#setUpdatesPaused", function () {
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
     });
 
-    it("Should not emit an event when the update status is unchanged (paused = false)", async function () {
-        await expect(controller.setUpdatesPaused(GRT, false)).to.not.emit(controller, "PauseStatusChanged");
+    it("Should revert when the update status is unchanged (paused = false)", async function () {
+        await expect(controller.setUpdatesPaused(GRT, false)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the status is the same
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
     });
 
-    it("Should not emit an event when the update status is unchanged (paused = true)", async function () {
+    it("Should revert when the update status is unchanged (paused = true)", async function () {
         await controller.setUpdatesPaused(GRT, true);
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
 
-        await expect(controller.setUpdatesPaused(GRT, true)).to.not.emit(controller, "PauseStatusChanged");
+        await expect(controller.setUpdatesPaused(GRT, true)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the status is the same
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -245,7 +245,7 @@ describe("RateController#setUpdatesPaused", function () {
 
     it("Should not call onPaused when the updates are paused, but they're already paused", async function () {
         await controller.setUpdatesPaused(GRT, true);
-        await controller.setUpdatesPaused(GRT, true);
+        await expect(controller.setUpdatesPaused(GRT, true)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -274,7 +274,7 @@ describe("RateController#setUpdatesPaused", function () {
     });
 
     it("Should not call onPaused when the updates are unpaused, but they're already unpaused", async function () {
-        await controller.setUpdatesPaused(GRT, false);
+        await expect(controller.setUpdatesPaused(GRT, false)).to.be.revertedWith("PauseStatusUnchanged");
 
         // Sanity check that the changes were made
         expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
@@ -469,6 +469,52 @@ describe("RateController#setConfig", function () {
         await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
     });
 
+    it("Should revert when a duplicate component is provided", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            componentWeights: [1, 1],
+            components: [computer.address, computer.address],
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+    });
+
+    it("Should revert if a component weight is zero", async function () {
+        const config = {
+            ...DEFAULT_CONFIG,
+            componentWeights: [0],
+            components: [computer.address],
+        };
+
+        await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+    });
+
+    it("Should update the config even if no components are specified", async function () {
+        // The default config has no components, but we explicitly set them to be empty here just to be sure.
+        const tx = await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            componentWeights: [],
+            components: [],
+        });
+
+        await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+        // Check the event args
+        const receipt = await tx.wait();
+        const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+        expect(event?.args?.token).to.equal(GRT);
+        expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+        expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+
+        // Sanity check that the new config is set
+        const newConfig = await controller.getConfig(GRT);
+        expect(newConfig.maxIncrease).to.equal(DEFAULT_CONFIG.maxIncrease);
+        expect(newConfig.maxDecrease).to.equal(DEFAULT_CONFIG.maxDecrease);
+        expect(newConfig.base).to.equal(DEFAULT_CONFIG.base);
+        expect(newConfig.componentWeights).to.deep.equal(DEFAULT_CONFIG.componentWeights);
+        expect(newConfig.components).to.deep.equal(DEFAULT_CONFIG.components);
+    });
+
     it("Should emit a RateConfigUpdated event if the config is valid", async function () {
         const tx = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
@@ -477,7 +523,6 @@ describe("RateController#setConfig", function () {
         // Check the event args
         const receipt = await tx.wait();
         const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
-        console.log(event?.args?.oldConfig);
         expect(event?.args?.token).to.equal(GRT);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -783,14 +828,19 @@ describe("RateController#computeRate", function () {
             components: [ethers.utils.parseUnits("0", 18), ethers.utils.parseUnits("0", 18)], // 0%, 0%
             componentWeights: [2500, 2500], // 25%, 25%
         },
+        {
+            base: ethers.utils.parseUnits("0", 18), // 0%
+            components: [BigNumber.from(1), BigNumber.from(1), BigNumber.from(1), BigNumber.from(1)],
+            componentWeights: [2500, 2500, 2500, 2500], // 25%, 25%, 25%, 25%
+        },
     ];
 
     function getRate(base, components, componentWeights) {
-        var rate = base;
+        var rateNum = BigNumber.from(0);
         for (var i = 0; i < components.length; ++i) {
-            rate = rate.add(components[i].mul(componentWeights[i]).div(10000));
+            rateNum = rateNum.add(components[i].mul(componentWeights[i]));
         }
-        return rate;
+        return base.add(rateNum.div(10000));
     }
 
     for (var i = 0; i < tests.length; ++i) {

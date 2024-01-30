@@ -12,6 +12,14 @@ abstract contract ManagedOracleBase is AccessControlEnumerable {
     /// @param areUpdatesPaused Whether updates are paused for the token.
     event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
 
+    /// @notice An error that is thrown when we try to change the pause state for a token, but the current pause state
+    /// is the same as the new pause state.
+    /// @dev This error is thrown to make it easier to notice when we try to change the pause state but nothing changes.
+    /// This is useful in preventing human error, in the case that we expect a change when there is none.
+    /// @param token The token for which we tried to change the pause state.
+    /// @param paused The pause state we tried to set.
+    error PauseStatusUnchanged(address token, bool paused);
+
     /// @notice An error that is thrown when updates are paused for a token.
     /// @param token The token for which updates are paused.
     error UpdatesArePaused(address token);
