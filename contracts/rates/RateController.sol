@@ -14,7 +14,7 @@ import "./IRateComputer.sol";
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
 abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic {
     using SafeCast for uint256;
 
@@ -73,6 +73,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param updater The address of the rate updater.
     error UpdaterMustBeEoa(address txOrigin, address updater);
 
+    /// @notice An error that is thrown when we try to change the pause state for a token, but the current pause state
+    /// is the same as the new pause state.
+    /// @dev This error is thrown to make it easier to notice when we try to change the pause state but nothing changes.
+    /// This is useful in preventing human error, in the case that we expect a change when there is none.
+    /// @param token The token for which we tried to change the pause state.
+    /// @param paused The pause state we tried to set.
+    error PauseStatusUnchanged(address token, bool paused);
+
     /// @notice Creates a new rate controller.
     /// @param period_ The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     /// @param initialBufferCardinality_ The initial capacity of the rate buffer.
@@ -119,9 +127,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         // Ensure that the sum of the component weights less than or equal to 10000 (100%)
-        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%). It's also possible
-        // to have the component weights be 100% and the base rate be non-zero. This is intentional because we don't
-        // have a hard cap on the rate.
+        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%).
         uint256 sum = 0;
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
             if (
@@ -129,6 +135,20 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                 !ERC165Checker.supportsInterface(address(config.components[i]), type(IRateComputer).interfaceId)
             ) {
                 revert InvalidConfig(token);
+            }
+
+            if (config.componentWeights[i] == 0) {
+                // The component weight cannot be zero. Such a scenario would be a waste of gas and likely to be a
+                // human error in setting the config.
+                revert InvalidConfig(token);
+            }
+
+            // Check for duplicate components
+            for (uint256 j = i + 1; j < config.componentWeights.length; ++j) {
+                if (config.components[i] == config.components[j]) {
+                    // The same component cannot be used more than once.
+                    revert InvalidConfig(token);
+                }
             }
 
             sum += config.componentWeights[i];
@@ -226,6 +246,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             emit PauseStatusChanged(token, paused);
 
             onPaused(token, paused);
+        } else {
+            revert PauseStatusUnchanged(token, paused);
         }
     }
 
@@ -371,16 +393,13 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function computeRateInternal(address token) internal view virtual returns (uint64) {
         RateConfig memory config = rateConfigs[token];
 
-        uint64 rate = config.base;
+        uint256 componentRateNumerator;
 
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
-            uint64 componentRate = ((uint256(config.components[i].computeRate(token)) * config.componentWeights[i]) /
-                10000).toUint64();
-
-            rate += componentRate;
+            componentRateNumerator += uint256(config.components[i].computeRate(token)) * config.componentWeights[i];
         }
 
-        return rate;
+        return (config.base + (componentRateNumerator / 10000)).toUint64();
     }
 
     /// @notice Computes the target rate and clamps it based on the specified token's rate configuration.

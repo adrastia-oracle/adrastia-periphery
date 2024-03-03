@@ -200,6 +200,64 @@ describe("MutatedValueComputer#setConfig", function () {
             computer.setConfig(USDC, PASS_THROUGH_CONFIG.max, PASS_THROUGH_CONFIG.min, PASS_THROUGH_CONFIG.offset, 0)
         ).to.be.revertedWith("InvalidConfig");
     });
+
+    it("Allows a new min that's above the current rate", async function () {
+        const tx1 = await computer.setConfig(
+            USDC,
+            PASS_THROUGH_CONFIG.max,
+            PASS_THROUGH_CONFIG.min,
+            PASS_THROUGH_CONFIG.offset,
+            PASS_THROUGH_CONFIG.scalar
+        );
+        await expect(tx1).to.emit(computer, "ConfigUpdated");
+
+        await computer.stubSetValue(USDC, BigNumber.from(100));
+
+        const currentRate = await computer.computeRate(USDC);
+        const newMin = currentRate.add(1);
+
+        const tx2 = await computer.setConfig(
+            USDC,
+            PASS_THROUGH_CONFIG.max,
+            newMin,
+            PASS_THROUGH_CONFIG.offset,
+            PASS_THROUGH_CONFIG.scalar
+        );
+        await expect(tx2).to.emit(computer, "ConfigUpdated");
+
+        // Sanity check that the the rate is equal to the new min
+        const newRate = await computer.computeRate(USDC);
+        expect(newRate).to.equal(newMin);
+    });
+
+    it("Allows a new max that's below the current rate", async function () {
+        const tx1 = await computer.setConfig(
+            USDC,
+            PASS_THROUGH_CONFIG.max,
+            PASS_THROUGH_CONFIG.min,
+            PASS_THROUGH_CONFIG.offset,
+            PASS_THROUGH_CONFIG.scalar
+        );
+        await expect(tx1).to.emit(computer, "ConfigUpdated");
+
+        await computer.stubSetValue(USDC, BigNumber.from(100));
+
+        const currentRate = await computer.computeRate(USDC);
+        const newMax = currentRate.sub(1);
+
+        const tx2 = await computer.setConfig(
+            USDC,
+            newMax,
+            PASS_THROUGH_CONFIG.min,
+            PASS_THROUGH_CONFIG.offset,
+            PASS_THROUGH_CONFIG.scalar
+        );
+        await expect(tx2).to.emit(computer, "ConfigUpdated");
+
+        // Sanity check that the the rate is equal to the new max
+        const newRate = await computer.computeRate(USDC);
+        expect(newRate).to.equal(newMax);
+    });
 });
 
 describe("MutatedValueComputer#computeRate", function () {

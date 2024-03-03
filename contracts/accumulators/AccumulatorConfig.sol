@@ -23,6 +23,12 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
     /// @dev An error thrown when attempting to set an invalid configuration.
     error InvalidConfig(Config config);
 
+    /// @notice An error thrown when attempting to set a new configuration that is the same as the current
+    /// configuration.
+    /// @dev This is thrown to make it more noticeable when nothing changes. It's probably a mistake.
+    /// @param config The unchanged configuration.
+    error ConfigUnchanged(Config config);
+
     /// @notice An error thrown when attempting to call a function that requires a certain role.
     /// @param account The account that is missing the role.
     /// @param role The role that is missing.
@@ -59,11 +65,22 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
     function setConfig(Config calldata newConfig) external virtual onlyRole(Roles.CONFIG_ADMIN) {
         // Ensure that updateDelay is not greater than heartbeat
         if (newConfig.updateDelay > newConfig.heartbeat) revert InvalidConfig(newConfig);
-
         // Ensure that updateThreshold is not zero
         if (newConfig.updateThreshold == 0) revert InvalidConfig(newConfig);
+        // Ensure that the heartbeat is not zero
+        if (newConfig.heartbeat == 0) revert InvalidConfig(newConfig);
 
         Config memory oldConfig = config;
+
+        // Ensure that the new config is different from the current config
+        if (
+            oldConfig.updateThreshold == newConfig.updateThreshold &&
+            oldConfig.updateDelay == newConfig.updateDelay &&
+            oldConfig.heartbeat == newConfig.heartbeat
+        ) {
+            revert ConfigUnchanged(newConfig);
+        }
+
         config = newConfig;
         emit ConfigUpdated(oldConfig, newConfig);
     }

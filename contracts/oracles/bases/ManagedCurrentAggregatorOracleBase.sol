@@ -27,6 +27,12 @@ abstract contract ManagedCurrentAggregatorOracleBase is ManagedAggregatorOracleB
     /// @param errorCode The error code.
     error InvalidConfig(Config config, uint256 errorCode);
 
+    /// @notice An error thrown when attempting to set a new configuration that is the same as the current
+    /// configuration.
+    /// @dev This is thrown to make it more noticeable when nothing changes. It's probably a mistake.
+    /// @param config The unchanged configuration.
+    error ConfigUnchanged(Config config);
+
     /// @notice The current configuration for the update threshold, update delay, and heartbeat.
     Config internal config;
 
@@ -55,6 +61,16 @@ abstract contract ManagedCurrentAggregatorOracleBase is ManagedAggregatorOracleB
         if (newConfig.heartbeat == 0) revert InvalidConfig(newConfig, ERROR_HEARTBEAT_ZERO);
 
         Config memory oldConfig = config;
+
+        // Ensure that the new config is different from the current config
+        if (
+            oldConfig.updateThreshold == newConfig.updateThreshold &&
+            oldConfig.updateDelay == newConfig.updateDelay &&
+            oldConfig.heartbeat == newConfig.heartbeat
+        ) {
+            revert ConfigUnchanged(newConfig);
+        }
+
         config = newConfig;
         emit ConfigUpdated(oldConfig, newConfig);
     }

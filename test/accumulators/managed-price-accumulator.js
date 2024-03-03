@@ -126,6 +126,20 @@ function describePriceAccumulatorTests(
 
             await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
         });
+
+        it("Reverts if the heartbeat is zero", async function () {
+            const config = {
+                ...DEFAULT_CONFIG,
+                updateDelay: 0,
+                heartbeat: 0,
+            };
+
+            await expect(accumulator.setConfig(config)).to.be.revertedWith("InvalidConfig");
+        });
+
+        it("Reverts if the config remains unchanged", async function () {
+            await expect(accumulator.setConfig(DEFAULT_CONFIG)).to.be.revertedWith("ConfigUnchanged");
+        });
     });
 
     describe(contractName + "#update", function () {

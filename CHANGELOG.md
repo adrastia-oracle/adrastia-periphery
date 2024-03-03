@@ -1,5 +1,25 @@
 # Changelog
 
+## 4.2.0
+### Dependencies
+- Upgrade adrastia-core to v4.2.0.
+
+### Accumulators
+- Ensure heartbeat is not zero in setConfig
+- Revert if the config is unchanged in setConfig
+
+### Oracles
+- Revert if the pause status is unchanged in setUpdatesPaused
+- Revert if the token config is unchanged in setTokenConfig
+- Revert if the config is unchanged in setConfig
+
+### Prudentia
+#### Controllers
+- Revert if a component has zero weight in setConfig
+- Revert if duplicate components are provided in setConfig
+- Revert if the pause status is unchanged in setUpdatesPaused
+- Fix precision loss error in computeRateInternal
+
 ## v4.1.0
 ### Accumulators
 - Add ManagedCometSBAccumulator and ManagedAaveV3SBAccumulator

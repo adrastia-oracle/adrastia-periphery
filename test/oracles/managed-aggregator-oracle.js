@@ -322,6 +322,16 @@ describe("ManagedCurrentAggregatorOracle#setConfig", function () {
 
         await expect(oracle.setConfig(newConfig)).to.be.revertedWith("InvalidConfig");
     });
+
+    it("Reverts if the new config is the same as the old config", async function () {
+        const newConfig = {
+            updateThreshold: DEFAULT_UPDATE_THRESHOLD,
+            updateDelay: DEFAULT_UPDATE_DELAY,
+            heartbeat: DEFAULT_HEARTBEAT,
+        };
+
+        await expect(oracle.setConfig(newConfig)).to.be.revertedWith("ConfigUnchanged");
+    });
 });
 
 function describeManagedAggregatorOracleTests(contractName, deployFunction) {
@@ -465,6 +475,26 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
             // Sanity check that we can update if unpaused
             await oracle.setUpdatesPaused(WETH, false);
             expect(await oracle.canUpdate(ethers.utils.hexZeroPad(WETH, 32))).to.equal(true);
+        });
+
+        it("Reverts when the pause status remains unchanged (paused = false)", async function () {
+            // Sanity check that the pause status is false
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(false);
+
+            await expect(oracle.setUpdatesPaused(WETH, false))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, false);
+        });
+
+        it("Reverts when the pause status remains unchanged (paused = true)", async function () {
+            await oracle.setUpdatesPaused(WETH, true);
+
+            // Sanity check that the pause status is true
+            expect(await oracle.areUpdatesPaused(WETH)).to.equal(true);
+
+            await expect(oracle.setUpdatesPaused(WETH, true))
+                .to.be.revertedWith("PauseStatusUnchanged")
+                .withArgs(WETH, true);
         });
     });
 
@@ -790,6 +820,22 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
             await expect(oracle.setTokenConfig(GRT, invalidTokenConfig.address))
                 .to.be.revertedWith("InvalidTokenConfig")
                 .withArgs(invalidTokenConfig.address, ERROR_INVALID_ORACLE);
+        });
+
+        it("Reverts if the token config remains unchanged (with a non-zero config address)", async function () {
+            await expect(oracle.setTokenConfig(WETH, alternativeTokenConfig.address))
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(WETH, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            await expect(oracle.setTokenConfig(WETH, alternativeTokenConfig.address)).to.be.revertedWith(
+                "TokenConfigUnchanged"
+            );
+        });
+
+        it("Reverts if the token config remains unchanged (with a zero config address)", async function () {
+            await expect(oracle.setTokenConfig(WETH, ethers.constants.AddressZero)).to.be.revertedWith(
+                "TokenConfigUnchanged"
+            );
         });
     });
 
