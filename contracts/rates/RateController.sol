@@ -187,28 +187,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external {
         checkManuallyPushRate();
 
-        BufferMetadata storage meta = rateBufferMetadata[token];
-        if (meta.maxSize == 0) {
-            // Uninitialized buffer means that the rate config is missing
-            revert MissingConfig(token);
-        }
-
-        // Note: We don't check the pause status here because we want to allow rate updates to be manually pushed even
-        // if rate updates are paused.
-
-        RateLibrary.Rate memory rate = RateLibrary.Rate({
-            target: target,
-            current: current,
-            timestamp: uint32(block.timestamp)
-        });
-
-        for (uint256 i = 0; i < amount; ++i) {
-            push(token, rate);
-        }
-
-        if (amount > 0) {
-            emit RatePushedManually(token, target, current, block.timestamp, amount);
-        }
+        _manuallyPushRate(token, target, current, amount);
     }
 
     /// @notice Determines whether rate updates are paused for a token.
@@ -532,6 +511,31 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));
 
         return true;
+    }
+
+    function _manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) internal virtual {
+        BufferMetadata storage meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing
+            revert MissingConfig(token);
+        }
+
+        // Note: We don't check the pause status here because we want to allow rate updates to be manually pushed even
+        // if rate updates are paused.
+
+        RateLibrary.Rate memory rate = RateLibrary.Rate({
+            target: target,
+            current: current,
+            timestamp: uint32(block.timestamp)
+        });
+
+        for (uint256 i = 0; i < amount; ++i) {
+            push(token, rate);
+        }
+
+        if (amount > 0) {
+            emit RatePushedManually(token, target, current, block.timestamp, amount);
+        }
     }
 
     /// @notice Called after the pause state is changed.

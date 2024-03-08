@@ -135,6 +135,13 @@ abstract contract PidController is RateController {
         }
     }
 
+    function _manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) internal virtual override {
+        super._manuallyPushRate(token, target, current, amount);
+
+        // Reinitialize the PID controller to avoid a large jump in the output rate with the next update.
+        initializePid(token);
+    }
+
     /// @notice Retrieves the raw input and error values from the oracle for a given token.
     /// @dev Returned values have not been transformed.
     /// @param token The address of the token for which to get input and error.
