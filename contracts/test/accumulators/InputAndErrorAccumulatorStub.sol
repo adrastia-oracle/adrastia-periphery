@@ -12,7 +12,7 @@ contract InputAndErrorAccumulatorStub is ILiquidityOracle {
         uint112 target;
     }
 
-    uint112 public constant ERROR_ZERO = 1e18;
+    uint112 internal constant ERROR_ZERO_ = 1e18;
 
     mapping(address => InputAndError) public values;
 
@@ -29,9 +29,9 @@ contract InputAndErrorAccumulatorStub is ILiquidityOracle {
 
         input = value.input;
         if (value.target >= value.input) {
-            err = (ERROR_ZERO + (value.target - value.input));
+            err = (ERROR_ZERO_ + (value.target - value.input));
         } else {
-            err = (ERROR_ZERO - (value.input - value.target));
+            err = (ERROR_ZERO_ - (value.input - value.target));
         }
     }
 
