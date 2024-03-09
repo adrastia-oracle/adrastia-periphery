@@ -113,6 +113,258 @@ describe("PidController#constructor", function () {
 
         expect(await controller.inputAndErrorOracle()).to.equal(oracle.address);
     });
+
+    it("Reverts if the period is zero", async function () {
+        await expect(factory.deploy(oracle.address, 0, 1, false)).to.be.revertedWith("InvalidPeriod");
+    });
+});
+
+describe("PidController#setPidConfig", function () {
+    var controller;
+    var oracle;
+
+    beforeEach(async function () {
+        factory = await ethers.getContractFactory("ManagedPidController");
+
+        const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
+        oracle = await oracleFactory.deploy();
+        await oracle.deployed();
+
+        controller = await factory.deploy(oracle.address, 1, 1, false);
+        await controller.deployed();
+    });
+
+    async function grantRoles(account = undefined) {
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        if (account === undefined) {
+            account = signer.address;
+        }
+
+        // Grant all roles to the signer
+        await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller.grantRole(ORACLE_UPDATER_ROLE, account);
+        await controller.grantRole(RATE_ADMIN_ROLE, account);
+        await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, account);
+    }
+
+    it("Reverts if we're missing a rate config", async function () {
+        await grantRoles();
+
+        await expect(controller.setPidConfig(GRT, DEFAULT_PID_CONFIG)).to.be.revertedWith("MissingConfig");
+    });
+
+    it("Reverts if the kPDenominator is zero", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kPDenominator: 0,
+        };
+
+        await expect(controller.setPidConfig(GRT, pidConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if the kIDenominator is zero", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kIDenominator: 0,
+        };
+
+        await expect(controller.setPidConfig(GRT, pidConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if the kDDenominator is zero", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kDDenominator: 0,
+        };
+
+        await expect(controller.setPidConfig(GRT, pidConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if all denominators are zero", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kPDenominator: 0,
+            kIDenominator: 0,
+            kDDenominator: 0,
+        };
+
+        await expect(controller.setPidConfig(GRT, pidConfig)).to.be.revertedWith("InvalidConfig");
+    });
+
+    it("Reverts if we don't have the RATE_ADMIN_ROLE", async function () {
+        const [signer1, signer2] = await ethers.getSigners();
+
+        await grantRoles(signer1.address);
+
+        // Format the signer's address to be lowercase
+        const signerAddress = signer2.address.toLowerCase();
+
+        await expect(controller.connect(signer2).setPidConfig(GRT, DEFAULT_PID_CONFIG)).to.be.revertedWith(
+            "AccessControl: account " + signerAddress + " is missing role " + RATE_ADMIN_ROLE
+        );
+    });
+
+    it("Initializes the PID config", async function () {
+        await grantRoles();
+
+        const input = ethers.utils.parseUnits("1.0", 8);
+        const target = ethers.utils.parseUnits("0.9", 8);
+
+        await oracle.setInput(GRT, input);
+        await oracle.setTarget(GRT, target);
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        const pidData = await controller.pidData(GRT);
+
+        // The last input should equal the latest input
+        expect(pidData.state.lastInput).to.equal(input);
+    });
+
+    it("Emits a PidConfigUpdated event", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+        };
+
+        await expect(controller.setPidConfig(GRT, pidConfig)).to.emit(controller, "PidConfigUpdated");
+    });
+
+    it("Updates the PID config", async function () {
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+        const pidData = await controller.pidData(GRT);
+
+        expect(pidData.config.kPNumerator).to.eq(DEFAULT_PID_CONFIG.kPNumerator);
+        expect(pidData.config.kPDenominator).to.eq(DEFAULT_PID_CONFIG.kPDenominator);
+        expect(pidData.config.kINumerator).to.eq(DEFAULT_PID_CONFIG.kINumerator);
+        expect(pidData.config.kIDenominator).to.eq(DEFAULT_PID_CONFIG.kIDenominator);
+        expect(pidData.config.kDNumerator).to.eq(DEFAULT_PID_CONFIG.kDNumerator);
+        expect(pidData.config.kDDenominator).to.eq(DEFAULT_PID_CONFIG.kDDenominator);
+        expect(pidData.config.transformer).to.equal(DEFAULT_PID_CONFIG.transformer);
+    });
+
+    it("Setting a new PID config does not reinitialize the PID state", async function () {
+        await grantRoles();
+
+        const input = ethers.utils.parseUnits("1.0", 8);
+        const target = ethers.utils.parseUnits("0.9", 8);
+
+        await oracle.setInput(GRT, input);
+        await oracle.setTarget(GRT, target);
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+        const newInput = ethers.utils.parseUnits("1.1", 8);
+        await oracle.setInput(GRT, newInput);
+
+        // Set a new config
+        await controller.setPidConfig(GRT, {
+            ...DEFAULT_PID_CONFIG,
+            kPNumerator: -201,
+        });
+
+        const pidDataAfter = await controller.pidData(GRT);
+
+        // The last input should equal the latest input
+        expect(pidDataAfter.state.lastInput).to.equal(input);
+    });
+});
+
+describe("PidController#onPaused", function () {
+    var controller;
+    var oracle;
+
+    beforeEach(async function () {
+        factory = await ethers.getContractFactory("ManagedPidController");
+
+        const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
+        oracle = await oracleFactory.deploy();
+        await oracle.deployed();
+
+        controller = await factory.deploy(oracle.address, 1, 1, false);
+        await controller.deployed();
+    });
+
+    async function grantRoles(account = undefined) {
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        if (account === undefined) {
+            account = signer.address;
+        }
+
+        // Grant all roles to the signer
+        await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller.grantRole(ORACLE_UPDATER_ROLE, account);
+        await controller.grantRole(RATE_ADMIN_ROLE, account);
+        await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, account);
+    }
+
+    it("Unpausing reinitializes the PID state", async function () {
+        await grantRoles();
+
+        const input = ethers.utils.parseUnits("1.0", 8);
+        const target = ethers.utils.parseUnits("0.9", 8);
+
+        await oracle.setInput(GRT, input);
+        await oracle.setTarget(GRT, target);
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+        const newInput = ethers.utils.parseUnits("1.1", 8);
+        await oracle.setInput(GRT, newInput);
+
+        // Pause updates
+        await controller.setUpdatesPaused(GRT, true);
+
+        const pidDataBefore = await controller.pidData(GRT);
+
+        // Ensure the pausing does not reinitalize the PID state
+        expect(pidDataBefore.state.lastInput).to.equal(input);
+
+        // Unpause updates
+        await controller.setUpdatesPaused(GRT, false);
+
+        const pidDataAfter = await controller.pidData(GRT);
+
+        expect(pidDataAfter.state.lastInput).to.equal(newInput);
+    });
 });
 
 function describeStandardControllerComputeRateTests(contractName, deployFunc) {
@@ -1579,25 +1831,888 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 }
 
 function describePidControllerUpdateTests(deployFunc, getController) {
-    it.skip("The current rate jumps to the min rate if the target is less than the min rate and change is unrestricted", async function () {});
+    it("The current rate jumps to the min rate if the target (0%) is less than the min rate and change is unrestricted", async function () {
+        const controller = await getController();
 
-    it.skip("The current rate jumps to the max rate if the target is greater than the max rate and change is unrestricted", async function () {});
+        const period = await controller.period();
 
-    it.skip("Rate increases are limited by the max rate increase", async function () {});
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
 
-    it.skip("Rate decreases are limited by the max rate decrease", async function () {});
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
 
-    it.skip("Rate increases are limited by the max rate increase, even when the minimum rate is equal to the target rate", async function () {});
+        // Push a starting rate of 0%
+        const startingRate = ethers.utils.parseUnits("0", 8);
 
-    it.skip("Rate decreases are limited by the max rate decrease, even when the maximum rate is equal to the target rate", async function () {});
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
 
-    it.skip("Rate increases are limited by the max rate percent increase", async function () {});
+        // Set input and target to be the same 90% utilization
+        const input = ethers.utils.parseUnits("0.90", 8);
+        await controller.setTarget(GRT, input);
+        await controller.setInput(GRT, input);
 
-    it.skip("Rate decreases are limited by the max rate percent decrease", async function () {});
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
 
-    it.skip("Rate increases by less than the max increase are okay", async function () {});
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
 
-    it.skip("Rate decreases by less than the max decrease are okay", async function () {});
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // The rate should be at the min rate
+        expect(currentRate).to.equal(minRate);
+    });
+
+    it("The current rate jumps to the min rate if the target (1%) is less than the min rate and change is unrestricted", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 1%
+        const startingRate = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input and target to be the same 90% utilization
+        const input = ethers.utils.parseUnits("0.90", 8);
+        await controller.setTarget(GRT, input);
+        await controller.setInput(GRT, input);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // The rate should be at the min rate
+        expect(currentRate).to.equal(minRate);
+    });
+
+    it("The current rate jumps to the max rate if the target is greater than the max rate and change is unrestricted", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 100%
+        const startingRate = ethers.utils.parseUnits("1", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input and target to be the same 90% utilization
+        const input = ethers.utils.parseUnits("0.90", 8);
+        await controller.setTarget(GRT, input);
+        await controller.setInput(GRT, input);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // The rate should be at the min rate
+        expect(currentRate).to.equal(maxRate);
+    });
+
+    it("Rate increases are limited by the max rate increase (within the bounds of min and max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxIncrease = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.add(maxIncrease);
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.gt(latestRate.current);
+    });
+
+    it("Rate decreases are limited by the max rate decrease (within the bounds of min and max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxDecrease = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: maxDecrease,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.sub(maxDecrease);
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.lt(latestRate.current);
+    });
+
+    it("Rate increases are limited by the max rate increase (even when below the min)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxIncrease = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 0%
+        const startingRate = ethers.utils.parseUnits("0", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.add(maxIncrease);
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.gt(latestRate.current);
+    });
+
+    it("Rate decreases are limited by the max rate decrease (even when above the max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxDecrease = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: maxDecrease,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 100%
+        const startingRate = ethers.utils.parseUnits("1", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.sub(maxDecrease);
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.lt(latestRate.current);
+    });
+
+    it("Rate increases are limited by the max rate percent increase (within the bounds of min and max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(10); // 10/10000 = 0.1%
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.add(startingRate.mul(maxPercentIncrease).div(10000));
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.gt(latestRate.current);
+    });
+
+    it("Rate decreases are limited by the max rate percent decrease (within the bounds of min and max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentDecrease = BigNumber.from(10); // 10/10000 = 0.1%
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: maxPercentDecrease,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.sub(startingRate.mul(maxPercentDecrease).div(10000));
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.lt(latestRate.current);
+    });
+
+    it("Rate increases are limited by the max rate percent increase (even when below the min)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(10); // 10/10000 = 0.1%
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 1%
+        const startingRate = ethers.utils.parseUnits("0.01", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.add(startingRate.mul(maxPercentIncrease).div(10000));
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.gt(latestRate.current);
+    });
+
+    it("Rate decreases are limited by the max rate percent decrease (even when above the max)", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentDecrease = BigNumber.from(10); // 10/10000 = 0.1%
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: maxPercentDecrease,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 0%
+        const startingRate = ethers.utils.parseUnits("1", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.sub(startingRate.mul(maxPercentDecrease).div(10000));
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.equal(expectedRate);
+
+        // Sanity check that the target rate is greater than the current rate to ensure that the rate limiting is being used
+        expect(latestRate.target).to.be.lt(latestRate.current);
+    });
+
+    it("Rate increases are not limited by the max rate percent increase when the last rate is zero", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(10); // 10/10000 = 0.1%
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 0%
+        const startingRate = ethers.utils.parseUnits("0", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should be at the min rate
+        expect(latestRate.current).to.be.gte(minRate);
+    });
+
+    it("Rate increases by less than the max increase are okay", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(10); // 10000/10000 = 10% relative
+        const maxIncrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.add(startingRate.mul(maxPercentIncrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.add(maxIncrease);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.be.gt(startingRate);
+
+        // Sanity check that the current rate is less than the expected max increases
+        expect(latestRate.current).to.be.lte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.lte(expectedRateMaxByAbsolute);
+    });
+
+    it("Rate decreases by less than the max decrease are okay", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentDecrease = BigNumber.from(10); // 10000/10000 = 10% relative
+        const maxDecrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: maxDecrease,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: maxPercentDecrease,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.sub(startingRate.mul(maxPercentDecrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.sub(maxDecrease);
+
+        // The rate should decrease from the starting rate
+        expect(latestRate.current).to.be.lt(startingRate);
+
+        // Sanity check that the current rate is greater than the expected max decreases
+        expect(latestRate.current).to.be.gte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.gte(expectedRateMaxByAbsolute);
+    });
+
+    it("The more restrictive limit (percent) is used with rate increases", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(10); // 10/10000 = 0.01% relative
+        const maxIncrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.add(startingRate.mul(maxPercentIncrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.add(maxIncrease);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRateMaxByPercent);
+
+        // Sanity check that the current rate is less than the both expected max increases
+        expect(latestRate.current).to.be.lte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.lte(expectedRateMaxByAbsolute);
+
+        // Sanity check that the percent change is the more restrictive limit
+        expect(expectedRateMaxByPercent).to.be.lt(expectedRateMaxByAbsolute);
+    });
+
+    it("The more restrictive limit (absolute) is used with rate increases", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentIncrease = BigNumber.from(1000); // 1000/10000 = 10% relative
+        const maxIncrease = ethers.utils.parseUnits("0.0001", 8); // 0.01% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.add(startingRate.mul(maxPercentIncrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.add(maxIncrease);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRateMaxByAbsolute);
+
+        // Sanity check that the current rate is less than the both expected max increases
+        expect(latestRate.current).to.be.lte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.lte(expectedRateMaxByAbsolute);
+
+        // Sanity check that the absolute change is the more restrictive limit
+        expect(expectedRateMaxByAbsolute).to.be.lt(expectedRateMaxByPercent);
+    });
+
+    it("The more restrictive limit (percent) is used with rate decreases", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentDecrease = BigNumber.from(10); // 10/10000 = 0.01% relative
+        const maxDecrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: maxDecrease,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: maxPercentDecrease,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decreases
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.sub(startingRate.mul(maxPercentDecrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.sub(maxDecrease);
+
+        // The rate should decrease from the starting rate
+        expect(latestRate.current).to.eq(expectedRateMaxByPercent);
+
+        // Sanity check that the current rate is less than the both expected max decreases
+        expect(latestRate.current).to.be.gte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.gte(expectedRateMaxByAbsolute);
+
+        // Sanity check that the percent change is the more restrictive limit
+        expect(expectedRateMaxByPercent).to.be.gt(expectedRateMaxByAbsolute);
+    });
+
+    it("The more restrictive limit (absolute) is used with rate decreases", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const minRate = ethers.utils.parseUnits("0.4", 8);
+        const maxRate = ethers.utils.parseUnits("0.6", 8);
+
+        const maxPercentDecrease = BigNumber.from(1000); // 1000/10000 = 10% relative
+        const maxDecrease = ethers.utils.parseUnits("0.0001", 8); // 0.01% absolute
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: maxDecrease,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: maxPercentDecrease,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input smaller than the target to make the rate decreases
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRateMaxByPercent = startingRate.sub(startingRate.mul(maxPercentDecrease).div(10000));
+        const expectedRateMaxByAbsolute = startingRate.sub(maxDecrease);
+
+        // The rate should decrease from the starting rate
+        expect(latestRate.current).to.eq(expectedRateMaxByAbsolute);
+
+        // Sanity check that the current rate is less than the both expected max decreases
+        expect(latestRate.current).to.be.gte(expectedRateMaxByPercent);
+        expect(latestRate.current).to.be.gte(expectedRateMaxByAbsolute);
+
+        // Sanity check that the absolute change is the more restrictive limit
+        expect(expectedRateMaxByAbsolute).to.be.gt(expectedRateMaxByPercent);
+    });
 
     it("Prevents windup when the rate is capped by the min rate (=0%)", async function () {
         const controller = await getController();
