@@ -289,6 +289,7 @@ async function main() {
 
     const updatePidConfig = async () => {
         await rateController.setPidConfig(coin, {
+            inputAndErrorOracle: ethers.constants.AddressZero,
             kPNumerator: kPNumerator,
             kPDenominator: kPDenominator,
             kINumerator: kINumerator,
