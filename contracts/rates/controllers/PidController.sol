@@ -19,6 +19,8 @@ import "hardhat/console.sol";
 /// - The output rates are limited to the range [0, 2^64). Rebase if you need to handle negative rates.
 /// - Windup prevention (used when rate limited)
 /// - Unpausing kickback prevention (reinitializes the PID controller to avoid a large jump in the output rate)
+/// - Manually pushing a rate reinitializes the PID controller to avoid a large jump in the output rate
+/// - Updates occur continuously on a fixed period
 ///
 /// This controller may struggle to achieve stability with near-zero rates. The user can mitigate this by rebasing.
 /// (i.e. considering a positive rate as zero and adjusting the output rates accordingly.)
