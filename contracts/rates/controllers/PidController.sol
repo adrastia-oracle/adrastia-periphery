@@ -16,6 +16,13 @@ import "hardhat/console.sol";
 /// - Derivative on measurement (input)
 /// - The input and error values can be transformed before being used in the PID controller.
 /// - The I term and changes to it are clamped with the same logic as the output rate (that is also clamped).
+/// - The output rates are limited to the range [0, 2^64). Rebase if you need to handle negative rates.
+/// - Windup prevention (used when rate limited)
+/// - Unpausing kickback prevention (reinitializes the PID controller to avoid a large jump in the output rate)
+///
+/// This controller may struggle to achieve stability with near-zero rates. The user can mitigate this by rebasing.
+/// (i.e. considering a positive rate as zero and adjusting the output rates accordingly.)
+/// This same rebasing can be used to handle negative rates.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
 /// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
 abstract contract PidController is RateController {
