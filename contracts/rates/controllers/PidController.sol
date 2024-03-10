@@ -261,6 +261,9 @@ abstract contract PidController is RateController {
         int256 previousITerm = pidState.iTerm;
         pidState.iTerm += (int256(pidConfig.kINumerator) * err) / int256(uint256(pidConfig.kIDenominator));
         pidState.iTerm = clampBigSignedRate(token, pidState.iTerm, false, meta.size > 0, previousITerm);
+        // Note: Clamping the I term is done over non-negative values which can make it hard for the controller
+        // to achieve stability with near-zero rates. The user can mitigate this by rebasing.
+        // (i.e. considering a positive rate as zero and adjusting the other rates accordingly.)
 
         // Compute derivative
         int256 deltaInput = input - pidState.lastInput;
