@@ -72,18 +72,20 @@ async function printRateControllerConfig(token) {
 
 async function printRateControllerPidConfig(token) {
     // The following configuration is based on using 8 decimals for the input and 4 decimals for the output
-    var kPNumerator = 100;
+    var inputAndErrorOracle = ethers.constants.AddressZero; // Using the zero address here signals to use the default oracle
+    var kPNumerator = -100;
     var kPDenominator = 100_000_000;
-    var kINumerator = 100;
+    var kINumerator = -100;
     var kIDenominator = 100_000_000;
-    var kDNumerator = 0;
+    var kDNumerator = -0;
     var kDDenominator = 10_000;
-    const reverseError = true;
     var transformer = TRANSFORMER;
 
     // Assemble the configuration as a string
     const configuration =
         '["' +
+        inputAndErrorOracle +
+        '","' +
         kPNumerator.toString() +
         '","' +
         kPDenominator.toString() +
@@ -95,21 +97,19 @@ async function printRateControllerPidConfig(token) {
         kDNumerator.toString() +
         '","' +
         kDDenominator.toString() +
-        '",' +
-        reverseError +
         ',"' +
         transformer +
         '"]';
 
     // Print the configuration
     console.log("RateController PID configuration for " + token + ": " + configuration);
+    console.log("inputAndErrorOracle = " + inputAndErrorOracle);
     console.log("kPNumerator = " + kPNumerator.toString());
     console.log("kPDenominator = " + kPDenominator.toString());
     console.log("kINumerator = " + kINumerator.toString());
     console.log("kIDenominator = " + kIDenominator.toString());
     console.log("kDNumerator = " + kDNumerator.toString());
     console.log("kDDenominator = " + kDDenominator.toString());
-    console.log("reverseError = " + reverseError);
     console.log("transformer = " + transformer);
 }
 
