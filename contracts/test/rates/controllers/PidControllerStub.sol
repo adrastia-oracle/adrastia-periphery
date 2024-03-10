@@ -71,6 +71,10 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
         pidData[token].state.iTerm = iTerm_;
     }
 
+    function stubGetInputAndError(address token) public view returns (uint112 input, uint112 error) {
+        return getInputAndError(token);
+    }
+
     function overrideNeedsUpdate(bool overridden, bool needsUpdate_) public {
         config.needsUpdateOverridden = overridden;
         config.needsUpdate = needsUpdate_;

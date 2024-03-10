@@ -49,6 +49,7 @@ const ZERO_CONFIG = {
 };
 
 const DEFAULT_PID_CONFIG = {
+    inputAndErrorOracle: AddressZero,
     kPNumerator: -100,
     kPDenominator: 10_000,
     kINumerator: -100,
@@ -111,11 +112,15 @@ describe("PidController#constructor", function () {
     it("Correctly sets the input and error oracle address", async function () {
         const controller = await factory.deploy(oracle.address, 1, 1, false);
 
-        expect(await controller.inputAndErrorOracle()).to.equal(oracle.address);
+        expect(await controller.getInputAndErrorOracle(GRT)).to.equal(oracle.address);
     });
 
     it("Reverts if the period is zero", async function () {
         await expect(factory.deploy(oracle.address, 0, 1, false)).to.be.revertedWith("InvalidPeriod");
+    });
+
+    it("Reverts if the oracle address is zero", async function () {
+        await expect(factory.deploy(AddressZero, 1, 1, false)).to.be.revertedWith("InvalidInputAndErrorOracle");
     });
 });
 
@@ -266,6 +271,7 @@ describe("PidController#setPidConfig", function () {
 
         const pidData = await controller.pidData(GRT);
 
+        expect(pidData.config.inputAndErrorOracle).to.equal(DEFAULT_PID_CONFIG.inputAndErrorOracle);
         expect(pidData.config.kPNumerator).to.eq(DEFAULT_PID_CONFIG.kPNumerator);
         expect(pidData.config.kPDenominator).to.eq(DEFAULT_PID_CONFIG.kPDenominator);
         expect(pidData.config.kINumerator).to.eq(DEFAULT_PID_CONFIG.kINumerator);
@@ -301,6 +307,108 @@ describe("PidController#setPidConfig", function () {
 
         // The last input should equal the latest input
         expect(pidDataAfter.state.lastInput).to.equal(input);
+    });
+
+    it("Setting a non-zero oracle address overrides the default", async function () {
+        const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
+        const newOracle = await oracleFactory.deploy();
+        await newOracle.deployed();
+
+        await grantRoles();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            inputAndErrorOracle: newOracle.address,
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        const newOracleAddress = await controller.getInputAndErrorOracle(GRT);
+        const defaultOracleAddress = await controller.defaultInputAndErrorOracle();
+
+        // Sanity check that the new oracle address is being used
+        expect(newOracleAddress).to.equal(newOracle.address);
+
+        // Validate that the new oracle address is different from the default
+        expect(defaultOracleAddress).to.not.equal(newOracleAddress);
+    });
+});
+
+describe("PidController#setDefaultInputAndErrorOracle", function () {
+    var controller;
+    var oracle;
+    var newOracle;
+
+    beforeEach(async function () {
+        factory = await ethers.getContractFactory("ManagedPidController");
+
+        const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
+        oracle = await oracleFactory.deploy();
+        await oracle.deployed();
+
+        newOracle = await oracleFactory.deploy();
+        await newOracle.deployed();
+
+        controller = await factory.deploy(oracle.address, 1, 1, false);
+        await controller.deployed();
+    });
+
+    async function grantRoles(account = undefined) {
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        if (account === undefined) {
+            account = signer.address;
+        }
+
+        // Grant all roles to the signer
+        await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller.grantRole(ORACLE_UPDATER_ROLE, account);
+        await controller.grantRole(RATE_ADMIN_ROLE, account);
+        await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, account);
+    }
+
+    it("Reverts if we don't have the RATE_ADMIN_ROLE", async function () {
+        const [signer1, signer2] = await ethers.getSigners();
+
+        await grantRoles(signer1.address);
+
+        // Format the signer's address to be lowercase
+        const signerAddress = signer2.address.toLowerCase();
+
+        await expect(controller.connect(signer2).setDefaultInputAndErrorOracle(newOracle.address)).to.be.revertedWith(
+            "AccessControl: account " + signerAddress + " is missing role " + RATE_ADMIN_ROLE
+        );
+    });
+
+    it("Reverts when setting the oracle address to the zero address", async function () {
+        await grantRoles();
+
+        await expect(controller.setDefaultInputAndErrorOracle(AddressZero)).to.be.revertedWith(
+            "InvalidInputAndErrorOracle"
+        );
+    });
+
+    it("Reverts when setting the oracle address to the current address", async function () {
+        await grantRoles();
+
+        await expect(controller.setDefaultInputAndErrorOracle(oracle.address)).to.be.revertedWith(
+            "DefaultInputAndErrorOracleUnchanged"
+        );
+    });
+
+    it("Emits a DefaultInputAndErrorOracleUpdated event and changes the oracle address", async function () {
+        await grantRoles();
+
+        await expect(controller.setDefaultInputAndErrorOracle(newOracle.address)).to.emit(
+            controller,
+            "DefaultInputAndErrorOracleUpdated"
+        );
+
+        const newOracleAddress = await controller.defaultInputAndErrorOracle();
+        expect(newOracleAddress).to.equal(newOracle.address);
     });
 });
 
@@ -3161,6 +3269,27 @@ function describePidControllerUpdateTests(deployFunc, getController) {
 
         // The rate with the transformer should be larger
         expect(latestRateWithTransformer.current).to.be.gt(latestRateWithoutTransformer.current);
+    });
+
+    it("Uses a token-specific input and error oracle", async function () {
+        const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
+        const oracle = await oracleFactory.deploy();
+        await oracle.deployed();
+
+        await controller.setPidConfig(GRT, {
+            ...DEFAULT_PID_CONFIG,
+            inputAndErrorOracle: oracle.address,
+        });
+
+        const oldOracleInput = ethers.utils.parseUnits("0.5", 8);
+        const newOracleInput = ethers.utils.parseUnits("0.9", 8);
+
+        await controller.setInput(GRT, oldOracleInput);
+        await oracle.setInput(GRT, newOracleInput);
+
+        const inputAndError = await controller.stubGetInputAndError(GRT);
+
+        expect(inputAndError.input).to.eq(newOracleInput);
     });
 }
 

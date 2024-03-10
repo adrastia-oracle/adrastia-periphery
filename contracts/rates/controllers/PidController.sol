@@ -26,10 +26,12 @@ import "hardhat/console.sol";
 /// (i.e. considering a positive rate as zero and adjusting the output rates accordingly.)
 /// This same rebasing can be used to handle negative rates.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetDefaultInputAndErrorOracle, and
+/// checkUpdate to add restrictions.
 abstract contract PidController is RateController {
     /// @notice Struct to hold PID configuration.
     struct PidConfig {
+        ILiquidityOracle inputAndErrorOracle;
         int32 kPNumerator;
         uint32 kPDenominator;
         int32 kINumerator;
@@ -54,8 +56,8 @@ abstract contract PidController is RateController {
     /// @notice A constant representing the error offset.
     uint112 public constant ERROR_ZERO = 1e18;
 
-    /// @notice Oracle to provide input and error values for the PID controller.
-    ILiquidityOracle public immutable inputAndErrorOracle;
+    /// @notice Default oracle to provide input and error values for the PID controller.
+    ILiquidityOracle public defaultInputAndErrorOracle;
 
     /// @notice Mapping to store PID data for different tokens.
     mapping(address => PidData) public pidData;
@@ -64,12 +66,23 @@ abstract contract PidController is RateController {
     /// @param token The token for which the PID configuration was updated.
     event PidConfigUpdated(address indexed token, PidConfig oldConfig, PidConfig newConfig);
 
+    /// @notice Event emitted when the default input and error oracle is set or changed.
+    event DefaultInputAndErrorOracleUpdated(ILiquidityOracle indexed oldOracle, ILiquidityOracle indexed newOracle);
+
+    /// @notice Emitted when attempting to update the default input and error oracle to the same value.
+    /// @param oracle The oracle that was attempted to be set.
+    error DefaultInputAndErrorOracleUnchanged(ILiquidityOracle oracle);
+
     /// @notice Emitted when the period is invalid.
     /// @param period The invalid period.
     error InvalidPeriod(uint256 period);
 
+    /// @notice Emitted when attempting to set an invalid input and error oracle.
+    /// @param oracle The invalid oracle.
+    error InvalidInputAndErrorOracle(ILiquidityOracle oracle);
+
     /// @notice Constructs the PidController.
-    /// @param inputAndErrorOracle_ Oracle to provide input and error values.
+    /// @param inputAndErrorOracle_ Default oracle to provide input and error values.
     /// @param period_ The period for the rate controller.
     /// @param initialBufferCardinality_ Initial size of the buffer for rate storage.
     /// @param updatersMustBeEoa_ Flag to determine if updaters must be externally owned accounts.
@@ -81,7 +94,37 @@ abstract contract PidController is RateController {
     ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {
         if (period_ == 0) revert InvalidPeriod(period_);
 
-        inputAndErrorOracle = inputAndErrorOracle_;
+        validateInputAndErrorOracle(inputAndErrorOracle_, true);
+
+        defaultInputAndErrorOracle = inputAndErrorOracle_;
+    }
+
+    /**
+     * @notice Gets the input and error oracle for a given token.
+     * @param token The token for which to get the input and error oracle.
+     */
+    function getInputAndErrorOracle(address token) external view virtual returns (ILiquidityOracle) {
+        return _inputAndErrorOracle(token);
+    }
+
+    /**
+     * @notice Sets the default input and error oracle.
+     * @param inputAndErrorOracle_ The new default input and error oracle.
+     */
+    function setDefaultInputAndErrorOracle(ILiquidityOracle inputAndErrorOracle_) external virtual {
+        checkSetDefaultInputAndErrorOracle();
+
+        validateInputAndErrorOracle(inputAndErrorOracle_, true);
+
+        ILiquidityOracle oldOracle = defaultInputAndErrorOracle;
+
+        if (oldOracle != inputAndErrorOracle_) {
+            defaultInputAndErrorOracle = inputAndErrorOracle_;
+
+            emit DefaultInputAndErrorOracleUpdated(oldOracle, inputAndErrorOracle_);
+        } else {
+            revert DefaultInputAndErrorOracleUnchanged(inputAndErrorOracle_);
+        }
     }
 
     /// @notice Sets the PID configuration for a specific token.
@@ -99,6 +142,8 @@ abstract contract PidController is RateController {
         if (pidConfig.kPDenominator == 0 || pidConfig.kIDenominator == 0 || pidConfig.kDDenominator == 0) {
             revert InvalidConfig(token);
         }
+
+        validateInputAndErrorOracle(pidConfig.inputAndErrorOracle, false);
 
         PidConfig memory oldConfig = pidData[token].config;
 
@@ -300,13 +345,35 @@ abstract contract PidController is RateController {
         return true;
     }
 
-    function _inputAndErrorOracle(address) internal view virtual returns (ILiquidityOracle) {
-        return inputAndErrorOracle;
+    function _inputAndErrorOracle(address token) internal view virtual returns (ILiquidityOracle) {
+        PidData memory pid = pidData[token];
+        if (address(pid.config.inputAndErrorOracle) == address(0)) {
+            return defaultInputAndErrorOracle;
+        } else {
+            return pid.config.inputAndErrorOracle;
+        }
     }
 
     /// @notice Checks if the caller is authorized to set the PID configuration.
     /// @dev This function should contain the access control logic for the setPidConfig function.
     function checkSetPidConfig() internal view virtual {
         checkSetConfig();
+    }
+
+    /// @notice Checks if the caller is authorized to set the default input and error oracle.
+    /// @dev This function should contain the access control logic for the setDefaultInputAndErrorOracle function.
+    function checkSetDefaultInputAndErrorOracle() internal view virtual {
+        checkSetConfig();
+    }
+
+    function validateInputAndErrorOracle(ILiquidityOracle oracle, bool isDefault) internal view virtual {
+        if (!isDefault) {
+            if (address(oracle) == address(0)) {
+                // A token-specific oracle can be set to the zero address to use the default oracle.
+                return;
+            }
+        }
+
+        if (address(oracle) == address(0)) revert InvalidInputAndErrorOracle(oracle);
     }
 }
