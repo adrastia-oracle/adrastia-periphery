@@ -6,8 +6,6 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/ILiquidityOracle.sol
 import "../transformers/IInputAndErrorTransformer.sol";
 import "../RateController.sol";
 
-import "hardhat/console.sol";
-
 /// @title PidController - PID Controller
 /// @notice A RateController implementation that uses a PID controller to compute rates.
 /// This is an opinionated implementation that has the following characteristics:
