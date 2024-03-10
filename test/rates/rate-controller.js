@@ -2398,7 +2398,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         const minRate = ethers.utils.parseUnits("0.4", 8);
         const maxRate = ethers.utils.parseUnits("0.6", 8);
 
-        const maxPercentIncrease = BigNumber.from(10); // 10000/10000 = 10% relative
+        const maxPercentIncrease = BigNumber.from(1000); // 1000/10000 = 10% relative
         const maxIncrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
 
         await controller.setConfig(GRT, {
@@ -2450,7 +2450,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         const minRate = ethers.utils.parseUnits("0.4", 8);
         const maxRate = ethers.utils.parseUnits("0.6", 8);
 
-        const maxPercentDecrease = BigNumber.from(10); // 10000/10000 = 10% relative
+        const maxPercentDecrease = BigNumber.from(1000); // 1000/10000 = 10% relative
         const maxDecrease = ethers.utils.parseUnits("0.1", 8); // 10% absolute
 
         await controller.setConfig(GRT, {
@@ -3080,6 +3080,87 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         // Confirm that the new rate equals the manually pushed rate
         // If the PID controller is not reinitialized, the rate will be the same as rate before the manually pushed rate (0)
         expect(currentRate).to.equal(startingRate);
+    });
+
+    it("It works with a transformer", async function () {
+        const deployment1 = await deployFunc();
+        const deployment2 = await deployFunc();
+
+        const controller1 = deployment1.controller;
+        const controller2 = deployment2.controller;
+
+        const transformerFactory = await ethers.getContractFactory("NegativeErrorScalingTransformer");
+        const transformer = await transformerFactory.deploy(2, 1);
+        await transformer.deployed();
+
+        const period = await controller1.period();
+
+        const minRate = ethers.utils.parseUnits("0.1", 8);
+        const maxRate = ethers.utils.parseUnits("1", 8);
+
+        const maxPercentIncrease = BigNumber.from(2000); // 1000/10000 = 20% relative
+        const maxIncrease = ethers.utils.parseUnits("0.2", 8); // 20% absolute
+
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: minRate,
+            max: maxRate,
+            maxDecrease: MAX_RATE,
+            maxIncrease: maxIncrease,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: maxPercentIncrease,
+        };
+
+        // Get our signer address
+        const [signer] = await ethers.getSigners();
+
+        // Grant all roles to the signer
+        await controller1.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller1.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        await controller1.grantRole(RATE_ADMIN_ROLE, signer.address);
+        await controller1.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+        await controller2.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+        await controller2.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+        await controller2.grantRole(RATE_ADMIN_ROLE, signer.address);
+        await controller2.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+        await controller1.setConfig(GRT, config);
+        await controller2.setConfig(GRT, config);
+
+        await controller1.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+        await controller2.setPidConfig(GRT, { ...DEFAULT_PID_CONFIG, transformer: transformer.address });
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller1.manuallyPushRate(GRT, startingRate, startingRate, 1);
+        await controller2.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller1.setInput(GRT, input);
+        await controller2.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller1.setTarget(GRT, target);
+        await controller2.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rates
+        await controller1.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+        await controller2.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRateWithoutTransformer = await controller1.getRateAt(GRT, 0);
+        const latestRateWithTransformer = await controller2.getRateAt(GRT, 0);
+
+        // Both rates should increase from the starting rate
+        expect(latestRateWithoutTransformer.current).to.be.gt(startingRate);
+        expect(latestRateWithTransformer.current).to.be.gt(startingRate);
+
+        // The rate with the transformer should be larger
+        expect(latestRateWithTransformer.current).to.be.gt(latestRateWithoutTransformer.current);
     });
 }
 
