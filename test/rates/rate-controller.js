@@ -2714,6 +2714,136 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         expect(expectedRateMaxByAbsolute).to.be.gt(expectedRateMaxByPercent);
     });
 
+    it("Clamps current and target rates to uint64.max", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            maxIncrease: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            max: MAX_RATE,
+            min: BigNumber.from(0),
+        });
+        await controller.setPidConfig(GRT, {
+            ...DEFAULT_PID_CONFIG,
+            kPDenominator: BigNumber.from(1),
+            kIDenominator: BigNumber.from(1),
+        });
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        const startingRate = MAX_RATE.sub(2);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.current).to.eq(MAX_RATE);
+        expect(latestRate.target).to.eq(MAX_RATE);
+    });
+
+    it("Negative real target and current rates are clamped to 0", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            maxIncrease: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            max: MAX_RATE,
+            min: BigNumber.from(0),
+        });
+        await controller.setPidConfig(GRT, {
+            ...DEFAULT_PID_CONFIG,
+            kPDenominator: BigNumber.from(1),
+            kIDenominator: BigNumber.from(1),
+        });
+
+        // Set input smaller than the target to make the rate decrease
+        const input = ethers.utils.parseUnits("0.1", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.9", 8);
+        await controller.setTarget(GRT, target);
+
+        const startingRate = BigNumber.from(0);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        expect(latestRate.current).to.eq(0);
+        expect(latestRate.target).to.eq(0);
+    });
+
+    it("A large iTerm does not break the clamping mechanism", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const maxIncrease = BigNumber.from(100);
+        const maxDecrease = BigNumber.from(100);
+
+        await controller.setConfig(GRT, {
+            ...DEFAULT_CONFIG,
+            maxIncrease: maxIncrease,
+            maxDecrease: MAX_RATE,
+            max: MAX_RATE,
+            min: BigNumber.from(0),
+        });
+        await controller.setPidConfig(GRT, {
+            ...DEFAULT_PID_CONFIG,
+            kPDenominator: BigNumber.from(1),
+            kIDenominator: BigNumber.from(1),
+        });
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        const startingRate = MAX_RATE.sub(200);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        await controller.stubSetITerm(GRT, BigNumber.from(2).pow(65));
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber() * 1000);
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        const expectedRate = startingRate.add(maxIncrease);
+
+        expect(latestRate.current).to.eq(expectedRate);
+        expect(latestRate.target).to.eq(MAX_RATE);
+    });
+
     it("Prevents windup when the rate is capped by the min rate (=0%)", async function () {
         const controller = await getController();
 

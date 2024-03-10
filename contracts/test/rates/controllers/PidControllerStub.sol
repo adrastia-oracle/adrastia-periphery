@@ -67,6 +67,10 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
         return initialBufferCardinality;
     }
 
+    function stubSetITerm(address token, int256 iTerm_) public {
+        pidData[token].state.iTerm = iTerm_;
+    }
+
     function overrideNeedsUpdate(bool overridden, bool needsUpdate_) public {
         config.needsUpdateOverridden = overridden;
         config.needsUpdate = needsUpdate_;
