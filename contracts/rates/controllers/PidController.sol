@@ -270,8 +270,15 @@ abstract contract PidController is RateController {
         // Compute output
         int256 output = pTerm + pidState.iTerm - dTerm;
         pidState.lastInput = input;
-        target = uint64(uint256(output));
+        if (output < int256(0)) {
+            target = 0;
+        } else if (output >= int256(uint256(type(uint64).max))) {
+            target = type(uint64).max;
+        } else {
+            target = uint64(uint256(output));
+        }
         output = clampBigSignedRate(token, output, true, false, 0);
+        // Clamping the output returns a value in the range [0, 2^64), so we can safely cast it to uint64.
         current = uint64(uint256(output));
     }
 
