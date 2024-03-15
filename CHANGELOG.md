@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.3.0
+### Dependencies
+- Upgrade adrastia-core to v4.3.0.
+
+### Accumulators
+- Add ManagedAdrastiaPriceAccumulator
+
 ## 4.2.0
 ### Dependencies
 - Upgrade adrastia-core to v4.2.0.
