@@ -36,7 +36,7 @@ const BAL = "0xba100000625a3754423978a60c9317c58a424e3D";
 const SUPPLY_RATE_TOKEN = "0x0000000000000000000000000000000000000010";
 
 const MIN_UPDATE_DELAY = 1;
-const MAX_UPDATE_DELAY = 2;
+const MAX_UPDATE_DELAY = 100;
 const TWO_PERCENT_CHANGE = 2000000;
 
 const SECONDS_PER_YEAR = BigNumber.from(365 * 24 * 60 * 60);
@@ -159,7 +159,7 @@ function describePriceAccumulatorTests(
 
         describe("Only accounts with oracle updater role can update", function () {
             it("Accounts with oracle updater role can update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, token);
+                var updateData = await generateUpdateDataFunction(accumulator, token);
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -168,12 +168,15 @@ function describePriceAccumulatorTests(
                 // Increase time so that the accumulator needs another update
                 await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
+                // Regenerate the update data as a significant amount of time has passed
+                updateData = await generateUpdateDataFunction(accumulator, token);
+
                 // The second call has some different functionality, so ensure that the results are the same for it
                 expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
             });
 
             it("Accounts without oracle updater role cannot update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, token);
+                var updateData = await generateUpdateDataFunction(accumulator, token);
 
                 const [, addr1] = await ethers.getSigners();
 
@@ -185,6 +188,9 @@ function describePriceAccumulatorTests(
 
                 // Increase time so that the accumulator needs another update
                 await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                // Regenerate the update data as a significant amount of time has passed
+                updateData = await generateUpdateDataFunction(accumulator, token);
 
                 // The second call has some different functionality, so ensure that the results are the same for it
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
@@ -246,7 +252,7 @@ function describePriceAccumulatorTests(
                 });
 
                 it("Accounts with oracle updater role can still update", async function () {
-                    const updateData = await generateUpdateDataFunction(accumulator, token);
+                    var updateData = await generateUpdateDataFunction(accumulator, token);
 
                     expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -255,6 +261,9 @@ function describePriceAccumulatorTests(
                     // Increase time so that the accumulator needs another update
                     await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
+                    // Regenerate the update data as a significant amount of time has passed
+                    updateData = await generateUpdateDataFunction(accumulator, token);
+
                     // The second call has some different functionality, so ensure that the results are the same for it
                     expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
                 });
@@ -262,7 +271,7 @@ function describePriceAccumulatorTests(
                 it(
                     "Accounts without oracle updater role " + (updaterRoleCanBeOpen ? "can" : "cannot") + " update",
                     async function () {
-                        const updateData = await generateUpdateDataFunction(accumulator, token);
+                        var updateData = await generateUpdateDataFunction(accumulator, token);
 
                         const [owner, addr1] = await ethers.getSigners();
 
@@ -273,6 +282,9 @@ function describePriceAccumulatorTests(
 
                             // Increase time so that the accumulator needs another update
                             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                            // Regenerate the update data as a significant amount of time has passed
+                            updateData = await generateUpdateDataFunction(accumulator, token);
 
                             // The second call has some different functionality, so ensure that the results are the same for it
                             await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
@@ -285,6 +297,9 @@ function describePriceAccumulatorTests(
 
                             // Increase time so that the accumulator needs another update
                             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                            // Regenerate the update data as a significant amount of time has passed
+                            updateData = await generateUpdateDataFunction(accumulator, token);
 
                             // We make sure that the other address still can't update
                             await expect(accumulator.connect(addr1).update(updateData)).to.be.reverted;
@@ -321,6 +336,30 @@ function describePriceAccumulatorTests(
             expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
         });
     });
+}
+
+async function deployAdrastiaPriceAccumulator() {
+    const oracleFactory = await ethers.getContractFactory("MockOracle");
+    const oracle = await oracleFactory.deploy(USDC, 0);
+    await oracle.deployed();
+
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAdrastiaPriceAccumulator");
+    return await accumulatorFactory.deploy(
+        true,
+        averagingStrategy.address,
+        oracle.address,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
 }
 
 async function deployOffchainPriceAccumulator() {
@@ -587,6 +626,35 @@ async function generateOnchainUpdateData(accumulator, token) {
 
     return updateData;
 }
+
+async function generateAdrastiaAccumulatorUpdateData(accumulator, token) {
+    // Get the oracle as a MockOracle contract
+    const oracle = await accumulator.adrastiaOracle();
+    const oracleFactory = await ethers.getContractFactory("MockOracle");
+    const mockOracle = oracleFactory.attach(oracle);
+    // Set an observation so that the accumulator can update
+    await mockOracle.stubSetObservationNow(token, 2, 3, 4);
+
+    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [token]);
+
+    return updateData;
+}
+
+describePriceAccumulatorTests(
+    "ManagedAdrastiaPriceAccumulator",
+    deployAdrastiaPriceAccumulator,
+    generateAdrastiaAccumulatorUpdateData,
+    /*
+    The role can be open since this accumulator is designed to be used in conjunction with view oracle contracts.
+    i.e. the data is pulled from other oracle systems and updaters have no ability to manipulate the data.
+     */
+    true,
+    /*
+    As described above, the data is pulled from other oracle systems and updaters have no ability to manipulate the data.
+    */
+    true,
+    WETH
+);
 
 describePriceAccumulatorTests(
     "ManagedOffchainPriceAccumulator",
