@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"@adrastia-oracle/adrastia-core@4.3.0":
-  version "4.3.0"
-  resolved "https://registry.yarnpkg.com/@adrastia-oracle/adrastia-core/-/adrastia-core-4.3.0.tgz#833be69a78b64ed910406a84652b77e3035d7055"
-  integrity sha512-vou0UIB3v9QFm1upmLL92l6aXu1ry0vVgjvmsvd3VV9qffULQOzHMj98b5T/ObDkxjIkqmV6CXseIb7cqhdtKw==
+"@adrastia-oracle/adrastia-core@4.4.0":
+  version "4.4.0"
+  resolved "https://registry.yarnpkg.com/@adrastia-oracle/adrastia-core/-/adrastia-core-4.4.0.tgz#e97a7bc29399ee64523bce4d6e87d352aed4213b"
+  integrity sha512-OziMqvvdoT6XBPNkB7ECGdQVu1g/Doe1uD3cyLe7PbJI4nSi8UoZHfsJGGzWdJETYQYWB8xkhdI2JKL+7cq8qw==
   dependencies:
     "@openzeppelin-v4/contracts" "npm:@openzeppelin/contracts@4.6.0"
     "@prb/math" "^2.5.0"
