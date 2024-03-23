@@ -91,6 +91,11 @@ contract ManagedAlocUtilizationAndErrorAccumulator is
     /// @param token The token to check.
     /// @return Whether the token is using the default target.
     function isUsingDefaultTarget(address token) external view virtual returns (bool) {
+        if (token == address(0)) {
+            // address(0) specifies the default target.
+            return true;
+        }
+
         return !targets[token].initialized;
     }
 
@@ -113,7 +118,6 @@ contract ManagedAlocUtilizationAndErrorAccumulator is
         targetConfig.initialized = false;
 
         emit TargetInitialized(token, false);
-        emit TargetUpdated(token, targetConfig.target);
     }
 
     function canUpdate(bytes memory data) public view virtual override returns (bool) {
