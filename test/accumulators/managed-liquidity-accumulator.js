@@ -22,6 +22,9 @@ const aaveV3Pool = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // Aave v3 on m
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
+const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_ADMIN_ROLE"));
+const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATE_PAUSE_ADMIN_ROLE"));
+const TARGET_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("TARGET_ADMIN_ROLE"));
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
@@ -39,6 +42,9 @@ const DEFAULT_CONFIG = {
 
 const DEFAULT_DECIMALS = 18;
 
+const DEFAULT_UTILIZATION_DECIMALS = 4;
+const DEFAULT_UTILIZATION_TARGET = ethers.utils.parseUnits("0.85", DEFAULT_UTILIZATION_DECIMALS);
+
 async function currentBlockTimestamp() {
     const currentBlockNumber = await ethers.provider.getBlockNumber();
 
@@ -49,16 +55,395 @@ async function blockTimestamp(blockNum) {
     return (await ethers.provider.getBlock(blockNum)).timestamp;
 }
 
+function describeUtilizationAndErrorAccumulatorTests(contractName, deployFunction, getTokenFunc) {
+    describe(contractName + "#setTarget", function () {
+        var accumulator;
+        var token;
+
+        beforeEach(async function () {
+            accumulator = await deployFunction();
+            token = await getTokenFunc();
+        });
+
+        it("Reverts if the caller doesn't have any roles", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await expect(accumulator.connect(addr1).setTarget(token, DEFAULT_UTILIZATION_TARGET)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the CONFIG_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(CONFIG_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).setTarget(token, DEFAULT_UTILIZATION_TARGET)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the UPDATER_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).setTarget(token, DEFAULT_UTILIZATION_TARGET)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the ORACLE_UPDATER role", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).setTarget(token, DEFAULT_UTILIZATION_TARGET)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the default target doesn't change", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            // Sanity check that the default target is as expected
+            expect(await accumulator.getTarget(ethers.constants.AddressZero)).to.equal(DEFAULT_UTILIZATION_TARGET);
+
+            await expect(
+                accumulator.setTarget(ethers.constants.AddressZero, DEFAULT_UTILIZATION_TARGET)
+            ).to.be.revertedWith("TargetNotChanged");
+        });
+
+        it("Reverts if the token-based target doesn't change", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            // Set the target for the token
+            await accumulator.setTarget(token, DEFAULT_UTILIZATION_TARGET);
+
+            await expect(accumulator.setTarget(token, DEFAULT_UTILIZATION_TARGET)).to.be.revertedWith(
+                "TargetNotChanged"
+            );
+        });
+
+        it("Works if the caller has the TARGET_ADMIN role, with a specific token", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            const tx = await accumulator.setTarget(token, target);
+
+            // Expected events
+            await expect(tx).to.emit(accumulator, "TargetInitialized").withArgs(token, true);
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(token, target);
+
+            expect(await accumulator.getTarget(token)).to.equal(target);
+        });
+
+        it("Works if the caller has the TARGET_ADMIN role, with a specific token, for a second time", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            const target2 = target.sub(1);
+
+            const tx = await accumulator.setTarget(token, target2);
+
+            // Expected events
+            await expect(tx).to.not.emit(accumulator, "TargetInitialized");
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(token, target2);
+
+            expect(await accumulator.getTarget(token)).to.equal(target2);
+        });
+
+        it("Works if the caller has the TARGET_ADMIN role, setting the default target", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            const tx = await accumulator.setTarget(ethers.constants.AddressZero, target);
+
+            // Expected events
+            await expect(tx).to.not.emit(accumulator, "TargetInitialized");
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(ethers.constants.AddressZero, target);
+
+            expect(await accumulator.getTarget(ethers.constants.AddressZero)).to.equal(target);
+        });
+
+        it("Works if the caller has the TARGET_ADMIN role, setting the default target, for a second time", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(ethers.constants.AddressZero, target);
+
+            const target2 = target.sub(1);
+
+            const tx = await accumulator.setTarget(ethers.constants.AddressZero, target2);
+
+            // Expected events
+            await expect(tx).to.not.emit(accumulator, "TargetInitialized");
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(ethers.constants.AddressZero, target2);
+
+            expect(await accumulator.getTarget(ethers.constants.AddressZero)).to.equal(target2);
+        });
+
+        it("Reinitializes a target after it has been reverted to the default target, with the old target", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            // Revert to the default target
+            await accumulator.revertToDefaultTarget(token);
+
+            // Revert to the old target
+            const tx = await accumulator.setTarget(token, target);
+
+            // Expected events
+            await expect(tx).to.emit(accumulator, "TargetInitialized").withArgs(token, true);
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(token, target);
+
+            expect(await accumulator.getTarget(token)).to.equal(target);
+        });
+
+        it("Reinitializes a target after it has been reverted to the default target, with a new target", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            // Revert to the default target
+            await accumulator.revertToDefaultTarget(token);
+
+            // Set a new target
+            const newTarget = target.sub(1);
+            const tx = await accumulator.setTarget(token, newTarget);
+
+            // Expected events
+            await expect(tx).to.emit(accumulator, "TargetInitialized").withArgs(token, true);
+            await expect(tx).to.emit(accumulator, "TargetUpdated").withArgs(token, newTarget);
+
+            expect(await accumulator.getTarget(token)).to.equal(newTarget);
+        });
+    });
+
+    describe(contractName + "#getTarget", function () {
+        var accumulator;
+        var token;
+
+        beforeEach(async function () {
+            accumulator = await deployFunction();
+            token = await getTokenFunc();
+        });
+
+        it("Returns the default target if no target has been set", async function () {
+            expect(await accumulator.getTarget(token)).to.equal(DEFAULT_UTILIZATION_TARGET);
+        });
+
+        it("Returns the target if it has been set", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            expect(await accumulator.getTarget(token)).to.equal(target);
+        });
+
+        it("Returns the default target if the target has been reverted to the default", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            await accumulator.revertToDefaultTarget(token);
+
+            expect(await accumulator.getTarget(token)).to.equal(DEFAULT_UTILIZATION_TARGET);
+        });
+    });
+
+    describe(contractName + "#isUsingDefaultTarget", function () {
+        var accumulator;
+        var token;
+
+        beforeEach(async function () {
+            accumulator = await deployFunction();
+            token = await getTokenFunc();
+        });
+
+        it("Returns true if no target has been set", async function () {
+            expect(await accumulator.isUsingDefaultTarget(token)).to.equal(true);
+        });
+
+        it("Returns true with address(0)", async function () {
+            expect(await accumulator.isUsingDefaultTarget(ethers.constants.AddressZero)).to.equal(true);
+        });
+
+        it("Returns false if a target has been set", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            expect(await accumulator.isUsingDefaultTarget(token)).to.equal(false);
+        });
+
+        it("Returns true if the target has been reverted to the default", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            await accumulator.revertToDefaultTarget(token);
+
+            expect(await accumulator.isUsingDefaultTarget(token)).to.equal(true);
+        });
+    });
+
+    describe(contractName + "#revertToDefaultTarget", function () {
+        var accumulator;
+        var token;
+
+        beforeEach(async function () {
+            accumulator = await deployFunction();
+            token = await getTokenFunc();
+        });
+
+        it("Reverts if the caller doesn't have any roles", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await expect(accumulator.connect(addr1).revertToDefaultTarget(token)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the CONFIG_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(CONFIG_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).revertToDefaultTarget(token)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the UPDATER_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).revertToDefaultTarget(token)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the caller only has the ORACLE_UPDATER role", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).revertToDefaultTarget(token)).to.be.revertedWith(
+                /AccessControl: .*/
+            );
+        });
+
+        it("Reverts if the token is already the default target", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            await expect(accumulator.revertToDefaultTarget(token)).to.be.revertedWith("AlreadyUsingDefaultTarget");
+        });
+
+        it("Reverts if the token is address(0)", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            await expect(accumulator.revertToDefaultTarget(ethers.constants.AddressZero)).to.be.revertedWith(
+                "AlreadyUsingDefaultTarget"
+            );
+        });
+
+        it("Reverts if the token is already using the default target, after reverting to the default tartget", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            await accumulator.revertToDefaultTarget(token);
+
+            await expect(accumulator.revertToDefaultTarget(token)).to.be.revertedWith("AlreadyUsingDefaultTarget");
+        });
+
+        it("Works if the caller has the TARGET_ADMIN role", async function () {
+            const [owner] = await ethers.getSigners();
+
+            await accumulator.grantRole(TARGET_ADMIN_ROLE, owner.address);
+
+            const target = DEFAULT_UTILIZATION_TARGET.sub(1);
+
+            await accumulator.setTarget(token, target);
+
+            const tx = await accumulator.revertToDefaultTarget(token);
+
+            // Expected events
+            await expect(tx).to.emit(accumulator, "TargetInitialized").withArgs(token, false);
+            await expect(tx).to.not.emit(accumulator, "TargetUpdated");
+
+            expect(await accumulator.isUsingDefaultTarget(token)).to.equal(true);
+        });
+    });
+}
+
 function describeLiquidityAccumulatorTests(
     contractName,
     deployFunction,
     generateUpdateDataFunction,
     updaterRoleCanBeOpen,
     smartContractsCanUpdate,
-    token
+    getTokenFunc,
+    describeAdditionalTests = undefined
 ) {
     describe(contractName + "#setConfig", function () {
         var accumulator;
+        var token;
 
         beforeEach(async function () {
             accumulator = await deployFunction();
@@ -67,6 +452,8 @@ function describeLiquidityAccumulatorTests(
 
             // Grant owner the config admin role
             await accumulator.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+
+            token = await getTokenFunc();
         });
 
         it("Only accounts with config admin role can set config", async function () {
@@ -135,6 +522,7 @@ function describeLiquidityAccumulatorTests(
 
     describe(contractName + "#update", function () {
         var accumulator;
+        var token;
 
         beforeEach(async () => {
             accumulator = await deployFunction();
@@ -146,6 +534,8 @@ function describeLiquidityAccumulatorTests(
 
             // Grant owner the oracle updater role
             await accumulator.grantRole(ORACLE_UPDATER_ROLE, owner.address);
+
+            token = await getTokenFunc();
         });
 
         describe("Only accounts with oracle updater role can update", function () {
@@ -312,6 +702,10 @@ function describeLiquidityAccumulatorTests(
             expect(await accumulator["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
         });
     });
+
+    if (describeAdditionalTests) {
+        describeAdditionalTests(contractName, deployFunction, getTokenFunc);
+    }
 }
 
 async function deployOffchainLiquidityAccumulator() {
@@ -522,6 +916,35 @@ async function generateDexBasedUpdateData(accumulator, token) {
     return updateData;
 }
 
+async function deployAlocUtilizationAndErrorAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAlocUtilizationAndErrorAccumulator");
+    return await accumulatorFactory.deploy(
+        DEFAULT_UTILIZATION_TARGET,
+        averagingStrategy.address,
+        DEFAULT_UTILIZATION_DECIMALS,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployTrueFiAloc() {
+    const alocFactory = await ethers.getContractFactory("AlocStub");
+    const aloc = await alocFactory.deploy();
+    await aloc.deployed();
+
+    return aloc.address;
+}
+
 describeLiquidityAccumulatorTests(
     "ManagedOffchainLiquidityAccumulator",
     deployOffchainLiquidityAccumulator,
@@ -536,7 +959,7 @@ describeLiquidityAccumulatorTests(
     so. Updaters already have full control over the data that the accumulator stores.
     */
     true,
-    WETH
+    () => WETH
 );
 
 describeLiquidityAccumulatorTests(
@@ -552,7 +975,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    WETH
+    () => WETH
 );
 
 describeLiquidityAccumulatorTests(
@@ -568,7 +991,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    WETH
+    () => WETH
 );
 
 describeLiquidityAccumulatorTests(
@@ -584,7 +1007,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    WETH
+    () => WETH
 );
 
 describeLiquidityAccumulatorTests(
@@ -600,7 +1023,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    WETH
+    () => WETH
 );
 
 describeLiquidityAccumulatorTests(
@@ -616,7 +1039,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    BAL
+    () => BAL
 );
 
 describeLiquidityAccumulatorTests(
@@ -632,7 +1055,7 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    USDC
+    () => USDC
 );
 
 describeLiquidityAccumulatorTests(
@@ -648,5 +1071,15 @@ describeLiquidityAccumulatorTests(
     Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
     */
     false,
-    USDC
+    () => USDC
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedAlocUtilizationAndErrorAccumulator",
+    deployAlocUtilizationAndErrorAccumulator,
+    generateDexBasedUpdateData,
+    true,
+    false,
+    deployTrueFiAloc,
+    describeUtilizationAndErrorAccumulatorTests
 );
