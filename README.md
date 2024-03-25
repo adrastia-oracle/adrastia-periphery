@@ -1,7 +1,7 @@
 # Adrastia Periphery
 
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
-![3413 out of 3413 tests passing](https://img.shields.io/badge/tests-3413/3413%20passing-brightgreen.svg?style=flat-square)
+![3756 out of 3756 tests passing](https://img.shields.io/badge/tests-3756/3756%20passing-brightgreen.svg?style=flat-square)
 ![test-coverage 100%](https://img.shields.io/badge/test%20coverage-100%25-brightgreen.svg?style=flat-square)
 
 Adrastia Periphery is a set of Solidity smart contracts that complement the [Adrastia Core](https://github.com/adrastia-oracle/adrastia-core) smart contracts.
