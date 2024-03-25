@@ -43,7 +43,7 @@ describe("TrueFiAlocPidController", function () {
         var oracle;
         var aloc;
 
-        before(async function () {
+        beforeEach(async function () {
             const alocFactory = await ethers.getContractFactory("AlocStub");
             aloc = await alocFactory.deploy();
             await aloc.deployed();
@@ -90,6 +90,22 @@ describe("TrueFiAlocPidController", function () {
             // Encode the aloc address as the update data
             const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [aloc.address]);
             await expect(controller.update(updateData)).to.emit(aloc, "FeesPaid");
+        });
+
+        it("Doesn't call updateAndPayFee if the interest rate is unavailable but the buffer is not empty", async function () {
+            const startingRate = ethers.utils.parseUnits("0.2", 8);
+            await controller.manuallyPushRate(aloc.address, startingRate, startingRate, 1);
+
+            // Set the interest rate to be unavailable
+            await aloc.stubSetInterestRateReverts(true);
+
+            const period = await controller.period();
+            // Advance the period
+            await timeAndMine.increaseTime(period.toNumber());
+
+            // Encode the aloc address as the update data
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [aloc.address]);
+            await expect(controller.update(updateData)).to.not.emit(aloc, "FeesPaid");
         });
 
         it("Calls updateAndPayFee before pushing the new rate", async function () {
