@@ -4,7 +4,6 @@ const { ethers, timeAndMine } = require("hardhat");
 
 const AddressZero = ethers.constants.AddressZero;
 
-const ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ADMIN_ROLE"));
 const ORACLE_UPDATER_MANAGER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_ADMIN_ROLE"));
@@ -23,18 +22,6 @@ const DEFAULT_CONFIG = {
     components: [],
 };
 
-const ZERO_CONFIG = {
-    max: BigNumber.from(0),
-    min: BigNumber.from(0),
-    maxIncrease: BigNumber.from(0),
-    maxDecrease: BigNumber.from(0),
-    maxPercentIncrease: 0,
-    maxPercentDecrease: 0,
-    base: BigNumber.from(0),
-    componentWeights: [],
-    components: [],
-};
-
 const DEFAULT_PID_CONFIG = {
     inputAndErrorOracle: AddressZero,
     kPNumerator: -100,
@@ -44,6 +31,8 @@ const DEFAULT_PID_CONFIG = {
     kDNumerator: 0,
     kDDenominator: 10_000,
     transformer: AddressZero,
+    proportionalOnMeasurement: false,
+    derivativeOnMeasurement: false,
 };
 
 const DEFAULT_PERIOD = 100;

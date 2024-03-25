@@ -57,6 +57,8 @@ const DEFAULT_PID_CONFIG = {
     kDNumerator: 0,
     kDDenominator: 10_000,
     transformer: AddressZero,
+    proportionalOnMeasurement: false,
+    derivativeOnMeasurement: false,
 };
 
 async function currentBlockTimestamp() {
@@ -858,7 +860,7 @@ function describePidControllerComputeRateTests(contractName, deployFunc) {
             const period = await controller.period();
 
             // Advance to the next period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             await controller.update(updateData);
 
@@ -1968,7 +1970,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, input);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2009,7 +2011,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, input);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2050,7 +2052,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, input);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2094,7 +2096,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2143,7 +2145,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2192,7 +2194,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2241,7 +2243,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2290,7 +2292,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2339,7 +2341,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2388,7 +2390,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2437,7 +2439,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2486,7 +2488,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2531,7 +2533,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2583,7 +2585,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2635,7 +2637,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2690,7 +2692,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2745,7 +2747,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2800,7 +2802,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2851,7 +2853,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2892,7 +2894,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2938,7 +2940,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.stubSetITerm(GRT, BigNumber.from(2).pow(65));
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -2983,7 +2985,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
 
         for (var i = 0; i < 100; ++i) {
             // Advance the block time by the period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             // Update the rate
             await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -3011,7 +3013,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, ethers.utils.parseUnits("1", 8));
 
         // Mine one more update
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
 
         // Get the current rate
@@ -3053,7 +3055,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
 
         for (var i = 0; i < 100; ++i) {
             // Advance the block time by the period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             // Update the rate
             await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -3081,7 +3083,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, ethers.utils.parseUnits("1", 8));
 
         // Mine one more update
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
 
         // Get the current rate
@@ -3124,7 +3126,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
 
         for (var i = 0; i < 100; ++i) {
             // Advance the block time by the period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             // Update the rate
             await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -3152,7 +3154,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, ethers.utils.parseUnits("0", 8));
 
         // Mine one more update
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
 
         // Get the current rate
@@ -3177,7 +3179,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller.setInput(GRT, targetRate);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rate
         await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -3253,7 +3255,7 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         await controller2.setTarget(GRT, target);
 
         // Advance the block time by the period
-        await timeAndMine.increaseTime(period.toNumber() * 1000);
+        await timeAndMine.increaseTime(period.toNumber());
 
         // Update the rates
         await controller1.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
@@ -3290,6 +3292,359 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         const inputAndError = await controller.stubGetInputAndError(GRT);
 
         expect(inputAndError.input).to.eq(newOracleInput);
+    });
+
+    it("Uses proportional on error when selected", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            proportionalOnMeasurement: false,
+            kINumerator: BigNumber.from(0), // Disable integral
+            kDNumerator: BigNumber.from(0), // Disable derivative
+            kPNumerator: BigNumber.from(-1),
+            kPDenominator: BigNumber.from(100),
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        const error = target.sub(input);
+
+        const expectedChange = error.mul(pidConfig.kPNumerator).div(pidConfig.kPDenominator);
+        const expectedRate = startingRate.add(expectedChange);
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRate);
+    });
+
+    it("Uses proportional on measurement when selected", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            proportionalOnMeasurement: true,
+            kINumerator: BigNumber.from(0), // Disable integral
+            kDNumerator: BigNumber.from(0), // Disable derivative
+            kPNumerator: BigNumber.from(-1),
+            kPDenominator: BigNumber.from(100),
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        const expectedChange = input.mul(pidConfig.kPNumerator).div(pidConfig.kPDenominator);
+        const expectedRate = startingRate.sub(expectedChange);
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRate);
+    });
+
+    it("Uses derivative on error when selected", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            derivativeOnMeasurement: false,
+            kINumerator: BigNumber.from(0), // Disable integral
+            kPNumerator: BigNumber.from(0), // Disable proportional
+            kDNumerator: BigNumber.from(1000),
+            kDDenominator: BigNumber.from(10000),
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        const pushTx = await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Get time of the push
+        const pushTime = (await ethers.provider.getBlock(pushTx.blockNumber)).timestamp;
+
+        const startingError = 0;
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        const updateTx = await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get time of the update
+        const updateTime = (await ethers.provider.getBlock(updateTx.blockNumber)).timestamp;
+
+        const error = target.sub(input);
+        const deltaError = error.sub(startingError);
+        const deltaTime = updateTime - pushTime;
+        const dTerm = deltaError.mul(pidConfig.kDNumerator).div(pidConfig.kDDenominator).div(deltaTime).mul(-1);
+
+        const expectedRate = startingRate.sub(dTerm);
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRate);
+    });
+
+    it("Uses derivative on measurement when selected", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            derivativeOnMeasurement: true,
+            kINumerator: BigNumber.from(0), // Disable integral
+            kPNumerator: BigNumber.from(0), // Disable proportional
+            kDNumerator: BigNumber.from(1000),
+            kDDenominator: BigNumber.from(10000),
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        const pushTx = await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Get time of the push
+        const pushTime = (await ethers.provider.getBlock(pushTx.blockNumber)).timestamp;
+
+        const startingInput = 0;
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        const updateTx = await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get time of the update
+        const updateTime = (await ethers.provider.getBlock(updateTx.blockNumber)).timestamp;
+
+        const deltaInput = input.sub(startingInput);
+        const deltaTime = updateTime - pushTime;
+        const dTerm = deltaInput.mul(pidConfig.kDNumerator).div(pidConfig.kDDenominator).div(deltaTime);
+
+        const expectedRate = startingRate.sub(dTerm);
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRate);
+    });
+
+    it("Doesn't calculate the derivative when we're calculating the first rate", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kINumerator: BigNumber.from(0), // Disable integral
+            kPNumerator: BigNumber.from(0), // Disable proportional
+            kDNumerator: BigNumber.from(1000),
+            kDDenominator: BigNumber.from(10000),
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(BigNumber.from(0));
+    });
+
+    it("Integrates the error", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Unrestricted change config
+        const config = {
+            ...DEFAULT_CONFIG,
+            min: MIN_RATE,
+            max: MAX_RATE,
+            maxDecrease: MAX_RATE,
+            maxIncrease: MAX_RATE,
+            maxPercentDecrease: MAX_PERCENT_DECREASE,
+            maxPercentIncrease: MAX_PERCENT_INCREASE,
+        };
+
+        await controller.setConfig(GRT, config);
+
+        const pidConfig = {
+            ...DEFAULT_PID_CONFIG,
+            kPNumerator: BigNumber.from(0), // Disable proportional
+            kDNumerator: BigNumber.from(0), // Disable derivative
+        };
+
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Push a starting rate of 50%
+        const startingRate = ethers.utils.parseUnits("0.5", 8);
+
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.9", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        const error = target.sub(input);
+        const expectedChange = error.mul(pidConfig.kINumerator).div(pidConfig.kIDenominator);
+        const expectedRate = startingRate.add(expectedChange);
+
+        // Get the current rate
+        const latestRate = await controller.getRateAt(GRT, 0);
+
+        // The rate should increase from the starting rate
+        expect(latestRate.current).to.eq(expectedRate);
+
+        // Sanity check that the rate is not the same as the starting rate
+        expect(latestRate.current).to.not.eq(startingRate);
     });
 }
 
