@@ -16,8 +16,15 @@ contract TrueFiAlocPidController is ManagedPidController {
     function push(address alocAddress, RateLibrary.Rate memory rate) internal virtual override {
         // Accrue interest for the prior rate before pushing the new rate
         if (rateBufferMetadata[alocAddress].size > 0) {
-            // We have a rate to accrue interest for. Let's perform the update.
-            IAutomatedLineOfCredit(alocAddress).updateAndPayFee();
+            // Check if the aloc has an interest rate to accrue. This check is useful for complex ALOCs that may not be
+            // able to calculate the rate soly based on this controller.
+            (bool success, ) = alocAddress.staticcall(
+                abi.encodeWithSelector(IAutomatedLineOfCredit.interestRate.selector)
+            );
+            if (success) {
+                // We have a rate to accrue interest for. Let's perform the update.
+                IAutomatedLineOfCredit(alocAddress).updateAndPayFee();
+            }
         }
 
         super.push(alocAddress, rate);
