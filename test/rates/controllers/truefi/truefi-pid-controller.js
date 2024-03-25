@@ -85,7 +85,7 @@ describe("TrueFiAlocPidController", function () {
 
             const period = await controller.period();
             // Advance the period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             // Encode the aloc address as the update data
             const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [aloc.address]);
@@ -98,7 +98,7 @@ describe("TrueFiAlocPidController", function () {
 
             const period = await controller.period();
             // Advance the period
-            await timeAndMine.increaseTime(period.toNumber() * 1000);
+            await timeAndMine.increaseTime(period.toNumber());
 
             // Encode the aloc address as the update data
             const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [aloc.address]);
