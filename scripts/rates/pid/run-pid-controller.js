@@ -297,6 +297,8 @@ async function main() {
             kDNumerator: kDNumerator,
             kDDenominator: kDDenominator,
             transformer: transformerAddress,
+            proportionalOnMeasurement: false,
+            derivativeOnMeasurement: false,
         });
     };
 
