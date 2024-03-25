@@ -9,9 +9,9 @@ import "../RateController.sol";
 /// @title PidController - PID Controller
 /// @notice A RateController implementation that uses a PID controller to compute rates.
 /// This is an opinionated implementation that has the following characteristics:
-/// - Proportional on error
+/// - Proportional on either measurement or error
 /// - Integral on error
-/// - Derivative on measurement (input)
+/// - Derivative on either measurement or error
 /// - The input and error values can be transformed before being used in the PID controller.
 /// - The I term and changes to it are clamped with the same logic as the output rate (that is also clamped).
 /// - The output rates are limited to the range [0, 2^64). Rebase if you need to handle negative rates.
@@ -29,20 +29,26 @@ import "../RateController.sol";
 abstract contract PidController is RateController {
     /// @notice Struct to hold PID configuration.
     struct PidConfig {
+        // Slot 1
         ILiquidityOracle inputAndErrorOracle;
         int32 kPNumerator;
         uint32 kPDenominator;
         int32 kINumerator;
+        // Slot 2
         uint32 kIDenominator;
         int32 kDNumerator;
         uint32 kDDenominator;
         IInputAndErrorTransformer transformer;
+        // Slot 3
+        bool proportionalOnMeasurement; // If true, the proportional term is computed on the input instead of the error.
+        bool derivativeOnMeasurement; // If true, the derivative term is computed on the input instead of the error.
     }
 
     /// @notice Struct to hold PID state.
     struct PidState {
         int256 iTerm;
         int256 lastInput;
+        int256 lastError;
     }
 
     /// @notice Struct to hold both PID configuration and state.
@@ -242,9 +248,10 @@ abstract contract PidController is RateController {
         PidState storage pidState = pidData[token].state;
         BufferMetadata storage meta = rateBufferMetadata[token];
 
-        (int256 input, ) = getSignedInputAndError(token);
+        (int256 input, int256 err) = getSignedInputAndError(token);
 
         pidState.lastInput = input;
+        pidState.lastError = err;
         if (meta.size > 0) {
             // We have a past rate, so set the iTerm to it to avoid a large jump.
             // We don't need to clamp this because the last rate was already clamped.
@@ -302,15 +309,30 @@ abstract contract PidController is RateController {
         PidConfig memory pidConfig = pid.config;
         BufferMetadata storage meta = rateBufferMetadata[token];
 
-        int256 deltaTime = int256(uint256(period));
+        int256 deltaTime;
+        if (meta.size > 0) {
+            // We have a past rate, so compute deltaTime.
+            uint256 lastUpdateTime = lastUpdateTime(abi.encode(token));
+            deltaTime = int256(block.timestamp - lastUpdateTime);
+        } else {
+            // We don't have a past rate, so deltaTime is 0.
+            deltaTime = 0;
+        }
 
         (int256 input, int256 err) = getSignedInputAndError(token);
 
         // Compute proportional
-        int256 pTerm = (int256(pidConfig.kPNumerator) * err) / int256(uint256(pidConfig.kPDenominator));
+        int256 pTerm;
+        if (pidConfig.proportionalOnMeasurement) {
+            pTerm = -(int256(pidConfig.kPNumerator) * input) / int256(uint256(pidConfig.kPDenominator));
+        } else {
+            pTerm = (int256(pidConfig.kPNumerator) * err) / int256(uint256(pidConfig.kPDenominator));
+        }
 
         // Compute integral
         int256 previousITerm = pidState.iTerm;
+        // Note: We assume that deltaTime is mostly constant. Otherwise, we should multiply the integral term by
+        // deltaTime and adjust the gain accordingly.
         pidState.iTerm += (int256(pidConfig.kINumerator) * err) / int256(uint256(pidConfig.kIDenominator));
         pidState.iTerm = clampBigSignedRate(token, pidState.iTerm, false, meta.size > 0, previousITerm);
         // Note: Clamping the I term is done over non-negative values which can make it hard for the controller
@@ -318,13 +340,25 @@ abstract contract PidController is RateController {
         // (i.e. considering a positive rate as zero and adjusting the other rates accordingly.)
 
         // Compute derivative
-        int256 deltaInput = input - pidState.lastInput;
-        int256 dTerm = (int256(pidConfig.kDNumerator) * deltaInput) /
-            (int256(uint256(pidConfig.kDDenominator)) * deltaTime);
+        int256 dTerm;
+        if (deltaTime > 0) {
+            if (pidConfig.derivativeOnMeasurement) {
+                int256 deltaInput = input - pidState.lastInput;
+                dTerm =
+                    (int256(pidConfig.kDNumerator) * deltaInput) /
+                    (int256(uint256(pidConfig.kDDenominator)) * deltaTime);
+            } else {
+                int256 deltaError = err - pidState.lastError;
+                dTerm =
+                    -(int256(pidConfig.kDNumerator) * deltaError) /
+                    (int256(uint256(pidConfig.kDDenominator)) * deltaTime);
+            }
+        }
 
         // Compute output
         int256 output = pTerm + pidState.iTerm - dTerm;
         pidState.lastInput = input;
+        pidState.lastError = err;
         if (output < int256(0)) {
             target = 0;
         } else if (output >= int256(uint256(type(uint64).max))) {
