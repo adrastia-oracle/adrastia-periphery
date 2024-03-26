@@ -196,12 +196,23 @@ async function main() {
     const maxPercentDecrease = BigNumber.from(10000); // 100%
 
     var kPNumerator = -100;
-    var kPDenominator = 100_000_000;
+    var kPDenominator = 10_00;
     var kINumerator = -100;
-    var kIDenominator = 100_000_000;
-    var kDNumerator = -0;
-    var kDDenominator = 10_000;
+    var kIDenominator = 10_000;
+    var kDNumerator = 100;
+    var kDDenominator = 1;
     var paused = false;
+
+    const decimalOffset = inputPrecisionDecimals - outputPrecisionDecimals;
+    if (decimalOffset > 0) {
+        kPDenominator *= 10 ** decimalOffset;
+        kIDenominator *= 10 ** decimalOffset;
+        kDDenominator *= 10 ** decimalOffset;
+    } else {
+        kPDenominator /= 10 ** -decimalOffset;
+        kIDenominator /= 10 ** -decimalOffset;
+        kDDenominator /= 10 ** -decimalOffset;
+    }
 
     const rateConfig = {
         max: max,
@@ -310,6 +321,8 @@ async function main() {
         try {
             await sleep(1000);
 
+            console.clear();
+
             // Perform update if needed
             const checkData = ethers.utils.defaultAbiCoder.encode(["address"], [coin]);
             var updateTx = undefined;
@@ -320,8 +333,6 @@ async function main() {
             }
 
             const output = await rateController.computeRate(coin);
-
-            console.clear();
 
             if (updateReceipt !== undefined) {
                 console.log(
