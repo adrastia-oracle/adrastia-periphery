@@ -93,6 +93,9 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
         // CONFIG_ADMIN is managed by ADMIN
         _setRoleAdmin(Roles.CONFIG_ADMIN, Roles.ADMIN);
 
+        // TARGET_ADMIN is managed by ADMIN
+        _setRoleAdmin(Roles.TARGET_ADMIN, Roles.ADMIN);
+
         // UPDATER_ADMIN is managed by ADMIN
         _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
 
@@ -102,6 +105,7 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
         // Hierarchy:
         // ADMIN
         //   - CONFIG_ADMIN
+        //   - TARGET_ADMIN
         //   - UPDATER_ADMIN
         //     - ORACLE_UPDATER
     }

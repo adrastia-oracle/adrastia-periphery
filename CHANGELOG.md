@@ -1,5 +1,22 @@
 # Changelog
 
+## v4.4.0
+### Dependencies
+- Upgrade adrastia-core to v4.4.0.
+
+### Accumulators
+- Add ManagedAlocUtilizationAndErrorAccumulator: An AlocUtilizationAndErrorAccumulator that implements standard management functions.
+
+### Prudentia
+#### Controllers
+- Add PidController: A RateController extension that implements a PID controller.
+- Add ManagedPidController: A PidController that implements standard management functions.
+- Add TrueFiAlocPidController: A ManagedPidController designed for integration into TrueFi.
+#### Transformers
+- Add IInputAndErrorTransformer: Interface for transforming input and error values in a PID controller.
+- Add NegativeErrorScalingTransformer: Implements the IInputAndErrorTransformer interface to scale negative error values.
+- Add PositiveErrorScalingTransformer: Implements the IInputAndErrorTransformer interface to scale positive error values.
+
 ## 4.3.0
 ### Dependencies
 - Upgrade adrastia-core to v4.3.0.
