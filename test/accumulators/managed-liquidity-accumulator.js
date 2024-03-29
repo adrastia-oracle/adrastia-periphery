@@ -905,6 +905,68 @@ async function deployAaveV3SBAccumulator() {
     );
 }
 
+async function deployCompoundV2SBAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    const poolFactory = await ethers.getContractFactory("IonicStub");
+    const pool = await poolFactory.deploy();
+    await pool.deployed();
+
+    const cTokenFactory = await ethers.getContractFactory("IonicCTokenStub");
+    const cToken = await cTokenFactory.deploy(USDC);
+    await cToken.deployed();
+
+    await pool["stubAddMarket(address)"](cToken.address);
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedCompoundV2SBAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        pool.address,
+        0, // Liquidity decimals
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
+async function deployIonicSBAccumulator() {
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    const poolFactory = await ethers.getContractFactory("IonicStub");
+    const pool = await poolFactory.deploy();
+    await pool.deployed();
+
+    const cTokenFactory = await ethers.getContractFactory("IonicCTokenStub");
+    const cToken = await cTokenFactory.deploy(USDC);
+    await cToken.deployed();
+
+    await pool["stubAddMarket(address)"](cToken.address);
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedIonicSBAccumulator");
+    return await accumulatorFactory.deploy(
+        averagingStrategy.address,
+        pool.address,
+        0, // Liquidity decimals
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function generateDexBasedUpdateData(accumulator, token) {
     const liquidity = await accumulator["consultLiquidity(address,uint256)"](token, 0);
 
@@ -1082,4 +1144,36 @@ describeLiquidityAccumulatorTests(
     false,
     deployTrueFiAloc,
     describeUtilizationAndErrorAccumulatorTests
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedCompoundV2SBAccumulator",
+    deployCompoundV2SBAccumulator,
+    generateDexBasedUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    () => USDC
+);
+
+describeLiquidityAccumulatorTests(
+    "ManagedIonicSBAccumulator",
+    deployIonicSBAccumulator,
+    generateDexBasedUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Smart contracts can't update the accumulator because it's susceptible to flash loan attack manipulation.
+    */
+    false,
+    () => USDC
 );
