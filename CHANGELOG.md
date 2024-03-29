@@ -1,5 +1,13 @@
 # Changelog
 
+## v4.5.0
+### Dependencies
+- Upgrade adrastia-core to v4.5.0.
+
+### Accumulators
+- Add ManagedCompoundV2SBAccumulator: A CompoundV2SBAccumulator that implements standard management functions.
+- Add ManagedIonicSBAccumulator: An IonicSBAccumulator that implements standard management functions.
+
 ## v4.4.0
 ### Dependencies
 - Upgrade adrastia-core to v4.4.0.
