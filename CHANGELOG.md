@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.6.0
+### Dependencies
+- Upgrade adrastia-core to v4.6.0.
+
+### Accumulators
+- Add ManagedVenusIsolatedV2SBAccumulator: A VenusIsolatedV2SBAccumulator that implements standard management functions.
+
 ## v4.5.0
 ### Dependencies
 - Upgrade adrastia-core to v4.5.0.
