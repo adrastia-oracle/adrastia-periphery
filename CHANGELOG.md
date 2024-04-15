@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.6.1
+### Dependencies
+- Upgrade adrastia-core to v4.6.1.
+
+### Accumulators
+- Update ManagedCompoundV2SBAccumulator, ManagedIonicSBAccumulator, and ManagedVenusIsolatedV2SBAccumulator: Out of an abundance of caution, only those with the CONFIG_ADMIN role can refresh token mappings.
+
 ## v4.6.0
 ### Dependencies
 - Upgrade adrastia-core to v4.6.0.
