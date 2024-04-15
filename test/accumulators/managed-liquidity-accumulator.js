@@ -19,6 +19,7 @@ const balancerV2WeightedPoolId = "0x5c6ee304399dbdb9c8ef030ab642b10820db8f560002
 const cometUSDC = "0xc3d688B66703497DAA19211EEdff47f25384cdc3"; // USDC market on mainnet
 const aaveV3Pool = "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2"; // Aave v3 on mainnet
 
+const ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ADMIN_ROLE"));
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
 const CONFIG_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("CONFIG_ADMIN_ROLE"));
@@ -53,6 +54,77 @@ async function currentBlockTimestamp() {
 
 async function blockTimestamp(blockNum) {
     return (await ethers.provider.getBlock(blockNum)).timestamp;
+}
+
+function describeRefreshTokenMappingsTests(contractName, deployFunc) {
+    describe(contractName + "#refreshTokenMappings", function () {
+        var accumulator;
+
+        beforeEach(async () => {
+            accumulator = await deployFunc();
+        });
+
+        it("Reverts if the caller doesn't have the CONFIG_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await expect(accumulator.connect(addr1).refreshTokenMappings()).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Reverts if the caller only has the ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).refreshTokenMappings()).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Revets if the caller only has the UPDATER_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).refreshTokenMappings()).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Reverts if the caller only has the ORACLE_UPDATER role", async function () {
+            const [owner, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(UPDATER_ADMIN_ROLE, owner.address);
+            await accumulator.grantRole(ORACLE_UPDATER_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).refreshTokenMappings()).to.be.revertedWith(/AccessControl: .*/);
+        });
+
+        it("Works if the caller has the CONFIG_ADMIN role", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(CONFIG_ADMIN_ROLE, addr1.address);
+
+            await expect(accumulator.connect(addr1).refreshTokenMappings()).to.not.be.reverted;
+        });
+
+        it("Discovers a new market", async function () {
+            const [, addr1] = await ethers.getSigners();
+
+            await accumulator.grantRole(CONFIG_ADMIN_ROLE, addr1.address);
+
+            const cTokenFactory = await ethers.getContractFactory("IonicCTokenStub");
+            const cToken = await cTokenFactory.deploy(BAL);
+
+            const poolAddress = await accumulator.comptroller();
+            const poolStubFactory = await ethers.getContractFactory("IonicStub");
+            const poolStub = await poolStubFactory.attach(poolAddress);
+
+            await poolStub["stubAddMarket(address)"](cToken.address);
+
+            const refreshTx = await accumulator.connect(addr1).refreshTokenMappings();
+            const receipt = await refreshTx.wait();
+
+            expect(refreshTx).to.emit(accumulator, "TokenMappingsRefreshed").withArgs(1, 0);
+            expect(refreshTx).to.emit(accumulator, "CTokenAdded").withArgs(cToken.address);
+            expect(receipt.events.length).to.equal(2);
+        });
+    });
 }
 
 function describeUtilizationAndErrorAccumulatorTests(contractName, deployFunction, getTokenFunc) {
@@ -1224,3 +1296,7 @@ describeLiquidityAccumulatorTests(
     false,
     () => USDC
 );
+
+describeRefreshTokenMappingsTests("ManagedCompoundV2SBAccumulator", deployCompoundV2SBAccumulator);
+describeRefreshTokenMappingsTests("ManagedIonicSBAccumulator", deployIonicSBAccumulator);
+describeRefreshTokenMappingsTests("ManagedVenusIsolatedSBAccumulator", deployVenusIsolatedSBAccumulator);
