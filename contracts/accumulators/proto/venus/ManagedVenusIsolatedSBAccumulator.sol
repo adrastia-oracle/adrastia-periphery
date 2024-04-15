@@ -25,6 +25,10 @@ contract ManagedVenusIsolatedSBAccumulator is VenusIsolatedSBAccumulator, Accumu
         AccumulatorConfig(uint32(updateTheshold_), uint32(minUpdateDelay_), uint32(maxUpdateDelay_))
     {}
 
+    function refreshTokenMappings() external virtual override onlyRole(Roles.CONFIG_ADMIN) {
+        _refreshTokenMappings();
+    }
+
     function canUpdate(bytes memory data) public view virtual override returns (bool) {
         // Return false if the message sender is missing the required role
         if (!hasRole(Roles.ORACLE_UPDATER, address(0)) && !hasRole(Roles.ORACLE_UPDATER, msg.sender)) return false;
