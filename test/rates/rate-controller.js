@@ -630,20 +630,120 @@ function describeStandardControllerComputeRateTests(contractName, deployFunc) {
                 components: [BigNumber.from(1), BigNumber.from(1), BigNumber.from(1), BigNumber.from(1)],
                 componentWeights: [2500, 2500, 2500, 2500], // 25%, 25%, 25%, 25%
             },
+            {
+                // index 26
+                base: ethers.utils.parseUnits("0", 18), // 0%
+                components: [BigNumber.from(0), BigNumber.from(0)],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: BigNumber.from(0),
+            },
+            {
+                // index 27
+                base: BigNumber.from(1),
+                components: [BigNumber.from(0), BigNumber.from(0)],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: BigNumber.from(1),
+            },
+            {
+                // index 28
+                base: ethers.utils.parseUnits("0", 18), // 0%
+                components: [BigNumber.from(1), BigNumber.from(1)],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: BigNumber.from(2),
+            },
+            {
+                // index 29
+                base: BigNumber.from(1),
+                components: [BigNumber.from(1), BigNumber.from(1)],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: BigNumber.from(3),
+            },
+            {
+                // index 30
+                base: ethers.utils.parseUnits("0", 18), // 0%
+                components: [MAX_RATE, MAX_RATE],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: MAX_RATE,
+                min: ethers.constants.Zero,
+                max: MAX_RATE,
+            },
+            {
+                // index 31
+                base: BigNumber.from(1),
+                components: [MAX_RATE, MAX_RATE],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: MAX_RATE,
+                min: ethers.constants.Zero,
+                max: MAX_RATE,
+            },
+            {
+                // index 32
+                base: MAX_RATE,
+                components: [MAX_RATE, MAX_RATE],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: MAX_RATE,
+                min: ethers.constants.Zero,
+                max: MAX_RATE,
+            },
+            {
+                // index 33
+                base: MAX_RATE,
+                components: [MAX_RATE, MAX_RATE],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: ethers.utils.parseUnits("1.0", 18),
+                min: ethers.constants.Zero,
+                max: ethers.utils.parseUnits("1.0", 18),
+            },
+            {
+                // index 34
+                base: BigNumber.from(0),
+                components: [BigNumber.from(0), BigNumber.from(0)],
+                componentWeights: [10000, 10000], // 100%, 100%
+                expectedRate: BigNumber.from(20),
+                min: BigNumber.from(20),
+            },
+            {
+                // index 35
+                base: BigNumber.from(0),
+                components: [BigNumber.from(1), BigNumber.from(1)],
+                componentWeights: [20000, 20000], // 200%, 200%
+                expectedRate: BigNumber.from(4),
+            },
+            {
+                // index 36
+                base: BigNumber.from(1),
+                components: [BigNumber.from(1), BigNumber.from(1)],
+                componentWeights: [20000, 20000], // 200%, 200%
+                expectedRate: BigNumber.from(5),
+            },
         ];
 
-        function getRate(base, components, componentWeights) {
+        function getRate(base, components, componentWeights, min, max) {
             var rateNum = BigNumber.from(0);
             for (var i = 0; i < components.length; ++i) {
                 rateNum = rateNum.add(components[i].mul(componentWeights[i]));
             }
-            return base.add(rateNum.div(10000));
+            const computedRate = base.add(rateNum.div(10000));
+
+            if (min != null && computedRate.lte(min)) {
+                return min;
+            }
+
+            if (max != null && computedRate.gte(max)) {
+                return max;
+            }
+
+            if (computedRate.gte(MAX_RATE)) {
+                return MAX_RATE;
+            }
+
+            return computedRate;
         }
 
         for (var i = 0; i < tests.length; ++i) {
             const test = tests[i];
 
-            const expectedRate = getRate(test.base, test.components, test.componentWeights);
+            const expectedRate = getRate(test.base, test.components, test.componentWeights, test.min, test.max);
 
             it(
                 "Should compute the rate as " + ethers.utils.formatUnits(expectedRate, 18) + " (index " + i + ")",
@@ -662,9 +762,12 @@ function describeStandardControllerComputeRateTests(contractName, deployFunc) {
 
                     // Set the config
                     const config = {
-                        ...DEFAULT_CONFIG,
-                        maxIncrease: ethers.utils.parseUnits("0.03", 18), // 3%
-                        maxDecrease: ethers.utils.parseUnits("0.04", 18), // 4%
+                        min: test.min ?? ethers.constants.Zero,
+                        max: test.max ?? MAX_RATE,
+                        maxIncrease: MAX_RATE,
+                        maxDecrease: MAX_RATE,
+                        maxPercentIncrease: MAX_PERCENT_INCREASE,
+                        maxPercentDecrease: MAX_PERCENT_DECREASE,
                         base: test.base,
                         components: componentContracts.map((c) => c.address),
                         componentWeights: test.componentWeights,
@@ -676,6 +779,11 @@ function describeStandardControllerComputeRateTests(contractName, deployFunc) {
 
                     // Check the rate
                     expect(rate).to.equal(expectedRate);
+
+                    if (test.expectedRate != null) {
+                        // We have an explicit expected rate, so check that
+                        expect(rate).to.equal(test.expectedRate);
+                    }
                 }
             );
         }
@@ -3875,15 +3983,18 @@ function describeTests(
     });
 
     describe(contractName + "#setConfig", function () {
-        var controller;
+        var computerFactory;
 
+        var controller;
         var computer;
+
+        before(async function () {
+            computerFactory = await ethers.getContractFactory("RateComputerStub");
+        });
 
         beforeEach(async () => {
             const deployment = await deployFunc();
             controller = deployment.controller;
-
-            const computerFactory = await ethers.getContractFactory("RateComputerStub");
 
             computer = await computerFactory.deploy();
 
@@ -3966,7 +4077,7 @@ function describeTests(
             await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
         });
 
-        it("Should revert if the sum of the component weights is greater than 10000 (with one component)", async function () {
+        it("Should not revert if the sum of the component weights is greater than 10000 (with one component)", async function () {
             const config = {
                 ...DEFAULT_CONFIG,
                 maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
@@ -3976,23 +4087,26 @@ function describeTests(
                 components: [computer.address],
             };
 
-            await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+            await expect(controller.setConfig(GRT, config)).to.not.be.reverted;
         });
 
-        it("Should revert if the sum of the component weights is greater than 10000 (with two components)", async function () {
+        it("Should not revert if the sum of the component weights is greater than 10000 (with two components)", async function () {
+            const secondComputer = await computerFactory.deploy();
+            await secondComputer.deployed();
+
             const config = {
                 ...DEFAULT_CONFIG,
                 maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
                 maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
                 base: ethers.utils.parseUnits("0", 18), // 0%
                 componentWeights: [5000, 5001],
-                components: [computer.address, computer.address],
+                components: [computer.address, secondComputer.address],
             };
 
-            await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+            await expect(controller.setConfig(GRT, config)).to.not.be.reverted;
         });
 
-        it("Should revert if a rate overflow is possible", async function () {
+        it("Should not revert if a rate overflow is possible (the rate will be truncated to the max)", async function () {
             const config = {
                 ...DEFAULT_CONFIG,
                 maxIncrease: ethers.utils.parseUnits("0.02", 18), // 2%
@@ -4002,7 +4116,7 @@ function describeTests(
                 components: [computer.address],
             };
 
-            await expect(controller.setConfig(GRT, config)).to.be.revertedWith("InvalidConfig").withArgs(GRT);
+            await expect(controller.setConfig(GRT, config)).to.not.be.reverted;
         });
 
         it("Should revert when a component with the zero address is provided", async function () {
@@ -4100,6 +4214,36 @@ function describeTests(
             expect(newConfig.base).to.equal(DEFAULT_CONFIG.base);
             expect(newConfig.componentWeights).to.deep.equal(DEFAULT_CONFIG.componentWeights);
             expect(newConfig.components).to.deep.equal(DEFAULT_CONFIG.components);
+        });
+
+        it("Should update the config when two components with 100% weights are provided", async function () {
+            const secondComputer = await computerFactory.deploy();
+            await secondComputer.deployed();
+
+            const config = {
+                ...DEFAULT_CONFIG,
+                componentWeights: [10000, 10000],
+                components: [computer.address, secondComputer.address],
+            };
+
+            const tx = await controller.setConfig(GRT, config);
+
+            await expect(tx).to.emit(controller, "RateConfigUpdated");
+
+            // Check the event args
+            const receipt = await tx.wait();
+            const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.token).to.equal(GRT);
+            expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
+            expect(event?.args?.newConfig).to.deep.equal(Object.values(config));
+
+            // Sanity check that the new config is set
+            const newConfig = await controller.getConfig(GRT);
+            expect(newConfig.maxIncrease).to.equal(config.maxIncrease);
+            expect(newConfig.maxDecrease).to.equal(config.maxDecrease);
+            expect(newConfig.base).to.equal(config.base);
+            expect(newConfig.componentWeights).to.deep.equal(config.componentWeights);
+            expect(newConfig.components).to.deep.equal(config.components);
         });
 
         it("Should emit a RateConfigUpdated event if the config is valid", async function () {

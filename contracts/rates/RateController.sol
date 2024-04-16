@@ -126,9 +126,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             revert InvalidConfig(token);
         }
 
-        // Ensure that the sum of the component weights less than or equal to 10000 (100%)
-        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%).
-        uint256 sum = 0;
+        // Check for invalid or duplicate components
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
             if (
                 address(config.components[i]) == address(0) ||
@@ -150,16 +148,6 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     revert InvalidConfig(token);
                 }
             }
-
-            sum += config.componentWeights[i];
-        }
-        if (sum > 10000) {
-            revert InvalidConfig(token);
-        }
-
-        // Ensure that the base rate plus the sum of the maximum component rates won't overflow
-        if (uint256(config.base) + ((sum * type(uint64).max) / 10000) > type(uint64).max) {
-            revert InvalidConfig(token);
         }
 
         RateConfig memory oldConfig = rateConfigs[token];
@@ -378,7 +366,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             componentRateNumerator += uint256(config.components[i].computeRate(token)) * config.componentWeights[i];
         }
 
-        return (config.base + (componentRateNumerator / 10000)).toUint64();
+        uint256 computedRate = uint256(config.base) + (componentRateNumerator / 10000);
+        if (computedRate > type(uint64).max) {
+            // The computed rate is higher than the maximum uint64 value, so we return the maximum value
+            // It's okay to return the maximum value because the rate will be clamped later and the max possible rate is
+            // the maximum uint64 value.
+            return type(uint64).max;
+        }
+
+        return uint64(computedRate); // Safe cast because we checked that the computed rate is less than the maximum
     }
 
     /// @notice Computes the target rate and clamps it based on the specified token's rate configuration.
