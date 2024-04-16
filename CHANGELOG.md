@@ -1,5 +1,13 @@
 # Changelog
 
+## v4.6.2
+### Prudentia
+#### Controllers
+- Update RateController
+  - Allow unrestricted individual component weights
+  - Allow total component weights to be above 100%
+  - Modify computeRateInternal to cap the rate to the max possible value to prevent overflow
+
 ## v4.6.1
 ### Dependencies
 - Upgrade adrastia-core to v4.6.1.
