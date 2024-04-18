@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.7.0
+### Dependencies
+- Upgrade adrastia-core to v4.7.0.
+
+### Accumulators
+- Update ManagedAlocUtilizationAndErrorAccumulator: Added a flag to consider an empty portfolio as 0% utilized.
+
+### Prudentia
+#### Computers
+- Add HistoricalRatesComputer: An IRateComputer that fetches historical rates from an IHistoricalRates contract.
+- Add ManagedHistoricalRatesComputer: A HistoricalRatesComputer that implements standard management functions.
+- Add SlopedOracleMutationComputer: An OracleMutationComputer that applies a two-part slope function to the value returned by an oracle.
+- Add ManagedSlopedOracleMutationComputer: A SlopedOracleMutationComputer that implements standard management functions.
+
 ## v4.6.2
 ### Prudentia
 #### Controllers
