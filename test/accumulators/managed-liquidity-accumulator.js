@@ -1093,6 +1093,7 @@ async function deployAlocUtilizationAndErrorAccumulator() {
     // Deploy accumulator
     const accumulatorFactory = await ethers.getContractFactory("ManagedAlocUtilizationAndErrorAccumulator");
     return await accumulatorFactory.deploy(
+        true,
         DEFAULT_UTILIZATION_TARGET,
         averagingStrategy.address,
         DEFAULT_UTILIZATION_DECIMALS,
