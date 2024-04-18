@@ -42,6 +42,7 @@ contract ManagedAlocUtilizationAndErrorAccumulator is
     error AlreadyUsingDefaultTarget(address token);
 
     constructor(
+        bool considerEmptyAs100Percent_,
         uint112 target_,
         IAveragingStrategy averagingStrategy_,
         uint8 decimals_,
@@ -50,6 +51,7 @@ contract ManagedAlocUtilizationAndErrorAccumulator is
         uint256 maxUpdateDelay_
     )
         AlocUtilizationAndErrorAccumulator(
+            considerEmptyAs100Percent_,
             target_,
             averagingStrategy_,
             decimals_,
