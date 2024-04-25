@@ -257,8 +257,37 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             willAnythingChange(data);
     }
 
+    /**
+     * @notice Determines if the next rate can be computed for a token. A revert indicates that the next rate cannot be
+     * computed.
+     * @param data The update data, containing the token address.
+     * @return True if the next rate can be computed; false otherwise.
+     */
+    function canComputeNextRate(bytes memory data) public view virtual returns (bool) {
+        address token = abi.decode(data, (address));
+
+        computeRateInternal(token);
+
+        return true;
+    }
+
     /// @inheritdoc IUpdateable
     function canUpdate(bytes memory data) public view virtual override returns (bool b) {
+        (bool callSuccess, bytes memory callReturn) = address(this).staticcall(
+            abi.encodeWithSelector(this.canComputeNextRate.selector, data)
+        );
+        if (!callSuccess) {
+            // Call reverted. We can't compute the next rate.
+            return false;
+        } else {
+            // Call succeeded. Let's check the return value
+            bool result = abi.decode(callReturn, (bool));
+            if (!result) {
+                // We can't compute the next rate.
+                return false;
+            }
+        }
+
         return
             // Can only update if the update is needed
             needsUpdate(data) &&
@@ -358,6 +387,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The address of the token for which to compute the rate.
     /// @return uint64 The computed rate for the given token.
     function computeRateInternal(address token) internal view virtual returns (uint64) {
+        BufferMetadata memory meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing. Don't return a rate if the config is missing.
+            revert MissingConfig(token);
+        }
+
         RateConfig memory config = rateConfigs[token];
 
         uint256 componentRateNumerator;

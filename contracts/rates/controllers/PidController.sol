@@ -85,6 +85,10 @@ abstract contract PidController is RateController {
     /// @param oracle The invalid oracle.
     error InvalidInputAndErrorOracle(ILiquidityOracle oracle);
 
+    /// @notice An error that is thrown if we require a PID configuration that has not been set.
+    /// @param token The token for which we require a PID configuration.
+    error MissingPidConfig(address token);
+
     /// @notice Constructs the PidController.
     /// @param inputAndErrorOracle_ Default oracle to provide input and error values.
     /// @param period_ The period for the rate controller.
@@ -302,12 +306,22 @@ abstract contract PidController is RateController {
         return int256(uint256(clamped));
     }
 
-    /// @inheritdoc RateController
-    function updateAndCompute(address token) internal virtual override returns (uint64 target, uint64 current) {
-        PidData storage pid = pidData[token];
-        PidState storage pidState = pid.state;
+    function computeNextPidRate(
+        address token
+    ) internal view virtual returns (uint64 target, uint64 current, PidState memory newPidState) {
+        BufferMetadata memory meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // This means that the rate config has not been set yet. We can't compute a rate without a config.
+            revert MissingConfig(token);
+        }
+
+        PidData memory pid = pidData[token];
+        PidState memory pidState = pid.state;
         PidConfig memory pidConfig = pid.config;
-        BufferMetadata storage meta = rateBufferMetadata[token];
+        if (pidConfig.kPDenominator == 0) {
+            // This means that the PID config has not been set yet. We can't compute a rate without a config.
+            revert MissingPidConfig(token);
+        }
 
         int256 deltaTime;
         if (meta.size > 0) {
@@ -369,6 +383,23 @@ abstract contract PidController is RateController {
         output = clampBigSignedRate(token, output, true, false, 0);
         // Clamping the output returns a value in the range [0, 2^64), so we can safely cast it to uint64.
         current = uint64(uint256(output));
+        newPidState = pidState;
+    }
+
+    function computeRateInternal(address token) internal view virtual override returns (uint64) {
+        (uint64 target, , ) = computeNextPidRate(token);
+
+        return target;
+    }
+
+    /// @inheritdoc RateController
+    function updateAndCompute(address token) internal virtual override returns (uint64 target, uint64 current) {
+        PidState memory newPidState;
+        (target, current, newPidState) = computeNextPidRate(token);
+
+        pidData[token].state = newPidState;
+
+        return (target, current);
     }
 
     /// @inheritdoc RateController

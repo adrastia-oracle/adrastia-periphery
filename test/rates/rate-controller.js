@@ -915,6 +915,16 @@ function describeStandardControllerComputeRateTests(contractName, deployFunc) {
             // Sanity check that the expected rate and the new target rate are different
             expect(expectedRate).to.not.equal(newConfig.base);
         });
+
+        it("Reverts if we haven't set a config", async function () {
+            const token = USDC;
+
+            await expect(controller.computeRate(token)).to.be.revertedWith("MissingConfig");
+
+            // Sanity check that it doesn't revert if we set a config
+            await controller.setConfig(token, DEFAULT_CONFIG);
+            await expect(controller.computeRate(token)).to.not.be.reverted;
+        });
     });
 }
 
@@ -3756,12 +3766,283 @@ function describePidControllerUpdateTests(deployFunc, getController) {
     });
 }
 
+function createDescribeCanUpdateTests(isPidController) {
+    return function describeStandardControllerCanUpdateTests(contractName, deployFunc) {
+        describe(contractName + "#canUpdate", function () {
+            var controller;
+
+            async function deploy(updaterMustBeEoa) {
+                const deployment = await deployFunc({
+                    updaterMustBeEoa: updaterMustBeEoa,
+                });
+                controller = deployment.controller;
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Grant all roles to the signer
+                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+                // Set config for GRT
+                await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+                if (isPidController) {
+                    // Set PID config for GRT
+                    await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+                }
+            }
+
+            beforeEach(async () => {
+                await deploy(false);
+            });
+
+            it("Should return false if it doesn't need an update", async function () {
+                // needsUpdate should return false
+                await controller.overrideNeedsUpdate(true, false);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that it needs an update if we set needsUpdate to true
+                await controller.overrideNeedsUpdate(true, true);
+                expect(await controller.canUpdate(updateData)).to.be.true;
+            });
+
+            it("Can't update if we don't have the required role and the role is not open", async function () {
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Revoke the role from the signer
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+                // Revoke the role from everyone
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that it can update if we have the role
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                expect(await controller.canUpdate(updateData)).to.be.true;
+            });
+
+            it("Can update if we have the required role and the role is not open", async function () {
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Revoke the role from everyone
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.true;
+            });
+
+            it("Can update if we don't have the required role but the role is open", async function () {
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Revoke the role from the signer
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+                // Grant the role to everyone
+                await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.true;
+            });
+
+            it("Can't update if the updaters must be EOA and the sender is a contract, with the updater having the required role", async function () {
+                // Redeploy with updaterMustBeEoa = true
+                await deploy(true);
+
+                // Deploy the caller contract
+                const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+                const caller = await callerFactory.deploy(controller.address);
+                await caller.deployed();
+
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Revoke the role from everyone
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                // Grant the role to the caller contract
+                await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await caller.canUpdate(updateData);
+                const canUpdateWithEoa = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that EOA can update
+                expect(canUpdateWithEoa).to.be.true;
+            });
+
+            it("Can't update if the updaters must be EOA and the sender is a contract, with the required role being open", async function () {
+                // Redeploy with updaterMustBeEoa = true
+                await deploy(true);
+
+                // Deploy the caller contract
+                const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+                const caller = await callerFactory.deploy(controller.address);
+                await caller.deployed();
+
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Revoke the role from the signer
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+                // Grant the role to everyone
+                await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await caller.canUpdate(updateData);
+                const canUpdateWithEoa = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that EOA can update
+                expect(canUpdateWithEoa).to.be.true;
+            });
+
+            it("Can update if the updaters don't have to be EOA and the sender is a contract, with the updater having the required role", async function () {
+                // Redeploy with updaterMustBeEoa = false
+                await deploy(false);
+
+                // Deploy the caller contract
+                const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+                const caller = await callerFactory.deploy(controller.address);
+                await caller.deployed();
+
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Revoke the role from everyone
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                // Grant the role to the caller contract
+                await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await caller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.true;
+            });
+
+            it("Can update if the updaters don't have to be EOA and the sender is a contract, with the required role being open", async function () {
+                // Redeploy with updaterMustBeEoa = false
+                await deploy(false);
+
+                // Deploy the caller contract
+                const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
+                const caller = await callerFactory.deploy(controller.address);
+                await caller.deployed();
+
+                // needsUpdate should return true
+                await controller.overrideNeedsUpdate(true, true);
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Revoke the role from the signer
+                await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
+                // Grant the role to everyone
+                await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await caller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.true;
+            });
+
+            it("Can't update if we haven't set a config for the token", async function () {
+                const token = USDC;
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [token]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that it needs an update if we set the config
+                await controller.setConfig(token, DEFAULT_CONFIG);
+                if (isPidController) {
+                    await controller.setPidConfig(token, DEFAULT_PID_CONFIG);
+                }
+                expect(await controller.canUpdate(updateData)).to.be.true;
+            });
+
+            if (isPidController) {
+                it("Can't update if we haven't set a PID config for the token", async function () {
+                    const token = USDC;
+
+                    // Set config
+                    await controller.setConfig(token, DEFAULT_CONFIG);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [token]);
+
+                    const canUpdate = await controller.canUpdate(updateData);
+
+                    expect(canUpdate).to.be.false;
+
+                    // Sanity check that it needs an update if we set the config
+                    await controller.setPidConfig(token, DEFAULT_PID_CONFIG);
+                    expect(await controller.canUpdate(updateData)).to.be.true;
+                });
+            }
+
+            it("Can't update if canComputeNextRate returns false", async function () {
+                // Set canComputeNextRate to false
+                await controller.overrideCanComputeNextRate(true, false);
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                const canUpdate = await controller.canUpdate(updateData);
+
+                expect(canUpdate).to.be.false;
+
+                // Sanity check that it can update if we set canComputeNextRate to true
+                await controller.overrideCanComputeNextRate(false, false);
+                expect(await controller.canUpdate(updateData)).to.be.true;
+            });
+        });
+    };
+}
+
 function describeTests(
     contractName,
     deployFunc,
     describeComputeRateTests,
     describeNeedsUpdateTests,
-    describeUpdateTests
+    describeUpdateTests,
+    describeCanUpdateTests
 ) {
     describe(contractName + "#constructor", function () {
         const tests = [
@@ -4504,215 +4785,7 @@ function describeTests(
         });
     });
 
-    describe(contractName + "#canUpdate", function () {
-        var controller;
-
-        async function deploy(updaterMustBeEoa) {
-            const deployment = await deployFunc({
-                updaterMustBeEoa: updaterMustBeEoa,
-            });
-            controller = deployment.controller;
-
-            // Get our signer address
-            const [signer] = await ethers.getSigners();
-
-            // Grant all roles to the signer
-            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
-            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
-            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
-            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
-
-            // Set config for GRT
-            await controller.setConfig(GRT, DEFAULT_CONFIG);
-        }
-
-        beforeEach(async () => {
-            await deploy(false);
-        });
-
-        it("Should return false if it doesn't need an update", async function () {
-            // needsUpdate should return false
-            await controller.overrideNeedsUpdate(true, false);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.false;
-
-            // Sanity check that it needs an update if we set needsUpdate to true
-            await controller.overrideNeedsUpdate(true, true);
-            expect(await controller.canUpdate(updateData)).to.be.true;
-        });
-
-        it("Can't update if we don't have the required role and the role is not open", async function () {
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Get our signer address
-            const [signer] = await ethers.getSigners();
-
-            // Revoke the role from the signer
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
-            // Revoke the role from everyone
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.false;
-
-            // Sanity check that it can update if we have the role
-            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
-            expect(await controller.canUpdate(updateData)).to.be.true;
-        });
-
-        it("Can update if we have the required role and the role is not open", async function () {
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Revoke the role from everyone
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.true;
-        });
-
-        it("Can update if we don't have the required role but the role is open", async function () {
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Get our signer address
-            const [signer] = await ethers.getSigners();
-
-            // Revoke the role from the signer
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
-            // Grant the role to everyone
-            await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.true;
-        });
-
-        it("Can't update if the updaters must be EOA and the sender is a contract, with the updater having the required role", async function () {
-            // Redeploy with updaterMustBeEoa = true
-            await deploy(true);
-
-            // Deploy the caller contract
-            const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
-            const caller = await callerFactory.deploy(controller.address);
-            await caller.deployed();
-
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Revoke the role from everyone
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            // Grant the role to the caller contract
-            await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await caller.canUpdate(updateData);
-            const canUpdateWithEoa = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.false;
-
-            // Sanity check that EOA can update
-            expect(canUpdateWithEoa).to.be.true;
-        });
-
-        it("Can't update if the updaters must be EOA and the sender is a contract, with the required role being open", async function () {
-            // Redeploy with updaterMustBeEoa = true
-            await deploy(true);
-
-            // Deploy the caller contract
-            const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
-            const caller = await callerFactory.deploy(controller.address);
-            await caller.deployed();
-
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Get our signer address
-            const [signer] = await ethers.getSigners();
-
-            // Revoke the role from the signer
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
-            // Grant the role to everyone
-            await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await caller.canUpdate(updateData);
-            const canUpdateWithEoa = await controller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.false;
-
-            // Sanity check that EOA can update
-            expect(canUpdateWithEoa).to.be.true;
-        });
-
-        it("Can update if the updaters don't have to be EOA and the sender is a contract, with the updater having the required role", async function () {
-            // Redeploy with updaterMustBeEoa = false
-            await deploy(false);
-
-            // Deploy the caller contract
-            const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
-            const caller = await callerFactory.deploy(controller.address);
-            await caller.deployed();
-
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Revoke the role from everyone
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            // Grant the role to the caller contract
-            await controller.grantRole(ORACLE_UPDATER_ROLE, caller.address);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await caller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.true;
-        });
-
-        it("Can update if the updaters don't have to be EOA and the sender is a contract, with the required role being open", async function () {
-            // Redeploy with updaterMustBeEoa = false
-            await deploy(false);
-
-            // Deploy the caller contract
-            const callerFactory = await ethers.getContractFactory("RateControllerStubCaller");
-            const caller = await callerFactory.deploy(controller.address);
-            await caller.deployed();
-
-            // needsUpdate should return true
-            await controller.overrideNeedsUpdate(true, true);
-
-            // Get our signer address
-            const [signer] = await ethers.getSigners();
-
-            // Revoke the role from the signer
-            await controller.revokeRole(ORACLE_UPDATER_ROLE, signer.address);
-            // Grant the role to everyone
-            await controller.grantRole(ORACLE_UPDATER_ROLE, AddressZero);
-
-            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-            const canUpdate = await caller.canUpdate(updateData);
-
-            expect(canUpdate).to.be.true;
-        });
-    });
+    describeCanUpdateTests(contractName, deployFunc);
 
     describeNeedsUpdateTests(contractName, deployFunc);
 
@@ -5654,7 +5727,8 @@ describeTests(
     deployStandardController,
     describeStandardControllerComputeRateTests,
     createDescribeStandardControllerNeedsUpdateTests(false, undefined, undefined),
-    createDescribeStandardControllerUpdateTests(undefined, true, undefined)
+    createDescribeStandardControllerUpdateTests(undefined, true, undefined),
+    createDescribeCanUpdateTests(false)
 );
 describeTests(
     "PidController",
@@ -5665,5 +5739,6 @@ describeTests(
         initializePidController,
         describePidControllerNeedsUpdateTests
     ),
-    createDescribeStandardControllerUpdateTests(initializePidController, false, describePidControllerUpdateTests)
+    createDescribeStandardControllerUpdateTests(initializePidController, false, describePidControllerUpdateTests),
+    createDescribeCanUpdateTests(true)
 );

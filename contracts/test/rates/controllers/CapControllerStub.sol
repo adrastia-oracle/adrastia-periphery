@@ -7,6 +7,8 @@ contract CapControllerStub is ManagedCapController {
     struct Config {
         bool needsUpdateOverridden;
         bool needsUpdate;
+        bool canComputeNextRateOverridden;
+        bool canComputeNextRate;
     }
 
     Config public config;
@@ -22,9 +24,19 @@ contract CapControllerStub is ManagedCapController {
         config.needsUpdate = needsUpdate_;
     }
 
+    function overrideCanComputeNextRate(bool overridden, bool canComputeNextRate_) public {
+        config.canComputeNextRateOverridden = overridden;
+        config.canComputeNextRate = canComputeNextRate_;
+    }
+
     function needsUpdate(bytes memory data) public view virtual override returns (bool) {
         if (config.needsUpdateOverridden) return config.needsUpdate;
         else return super.needsUpdate(data);
+    }
+
+    function canComputeNextRate(bytes memory data) public view virtual override returns (bool) {
+        if (config.canComputeNextRateOverridden) return config.canComputeNextRate;
+        else return super.canComputeNextRate(data);
     }
 
     function stubPush(address token, uint64 target, uint64 current, uint32 timestamp) public {

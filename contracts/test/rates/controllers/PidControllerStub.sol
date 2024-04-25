@@ -8,6 +8,8 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
     struct Config {
         bool needsUpdateOverridden;
         bool needsUpdate;
+        bool canComputeNextRateOverridden;
+        bool canComputeNextRate;
     }
 
     struct OnPauseCall {
@@ -80,11 +82,21 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
         config.needsUpdate = needsUpdate_;
     }
 
+    function overrideCanComputeNextRate(bool overridden, bool canComputeNextRate_) public {
+        config.canComputeNextRateOverridden = overridden;
+        config.canComputeNextRate = canComputeNextRate_;
+    }
+
     function needsUpdate(
         bytes memory data
     ) public view virtual override(PidController, InputAndErrorAccumulatorStub) returns (bool) {
         if (config.needsUpdateOverridden) return config.needsUpdate;
         else return PidController.needsUpdate(data);
+    }
+
+    function canComputeNextRate(bytes memory data) public view virtual override returns (bool) {
+        if (config.canComputeNextRateOverridden) return config.canComputeNextRate;
+        else return super.canComputeNextRate(data);
     }
 
     function onPaused(address token, bool paused) internal virtual override {
