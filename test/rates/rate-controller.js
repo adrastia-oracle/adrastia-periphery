@@ -3764,6 +3764,95 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         // Sanity check that the rate is not the same as the starting rate
         expect(latestRate.current).to.not.eq(startingRate);
     });
+
+    it("Sets pidState.iTerm to the current integral", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        const pidConfig = DEFAULT_PID_CONFIG;
+
+        // Sanity check that the integral gains is not 0
+        expect(pidConfig.kINumerator).to.not.equal(0);
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+        await controller.setPidConfig(GRT, pidConfig);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.923", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+        const error = target.sub(input);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the pidState
+        const pidData = await controller.pidData(GRT);
+
+        const integral = error.mul(pidConfig.kINumerator).div(pidConfig.kIDenominator);
+
+        // The iTerm should be the current integral
+        expect(pidData.state.iTerm).to.eq(integral);
+    });
+
+    it("Sets pidState.lastInput to the current input", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+        await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.923", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the pidState
+        const pidData = await controller.pidData(GRT);
+
+        // The last input should be the current input
+        expect(pidData.state.lastInput).to.eq(input);
+    });
+
+    it("Sets pidState.lastError to the current error", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        await controller.setConfig(GRT, DEFAULT_CONFIG);
+        await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+        // Set input larger than the target to make the rate increase
+        const input = ethers.utils.parseUnits("0.923", 8);
+        await controller.setInput(GRT, input);
+        const target = ethers.utils.parseUnits("0.1", 8);
+        await controller.setTarget(GRT, target);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the pidState
+        const pidData = await controller.pidData(GRT);
+
+        // The last error should be the current error
+        expect(pidData.state.lastError).to.eq(target.sub(input));
+    });
 }
 
 function createDescribeCanUpdateTests(isPidController) {
