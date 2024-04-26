@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.7.1
+### Prudentia
+#### Controllers
+- Update RateController
+  - canUpdate now returns false if it's unable to compute the next rate
+  - computeRate now reverts if the config hasn't been set
+
 ## v4.7.0
 ### Dependencies
 - Upgrade adrastia-core to v4.7.0.
