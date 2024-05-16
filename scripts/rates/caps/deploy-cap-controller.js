@@ -90,6 +90,7 @@ async function main() {
     const updatersMustBeEoa = true;
     const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin
     const assignAllRolesToAdmin = true;
+    const anyoneCanUpdate = true;
 
     const factory = await ethers.getContractFactory("ManagedCapController");
     const rateController = await factory.deploy(period, initialBufferCardinality, updatersMustBeEoa);
@@ -111,6 +112,10 @@ async function main() {
             await tryGrantRole(rateController, newAdmin, ORACLE_UPDATER_ROLE);
             await tryGrantRole(rateController, newAdmin, RATE_ADMIN_ROLE);
             await tryGrantRole(rateController, newAdmin, UPDATE_PAUSE_ADMIN_ROLE);
+
+            if (anyoneCanUpdate) {
+                await tryGrantRole(rateController, ethers.constants.AddressZero, ORACLE_UPDATER_ROLE);
+            }
 
             // Revoke the deployer's updater admin role
             await tryRevokeRole(rateController, deployer.address, ORACLE_UPDATER_MANAGER_ROLE);
