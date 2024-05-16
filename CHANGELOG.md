@@ -1,13 +1,81 @@
 # Changelog
 
-## 4.3.0
+## 4.7.1
+### Prudentia
+#### Controllers
+- Update RateController
+  - canUpdate now returns false if it's unable to compute the next rate
+  - computeRate now reverts if the config hasn't been set
+
+## v4.7.0
+### Dependencies
+- Upgrade adrastia-core to v4.7.0.
+
+### Accumulators
+- Update ManagedAlocUtilizationAndErrorAccumulator: Added a flag to consider an empty portfolio as 0% utilized.
+
+### Prudentia
+#### Computers
+- Add HistoricalRatesComputer: An IRateComputer that fetches historical rates from an IHistoricalRates contract.
+- Add ManagedHistoricalRatesComputer: A HistoricalRatesComputer that implements standard management functions.
+- Add SlopedOracleMutationComputer: An OracleMutationComputer that applies a two-part slope function to the value returned by an oracle.
+- Add ManagedSlopedOracleMutationComputer: A SlopedOracleMutationComputer that implements standard management functions.
+
+## v4.6.2
+### Prudentia
+#### Controllers
+- Update RateController
+  - Allow unrestricted individual component weights
+  - Allow total component weights to be above 100%
+  - Modify computeRateInternal to cap the rate to the max possible value to prevent overflow
+
+## v4.6.1
+### Dependencies
+- Upgrade adrastia-core to v4.6.1.
+
+### Accumulators
+- Update ManagedCompoundV2SBAccumulator, ManagedIonicSBAccumulator, and ManagedVenusIsolatedV2SBAccumulator: Out of an abundance of caution, only those with the CONFIG_ADMIN role can refresh token mappings.
+
+## v4.6.0
+### Dependencies
+- Upgrade adrastia-core to v4.6.0.
+
+### Accumulators
+- Add ManagedVenusIsolatedV2SBAccumulator: A VenusIsolatedV2SBAccumulator that implements standard management functions.
+
+## v4.5.0
+### Dependencies
+- Upgrade adrastia-core to v4.5.0.
+
+### Accumulators
+- Add ManagedCompoundV2SBAccumulator: A CompoundV2SBAccumulator that implements standard management functions.
+- Add ManagedIonicSBAccumulator: An IonicSBAccumulator that implements standard management functions.
+
+## v4.4.0
+### Dependencies
+- Upgrade adrastia-core to v4.4.0.
+
+### Accumulators
+- Add ManagedAlocUtilizationAndErrorAccumulator: An AlocUtilizationAndErrorAccumulator that implements standard management functions.
+
+### Prudentia
+#### Controllers
+- Add PidController: A RateController extension that implements a PID controller.
+- Add ManagedPidController: A PidController that implements standard management functions.
+- Add TrueFiAlocPidController: A ManagedPidController designed for integration into TrueFi.
+#### Transformers
+- Add IInputAndErrorTransformer: Interface for transforming input and error values in a PID controller.
+- Add NegativeErrorScalingTransformer: Implements the IInputAndErrorTransformer interface to scale negative error values.
+- Add PositiveErrorScalingTransformer: Implements the IInputAndErrorTransformer interface to scale positive error values.
+
+## v4.3.0
 ### Dependencies
 - Upgrade adrastia-core to v4.3.0.
 
 ### Accumulators
 - Add ManagedAdrastiaPriceAccumulator
 
-## 4.2.0
+## v4.2.0
 ### Dependencies
 - Upgrade adrastia-core to v4.2.0.
 

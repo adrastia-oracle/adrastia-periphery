@@ -126,9 +126,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             revert InvalidConfig(token);
         }
 
-        // Ensure that the sum of the component weights less than or equal to 10000 (100%)
-        // Notice: It's possible to have the sum of the component weights be less than 10000 (100%).
-        uint256 sum = 0;
+        // Check for invalid or duplicate components
         for (uint256 i = 0; i < config.componentWeights.length; ++i) {
             if (
                 address(config.components[i]) == address(0) ||
@@ -150,16 +148,6 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     revert InvalidConfig(token);
                 }
             }
-
-            sum += config.componentWeights[i];
-        }
-        if (sum > 10000) {
-            revert InvalidConfig(token);
-        }
-
-        // Ensure that the base rate plus the sum of the maximum component rates won't overflow
-        if (uint256(config.base) + ((sum * type(uint64).max) / 10000) > type(uint64).max) {
-            revert InvalidConfig(token);
         }
 
         RateConfig memory oldConfig = rateConfigs[token];
@@ -187,28 +175,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external {
         checkManuallyPushRate();
 
-        BufferMetadata storage meta = rateBufferMetadata[token];
-        if (meta.maxSize == 0) {
-            // Uninitialized buffer means that the rate config is missing
-            revert MissingConfig(token);
-        }
-
-        // Note: We don't check the pause status here because we want to allow rate updates to be manually pushed even
-        // if rate updates are paused.
-
-        RateLibrary.Rate memory rate = RateLibrary.Rate({
-            target: target,
-            current: current,
-            timestamp: uint32(block.timestamp)
-        });
-
-        for (uint256 i = 0; i < amount; ++i) {
-            push(token, rate);
-        }
-
-        if (amount > 0) {
-            emit RatePushedManually(token, target, current, block.timestamp, amount);
-        }
+        _manuallyPushRate(token, target, current, amount);
     }
 
     /// @notice Determines whether rate updates are paused for a token.
@@ -290,8 +257,37 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             willAnythingChange(data);
     }
 
+    /**
+     * @notice Determines if the next rate can be computed for a token. A revert indicates that the next rate cannot be
+     * computed.
+     * @param data The update data, containing the token address.
+     * @return True if the next rate can be computed; false otherwise.
+     */
+    function canComputeNextRate(bytes memory data) public view virtual returns (bool) {
+        address token = abi.decode(data, (address));
+
+        computeRateInternal(token);
+
+        return true;
+    }
+
     /// @inheritdoc IUpdateable
     function canUpdate(bytes memory data) public view virtual override returns (bool b) {
+        (bool callSuccess, bytes memory callReturn) = address(this).staticcall(
+            abi.encodeWithSelector(this.canComputeNextRate.selector, data)
+        );
+        if (!callSuccess) {
+            // Call reverted. We can't compute the next rate.
+            return false;
+        } else {
+            // Call succeeded. Let's check the return value
+            bool result = abi.decode(callReturn, (bool));
+            if (!result) {
+                // We can't compute the next rate.
+                return false;
+            }
+        }
+
         return
             // Can only update if the update is needed
             needsUpdate(data) &&
@@ -391,6 +387,12 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The address of the token for which to compute the rate.
     /// @return uint64 The computed rate for the given token.
     function computeRateInternal(address token) internal view virtual returns (uint64) {
+        BufferMetadata memory meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing. Don't return a rate if the config is missing.
+            revert MissingConfig(token);
+        }
+
         RateConfig memory config = rateConfigs[token];
 
         uint256 componentRateNumerator;
@@ -399,7 +401,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             componentRateNumerator += uint256(config.components[i].computeRate(token)) * config.componentWeights[i];
         }
 
-        return (config.base + (componentRateNumerator / 10000)).toUint64();
+        uint256 computedRate = uint256(config.base) + (componentRateNumerator / 10000);
+        if (computedRate > type(uint64).max) {
+            // The computed rate is higher than the maximum uint64 value, so we return the maximum value
+            // It's okay to return the maximum value because the rate will be clamped later and the max possible rate is
+            // the maximum uint64 value.
+            return type(uint64).max;
+        }
+
+        return uint64(computedRate); // Safe cast because we checked that the computed rate is less than the maximum
     }
 
     /// @notice Computes the target rate and clamps it based on the specified token's rate configuration.
@@ -532,6 +542,31 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));
 
         return true;
+    }
+
+    function _manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) internal virtual {
+        BufferMetadata storage meta = rateBufferMetadata[token];
+        if (meta.maxSize == 0) {
+            // Uninitialized buffer means that the rate config is missing
+            revert MissingConfig(token);
+        }
+
+        // Note: We don't check the pause status here because we want to allow rate updates to be manually pushed even
+        // if rate updates are paused.
+
+        RateLibrary.Rate memory rate = RateLibrary.Rate({
+            target: target,
+            current: current,
+            timestamp: uint32(block.timestamp)
+        });
+
+        for (uint256 i = 0; i < amount; ++i) {
+            push(token, rate);
+        }
+
+        if (amount > 0) {
+            emit RatePushedManually(token, target, current, block.timestamp, amount);
+        }
     }
 
     /// @notice Called after the pause state is changed.

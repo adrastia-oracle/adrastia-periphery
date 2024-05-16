@@ -88,15 +88,16 @@ async function main() {
     const period = 24 * 60 * 60; // 24 hours
     const initialBufferCardinality = 2;
     const updatersMustBeEoa = true;
-    const newAdmin = "0xec89a5dd6c179c345EA7996AA879E59cB18c8484"; // Adrastia Admin
+    const newAdmin = "0xc885f24beC7c10f5B32Dd1c566EB12c901d8eADf";
     const assignAllRolesToAdmin = true;
-    const anyoneCanUpdate = true;
+    const oracleAddress = "0x0E3612fcD04688f115D06F76848F9D7629F3f019";
 
-    const factory = await ethers.getContractFactory("ManagedCapController");
-    const rateController = await factory.deploy(period, initialBufferCardinality, updatersMustBeEoa);
+    const contractName = "TrueFiAlocPidController";
+    const factory = await ethers.getContractFactory(contractName);
+    const rateController = await factory.deploy(oracleAddress, period, initialBufferCardinality, updatersMustBeEoa);
     await rateController.deployed();
 
-    console.log("ManagedCapController deployed to:", rateController.address);
+    console.log(contractName + " deployed to:", rateController.address);
 
     if (newAdmin !== "") {
         await tryGrantRole(rateController, newAdmin, ADMIN_ROLE);
@@ -113,10 +114,6 @@ async function main() {
             await tryGrantRole(rateController, newAdmin, RATE_ADMIN_ROLE);
             await tryGrantRole(rateController, newAdmin, UPDATE_PAUSE_ADMIN_ROLE);
 
-            if (anyoneCanUpdate) {
-                await tryGrantRole(rateController, ethers.constants.AddressZero, ORACLE_UPDATER_ROLE);
-            }
-
             // Revoke the deployer's updater admin role
             await tryRevokeRole(rateController, deployer.address, ORACLE_UPDATER_MANAGER_ROLE);
         }
@@ -125,7 +122,7 @@ async function main() {
         await tryRevokeRole(rateController, deployer.address, ADMIN_ROLE);
     }
 
-    console.log("Done");
+    console.log(contractName + " access control configured");
 }
 
 main()

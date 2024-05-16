@@ -13,4 +13,6 @@ library Roles {
     bytes32 public constant UPDATE_PAUSE_ADMIN = keccak256("UPDATE_PAUSE_ADMIN_ROLE");
 
     bytes32 public constant CONFIG_ADMIN = keccak256("CONFIG_ADMIN_ROLE");
+
+    bytes32 public constant TARGET_ADMIN = keccak256("TARGET_ADMIN_ROLE");
 }

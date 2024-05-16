@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import "../../rates/ManagedRateController.sol";
+import "../../accumulators/InputAndErrorAccumulatorStub.sol";
+import "../../../rates/controllers/ManagedPidController.sol";
 
-contract RateControllerStub is ManagedRateController {
+contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub {
     struct Config {
         bool needsUpdateOverridden;
         bool needsUpdate;
@@ -24,7 +25,31 @@ contract RateControllerStub is ManagedRateController {
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) ManagedRateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) ManagedPidController(this, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+
+    function canUpdate(
+        bytes memory data
+    ) public view virtual override(ManagedPidController, InputAndErrorAccumulatorStub) returns (bool) {
+        return ManagedPidController.canUpdate(data);
+    }
+
+    function update(
+        bytes memory data
+    ) public virtual override(RateController, InputAndErrorAccumulatorStub) returns (bool) {
+        return RateController.update(data);
+    }
+
+    function lastUpdateTime(
+        bytes memory data
+    ) public view virtual override(RateController, InputAndErrorAccumulatorStub) returns (uint256) {
+        return RateController.lastUpdateTime(data);
+    }
+
+    function timeSinceLastUpdate(
+        bytes memory data
+    ) public view virtual override(RateController, InputAndErrorAccumulatorStub) returns (uint256) {
+        return RateController.timeSinceLastUpdate(data);
+    }
 
     function stubPush(address token, uint64 target, uint64 current, uint32 timestamp) public {
         RateLibrary.Rate memory rate;
@@ -44,6 +69,14 @@ contract RateControllerStub is ManagedRateController {
         return initialBufferCardinality;
     }
 
+    function stubSetITerm(address token, int256 iTerm_) public {
+        pidData[token].state.iTerm = iTerm_;
+    }
+
+    function stubGetInputAndError(address token) public view returns (uint112 input, uint112 error) {
+        return getInputAndError(token);
+    }
+
     function overrideNeedsUpdate(bool overridden, bool needsUpdate_) public {
         config.needsUpdateOverridden = overridden;
         config.needsUpdate = needsUpdate_;
@@ -54,9 +87,11 @@ contract RateControllerStub is ManagedRateController {
         config.canComputeNextRate = canComputeNextRate_;
     }
 
-    function needsUpdate(bytes memory data) public view virtual override returns (bool) {
+    function needsUpdate(
+        bytes memory data
+    ) public view virtual override(PidController, InputAndErrorAccumulatorStub) returns (bool) {
         if (config.needsUpdateOverridden) return config.needsUpdate;
-        else return super.needsUpdate(data);
+        else return PidController.needsUpdate(data);
     }
 
     function canComputeNextRate(bytes memory data) public view virtual override returns (bool) {
@@ -69,21 +104,5 @@ contract RateControllerStub is ManagedRateController {
 
         call.paused = paused;
         ++call.callCount;
-    }
-}
-
-contract RateControllerStubCaller {
-    RateControllerStub immutable callee;
-
-    constructor(RateControllerStub callee_) {
-        callee = callee_;
-    }
-
-    function canUpdate(bytes memory data) public view returns (bool) {
-        return callee.canUpdate(data);
-    }
-
-    function update(bytes memory data) public returns (bool) {
-        return callee.update(data);
     }
 }

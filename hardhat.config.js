@@ -56,6 +56,11 @@ module.exports = {
             url: process.env.OPTIMISM_URL || "",
             accounts: [process.env.PRIVATE_KEY_DEPLOYER || ""],
         },
+        mode: {
+            chainId: 34443,
+            url: process.env.MODE_URL || "",
+            accounts: [process.env.PRIVATE_KEY_DEPLOYER || ""],
+        },
     },
     etherscan: {
         apiKey: {
@@ -72,6 +77,14 @@ module.exports = {
                 urls: {
                     apiURL: "https://api-zkevm.polygonscan.com/api",
                     browserURL: "https://zkevm.polygonscan.com",
+                },
+            },
+            {
+                network: "mode",
+                chainId: 34443,
+                urls: {
+                    apiURL: "https://explorer.mode.network/api",
+                    browserURL: "https://explorer.mode.network",
                 },
             },
         ],
