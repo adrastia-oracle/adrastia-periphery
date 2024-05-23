@@ -17,6 +17,8 @@ async function main() {
     ids["IOracle"] = await interfaceIds.iOracle();
     ids["AggregatorV3Interface"] = await interfaceIds.aggregatorV3Interface();
     ids["IOracleAggregator"] = await interfaceIds.iOracleAggregator();
+    ids["IAccessControl"] = await interfaceIds.iAccessControl();
+    ids["IAccessControlEnumerable"] = await interfaceIds.iAccessControlEnumerable();
 
     console.log(ids);
 }

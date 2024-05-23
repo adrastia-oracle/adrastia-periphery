@@ -1,16 +1,22 @@
 const hre = require("hardhat");
 
-const ethers = hre.ethers;
+const parseUnits = hre.ethers.utils.parseUnits;
 
-const UPDATE_THRESHOLD_0_1_PERCENT = ethers.utils.parseUnits("0.001", 8); // 0.1%
-const UPDATE_THRESHOLD_0_5_PERCENT = ethers.utils.parseUnits("0.005", 8); // 0.5%
-const UPDATE_THRESHOLD_1_PERCENT = ethers.utils.parseUnits("0.01", 8); // 1%
-const UPDATE_THRESHOLD_10_PERCENT = ethers.utils.parseUnits("0.1", 8); // 10%
+const CHANGE_PRECISION_DECIMALS = 8;
+
+const UPDATE_THRESHOLD_0_1_PERCENT = parseUnits("0.001", CHANGE_PRECISION_DECIMALS); // 0.1%
+const UPDATE_THRESHOLD_0_5_PERCENT = parseUnits("0.005", CHANGE_PRECISION_DECIMALS); // 0.5%
+const UPDATE_THRESHOLD_1_PERCENT = parseUnits("0.01", CHANGE_PRECISION_DECIMALS); // 1%
+const UPDATE_THRESHOLD_10_PERCENT = parseUnits("0.1", CHANGE_PRECISION_DECIMALS); // 10%
 
 async function main() {
-    const updateThreshold = UPDATE_THRESHOLD_10_PERCENT;
+    const updateThreshold = UPDATE_THRESHOLD_0_1_PERCENT;
     const updateDelay = 10; // 10 seconds
     const heartbeat = 60 * 60 * 4; // 4 hours
+
+    console.log("Update threshold:", updateThreshold.toNumber());
+    console.log("Update delay:", updateDelay);
+    console.log("Heartbeat:", heartbeat);
 
     // Assemble the configuration as a string
     const configuration =

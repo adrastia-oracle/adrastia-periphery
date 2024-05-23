@@ -41,9 +41,9 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
     constructor(uint32 updateThreshold_, uint32 updateDelay_, uint32 heartbeat_) {
         initializeRoles();
 
-        config.updateThreshold = updateThreshold_;
-        config.updateDelay = updateDelay_;
-        config.heartbeat = heartbeat_;
+        setConfigInternal(
+            Config({updateThreshold: updateThreshold_, updateDelay: updateDelay_, heartbeat: heartbeat_})
+        );
     }
 
     /**
@@ -63,6 +63,13 @@ abstract contract AccumulatorConfig is AccessControlEnumerable {
     /// @param newConfig The new configuration values.
     /// @dev Only accounts with the CONFIG_ADMIN role can call this function.
     function setConfig(Config calldata newConfig) external virtual onlyRole(Roles.CONFIG_ADMIN) {
+        setConfigInternal(newConfig);
+    }
+
+    /// @notice Sets a new configuration.
+    /// @param newConfig The new configuration values.
+    /// @dev Only accounts with the CONFIG_ADMIN role can call this function.
+    function setConfigInternal(Config memory newConfig) internal virtual {
         // Ensure that updateDelay is not greater than heartbeat
         if (newConfig.updateDelay > newConfig.heartbeat) revert InvalidConfig(newConfig);
         // Ensure that updateThreshold is not zero
