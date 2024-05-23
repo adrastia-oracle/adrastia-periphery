@@ -30,7 +30,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "4.7.0",
+    "@adrastia-oracle/adrastia-core": "4.7.1",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
     "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
   },
