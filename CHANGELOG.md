@@ -1,6 +1,13 @@
 # Changelog
 
-## 4.7.1
+## v4.7.2
+### Dependencies
+- Upgrade adrastia-core to v4.7.1.
+
+### Accumulators
+- Add constructor args validation and events to AccumulatorConfig.
+
+## v4.7.1
 ### Prudentia
 #### Controllers
 - Update RateController
