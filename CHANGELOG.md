@@ -1,5 +1,9 @@
 # Changelog
 
+## v4.7.3
+### Oracles
+- Update managed aggregator oracles: Add the ability to change the default config (strategies and aggregation params).
+
 ## v4.7.2
 ### Dependencies
 - Upgrade adrastia-core to v4.7.1.
