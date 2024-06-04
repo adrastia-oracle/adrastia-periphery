@@ -507,6 +507,7 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
         var tokenConfigFactory;
 
         var alternativeTokenConfig;
+        var alternativeTokenConfig2;
 
         var oracleStub1;
         var oracleStub2;
@@ -519,6 +520,8 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
 
         var newAggregationStrategy;
         var newValidationStrategy;
+        var newAggregationStrategy2;
+        var newValidationStrategy2;
 
         beforeEach(async function () {
             const aggregatorDeployment = await deployFunction();
@@ -549,7 +552,9 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 DEFAULT_AGGREGATION_STRATEGY_BYTECODE
             );
             newAggregationStrategy = await aggregationStrategyFactory.deploy(newAveragingStrategy.address);
+            newAggregationStrategy2 = await aggregationStrategyFactory.deploy(newAveragingStrategy.address);
             await newAggregationStrategy.deployed();
+            await newAggregationStrategy2.deployed();
 
             const validationStrategyFactory = await ethers.getContractFactory(
                 DEFAULT_VALIDATION_STRATEGY_ABI,
@@ -562,7 +567,15 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 1,
                 100000
             );
+            newValidationStrategy2 = await validationStrategyFactory.deploy(
+                DEFAULT_QUOTE_TOKEN_DECIMALS,
+                0,
+                0,
+                1,
+                100000
+            );
             await newValidationStrategy.deployed();
+            await newValidationStrategy2.deployed();
 
             const oracleStubFactory = await ethers.getContractFactory("MockOracle");
             oracleStub1 = await oracleStubFactory.deploy(DEFAULT_QUOTE_TOKEN_ADDRESS, DEFAULT_LIQUIDITY_DECIMALS);
@@ -589,6 +602,12 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 2,
                 [oracleStub1.address, oracleStub2.address]
             );
+            alternativeTokenConfig2 = await tokenConfigFactory.deploy(
+                newAggregationStrategy2.address,
+                newValidationStrategy2.address,
+                3,
+                [oracleStub1.address, oracleStub2.address, oracleStub3.address]
+            );
         });
 
         it("Overrides the default config", async function () {
@@ -610,6 +629,111 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
             expect(await oracle.validationStrategy(GRT)).to.not.equal(validationStrategy);
             expect(await oracle.minimumResponses(GRT)).to.not.equal(1);
             expect(await oracle.getOracles(GRT)).to.not.have.lengthOf(1);
+        });
+
+        it("Changes the default config", async function () {
+            const tx = await oracle.setTokenConfig(ethers.constants.AddressZero, alternativeTokenConfig.address);
+            const receipt = await tx.wait();
+
+            expect(receipt)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(ethers.constants.AddressZero, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            // Check that the functions return the new values
+            expect(await oracle.aggregationStrategy(WETH)).to.equal(await alternativeTokenConfig.aggregationStrategy());
+            expect(await oracle.validationStrategy(WETH)).to.equal(await alternativeTokenConfig.validationStrategy());
+            expect(await oracle.minimumResponses(WETH)).to.equal(await alternativeTokenConfig.minimumResponses());
+            expect(await oracle.getOracles(WETH)).to.eql(await alternativeTokenConfig.oracles()); // eql = deep equality
+
+            // Sanity check that the functions return values other than the default
+            expect(await oracle.aggregationStrategy(WETH)).to.not.equal(aggregationStrategy);
+            expect(await oracle.validationStrategy(WETH)).to.not.equal(validationStrategy);
+            expect(await oracle.minimumResponses(WETH)).to.not.equal(1);
+            expect(await oracle.getOracles(WETH)).to.not.have.lengthOf(1);
+        });
+
+        it("Changing the default config does not affect the token-specific config", async function () {
+            // Set a token-specific config
+            const tx = await oracle.setTokenConfig(WETH, alternativeTokenConfig2.address);
+            const receipt = await tx.wait();
+
+            expect(receipt)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(WETH, ethers.constants.AddressZero, alternativeTokenConfig2.address);
+
+            // Check that the functions return the new values
+            expect(await oracle.aggregationStrategy(WETH)).to.equal(
+                await alternativeTokenConfig2.aggregationStrategy()
+            );
+            expect(await oracle.validationStrategy(WETH)).to.equal(await alternativeTokenConfig2.validationStrategy());
+            expect(await oracle.minimumResponses(WETH)).to.equal(await alternativeTokenConfig2.minimumResponses());
+            expect(await oracle.getOracles(WETH)).to.eql(await alternativeTokenConfig2.oracles()); // eql = deep equality
+
+            // Change the default config
+            const tx2 = await oracle.setTokenConfig(ethers.constants.AddressZero, alternativeTokenConfig.address);
+            const receipt2 = await tx2.wait();
+
+            expect(receipt2)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(ethers.constants.AddressZero, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            // Check that the token-specific config is still the same
+            expect(await oracle.aggregationStrategy(WETH)).to.equal(
+                await alternativeTokenConfig2.aggregationStrategy()
+            );
+            expect(await oracle.validationStrategy(WETH)).to.equal(await alternativeTokenConfig2.validationStrategy());
+            expect(await oracle.minimumResponses(WETH)).to.equal(await alternativeTokenConfig2.minimumResponses());
+            expect(await oracle.getOracles(WETH)).to.eql(await alternativeTokenConfig2.oracles()); // eql = deep equality
+        });
+
+        it("The config reverts to the default if the new config is the zero address", async function () {
+            // First set the config to something other than the default
+            const tx = await oracle.setTokenConfig(GRT, alternativeTokenConfig.address);
+            const receipt = await tx.wait();
+            expect(receipt)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(GRT, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            // Then set the config to the zero address
+            const tx2 = await oracle.setTokenConfig(GRT, ethers.constants.AddressZero);
+            const receipt2 = await tx2.wait();
+            expect(receipt2)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(GRT, alternativeTokenConfig.address, ethers.constants.AddressZero);
+
+            expect(await oracle.aggregationStrategy(GRT)).to.equal(aggregationStrategy);
+            expect(await oracle.validationStrategy(GRT)).to.equal(validationStrategy);
+            expect(await oracle.minimumResponses(GRT)).to.equal(1);
+            expect(await oracle.getOracles(GRT)).to.have.lengthOf(1);
+        });
+
+        it("The config reverts to a new default if the new config is the zero address", async function () {
+            // Change the default config
+            const tx1 = await oracle.setTokenConfig(ethers.constants.AddressZero, alternativeTokenConfig2.address);
+            const receipt1 = await tx1.wait();
+
+            expect(receipt1)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(ethers.constants.AddressZero, ethers.constants.AddressZero, alternativeTokenConfig2.address);
+
+            // Set the config to something other than the default
+            const tx = await oracle.setTokenConfig(GRT, alternativeTokenConfig.address);
+            const receipt = await tx.wait();
+            expect(receipt)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(GRT, ethers.constants.AddressZero, alternativeTokenConfig.address);
+
+            // Then set the config to the zero address
+            const tx2 = await oracle.setTokenConfig(GRT, ethers.constants.AddressZero);
+            const receipt2 = await tx2.wait();
+            expect(receipt2)
+                .to.emit(oracle, "TokenConfigUpdated")
+                .withArgs(GRT, alternativeTokenConfig.address, ethers.constants.AddressZero);
+
+            expect(await oracle.aggregationStrategy(GRT)).to.equal(await alternativeTokenConfig2.aggregationStrategy());
+            expect(await oracle.validationStrategy(GRT)).to.equal(await alternativeTokenConfig2.validationStrategy());
+            expect(await oracle.minimumResponses(GRT)).to.equal(await alternativeTokenConfig2.minimumResponses());
+            expect(await oracle.getOracles(GRT)).to.eql(await alternativeTokenConfig2.oracles()); // eql = deep equality
         });
 
         it("Works with 8 oracles", async function () {

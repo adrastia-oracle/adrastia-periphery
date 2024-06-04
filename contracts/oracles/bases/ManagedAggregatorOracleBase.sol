@@ -42,10 +42,11 @@ abstract contract ManagedAggregatorOracleBase is ManagedOracleBase {
     constructor() ManagedOracleBase() {}
 
     /**
-     * @notice Sets a new configuration for a specific token.
+     * @notice Sets a new configuration for a token.
      * @dev This configuration is for the strategies, minimum responses, and underlying oracles.
-     * @param token The token to set the configuration for.
-     * @param newConfig The new token configuration.
+     * @param token The token to set the configuration for. Use address(0) to set the default configuration.
+     * @param newConfig The new token configuration. Use address(0) to remove the configuration so that the default
+     * configuration is used.
      */
     function setTokenConfig(
         address token,

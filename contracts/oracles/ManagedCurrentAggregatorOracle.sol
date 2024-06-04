@@ -91,12 +91,20 @@ contract ManagedCurrentAggregatorOracle is CurrentAggregatorOracle, ManagedCurre
         if (address(tokenConfig) != address(0)) {
             return tokenConfig.minimumResponses();
         }
+        tokenConfig = tokenConfigs[address(0)]; // Default config
+        if (address(tokenConfig) != address(0)) {
+            return tokenConfig.minimumResponses();
+        }
 
         return super._minimumResponses(token);
     }
 
     function _aggregationStrategy(address token) internal view virtual override returns (IAggregationStrategy) {
         IOracleAggregatorTokenConfig tokenConfig = tokenConfigs[token];
+        if (address(tokenConfig) != address(0)) {
+            return tokenConfig.aggregationStrategy();
+        }
+        tokenConfig = tokenConfigs[address(0)]; // Default config
         if (address(tokenConfig) != address(0)) {
             return tokenConfig.aggregationStrategy();
         }
@@ -109,12 +117,20 @@ contract ManagedCurrentAggregatorOracle is CurrentAggregatorOracle, ManagedCurre
         if (address(tokenConfig) != address(0)) {
             return tokenConfig.validationStrategy();
         }
+        tokenConfig = tokenConfigs[address(0)]; // Default config
+        if (address(tokenConfig) != address(0)) {
+            return tokenConfig.validationStrategy();
+        }
 
         return super._validationStrategy(token);
     }
 
     function _getOracles(address token) internal view virtual override returns (Oracle[] memory oracles) {
         IOracleAggregatorTokenConfig tokenConfig = tokenConfigs[token];
+        if (address(tokenConfig) != address(0)) {
+            return tokenConfig.oracles();
+        }
+        tokenConfig = tokenConfigs[address(0)]; // Default config
         if (address(tokenConfig) != address(0)) {
             return tokenConfig.oracles();
         }
