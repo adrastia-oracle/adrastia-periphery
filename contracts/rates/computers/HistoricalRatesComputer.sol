@@ -296,7 +296,10 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
 
     /// @inheritdoc IERC165
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IRateComputer).interfaceId || interfaceId == type(IERC165).interfaceId;
+        return
+            interfaceId == type(IRateComputer).interfaceId ||
+            interfaceId == type(IHistoricalRates).interfaceId ||
+            interfaceId == type(IERC165).interfaceId;
     }
 
     function getConfigOrDefault(address token) internal view virtual returns (Config memory) {
