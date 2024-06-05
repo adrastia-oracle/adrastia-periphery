@@ -5,6 +5,7 @@ import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 
 import "../IHistoricalRates.sol";
 import "../IRateComputer.sol";
+import "../IHistoricalRates.sol";
 
 /**
  * @title HistoricalRatesComputer
@@ -20,7 +21,7 @@ import "../IRateComputer.sol";
  * construction, if provided, or with setConfig using address(0) as the token. The default config can be disabled by
  * setting the rate provider to address(0).
  */
-abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
+abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalRates {
     struct Config {
         IHistoricalRates rateProvider;
         uint16 index;
@@ -226,6 +227,71 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
         if (config.rateProvider == IHistoricalRates(address(0))) {
             revert MissingConfig(token);
         }
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRateAt(address token, uint256 index) external view override returns (RateLibrary.Rate memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRateAt(token, index);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRates(address token, uint256 amount) external view override returns (RateLibrary.Rate[] memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRates(token, amount);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRates(
+        address token,
+        uint256 amount,
+        uint256 offset,
+        uint256 increment
+    ) external view override returns (RateLibrary.Rate[] memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRates(token, amount, offset, increment);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRatesCount(address token) external view override returns (uint256) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRatesCount(token);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRatesCapacity(address token) external view override returns (uint256) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRatesCapacity(token);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function setRatesCapacity(address token, uint256 amount) external override {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        config.rateProvider.setRatesCapacity(token, amount);
     }
 
     /// @inheritdoc IERC165
