@@ -1,5 +1,10 @@
 # Changelog
 
+## v4.7.4
+### Prudentia
+#### Computers
+- Update HistoricalRatesComputer to implement IHistoricalRates and add an auxiliary function to get the select index.
+
 ## v4.7.3
 ### Oracles
 - Update managed aggregator oracles: Add the ability to change the default config (strategies and aggregation params).

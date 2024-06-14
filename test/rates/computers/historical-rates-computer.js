@@ -1,12 +1,14 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { MAX_CONFIG } = require("../../../src/constants/rate-controller");
-const { RATE_ADMIN_ROLE } = require("../../../src/roles");
+const { RATE_ADMIN_ROLE, ADMIN_ROLE } = require("../../../src/roles");
 const { AddressZero } = ethers.constants;
 
 const DEFAULT_PERIOD = 100;
 const DEFAULT_INITIAL_BUFFER_CARDINALITY = 10;
 const DEFAULT_UPDATERS_MUST_BE_EAO = false;
+
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
 describe("HistoricalRatesComputer#constructor", function () {
     var factory;
@@ -144,7 +146,7 @@ describe("HistoricalRatesComputer#computeRate", function () {
             highAvailability: true,
         });
 
-        await expect(computer.computeRate(token)).to.be.revertedWith("RateNotAvailable");
+        await expect(computer.computeRate(token)).to.be.reverted;
     });
 
     it("Reverts if the desired rate is not available, without high availability", async function () {
@@ -799,6 +801,326 @@ describe("HistoricalRatesComputer#getConfig", function () {
     });
 });
 
+describe("HistoricalRatesComputer#computeRateIndex", function () {
+    var computerFactory;
+    var token;
+    var computer;
+    var rateController;
+
+    before(async function () {
+        computerFactory = await ethers.getContractFactory("HistoricalRatesComputerStub");
+
+        const tokenFactory = await ethers.getContractFactory("FakeERC20");
+        const tokenContract = await tokenFactory.deploy("Token", "TKN", 18);
+        await tokenContract.deployed();
+
+        token = tokenContract.address;
+    });
+
+    beforeEach(async function () {
+        const [signer] = await ethers.getSigners();
+
+        const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
+        rateController = await rateControllerFactory.deploy(
+            DEFAULT_PERIOD,
+            DEFAULT_INITIAL_BUFFER_CARDINALITY,
+            DEFAULT_UPDATERS_MUST_BE_EAO
+        );
+
+        await rateController.grantRole(RATE_ADMIN_ROLE, signer.address);
+        await rateController.setConfig(token, MAX_CONFIG);
+
+        computer = await computerFactory.deploy(AddressZero, 0, false);
+    });
+
+    it("Reverts if the token is address(0)", async function () {
+        await expect(computer.computeRateIndex(AddressZero)).to.be.revertedWith("InvalidInput");
+    });
+
+    it("Reverts if there's no config for a token", async function () {
+        await expect(computer.computeRateIndex(USDC)).to.be.revertedWith("MissingConfig");
+    });
+
+    it("Returns the index of the desired rate, without high availability, even if the rate isn't available", async function () {
+        const index = 7;
+
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: index,
+            highAvailability: false,
+        });
+
+        expect(await computer.computeRateIndex(token)).to.eq(index);
+    });
+
+    it("Returns the index of the desired rate, without high availability", async function () {
+        const index = 1;
+
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: 1,
+            highAvailability: false,
+        });
+
+        await rateController.manuallyPushRate(token, 0, 0, 2);
+
+        expect(await computer.computeRateIndex(token)).to.eq(index);
+    });
+
+    it("Returns 0 with high availability when there are no rates available", async function () {
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: 1,
+            highAvailability: true,
+        });
+
+        expect(await computer.computeRateIndex(token)).to.eq(0);
+    });
+
+    it("Returns the index of the desired rate, with high availability", async function () {
+        const index = 1;
+
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: 1,
+            highAvailability: true,
+        });
+
+        await rateController.manuallyPushRate(token, 0, 0, 2);
+
+        expect(await computer.computeRateIndex(token)).to.eq(index);
+    });
+
+    it("Returns the index of the desired rate, with high availability, ignoring older rates", async function () {
+        const index = 1;
+
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: 1,
+            highAvailability: true,
+        });
+
+        await rateController.manuallyPushRate(token, 0, 0, 10);
+
+        expect(await computer.computeRateIndex(token)).to.eq(index);
+    });
+});
+
+describe("HistoricalRatesComputer - IHistoricalRates implementation", function () {
+    let rateControllerStubFactory;
+    let historicalRatesComputerFactory;
+    let token;
+
+    let rateController;
+    let computer;
+
+    let rate0;
+    let rate1;
+
+    before(async function () {
+        rateControllerStubFactory = await ethers.getContractFactory("RateControllerStub");
+        historicalRatesComputerFactory = await ethers.getContractFactory("HistoricalRatesComputerStub");
+
+        const tokenFactory = await ethers.getContractFactory("FakeERC20");
+        const tokenContract = await tokenFactory.deploy("Token", "TKN", 18);
+        await tokenContract.deployed();
+
+        token = tokenContract.address;
+    });
+
+    beforeEach(async function () {
+        const [signer] = await ethers.getSigners();
+
+        rateController = await rateControllerStubFactory.deploy(
+            DEFAULT_PERIOD,
+            DEFAULT_INITIAL_BUFFER_CARDINALITY,
+            DEFAULT_UPDATERS_MUST_BE_EAO
+        );
+        await rateController.deployed();
+
+        computer = await historicalRatesComputerFactory.deploy(AddressZero, 0, false);
+
+        await computer.setConfig(token, {
+            rateProvider: rateController.address,
+            index: 0,
+            highAvailability: false,
+        });
+
+        await rateController.grantRole(RATE_ADMIN_ROLE, signer.address);
+        await rateController.setConfig(token, MAX_CONFIG);
+        await rateController.setConfig(USDC, MAX_CONFIG);
+
+        // Allow anyone
+
+        rate0 = ethers.constants.One;
+        rate1 = ethers.constants.Two;
+
+        await rateController.manuallyPushRate(token, rate1, rate1, 1);
+        await rateController.manuallyPushRate(token, rate0, rate0, 1);
+
+        await rateController.manuallyPushRate(USDC, rate1, rate1, 1);
+        await rateController.manuallyPushRate(USDC, rate0, rate0, 1);
+    });
+
+    describe("getRateAt", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer.getRateAt(USDC, 0)).to.be.revertedWith("MissingConfig");
+        });
+
+        it("Calls the rate controller to get the rate at the desired index", async function () {
+            expect((await computer.getRateAt(token, 0)).current).to.eq(1);
+        });
+
+        it("Calls the default rate controller to get the rate at the desired index", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            expect((await computer.getRateAt(USDC, 0)).current).to.eq(1);
+        });
+    });
+
+    describe("getRates(address,uint256)", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer["getRates(address,uint256)"](USDC, 2)).to.be.revertedWith("MissingConfig");
+        });
+
+        it("Calls the rate controller to get the rates at the desired index", async function () {
+            const rates = await computer["getRates(address,uint256)"](token, 2);
+
+            expect(rates).lengthOf(2);
+
+            expect(rates[0].current).to.eq(rate0);
+            expect(rates[1].current).to.eq(rate1);
+        });
+
+        it("Calls the default rate controller to get the rates at the desired index", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            const rates = await computer["getRates(address,uint256)"](USDC, 2);
+
+            expect(rates).lengthOf(2);
+
+            expect(rates[0].current).to.eq(rate0);
+            expect(rates[1].current).to.eq(rate1);
+        });
+    });
+
+    describe("getRates(address,uint256,uint256,uint256)", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer["getRates(address,uint256,uint256,uint256)"](USDC, 2, 0, 1)).to.be.revertedWith(
+                "MissingConfig"
+            );
+        });
+
+        it("Calls the rate controller to get the rates at the desired index", async function () {
+            const rates = await computer["getRates(address,uint256,uint256,uint256)"](token, 2, 0, 1);
+
+            expect(rates).lengthOf(2);
+
+            expect(rates[0].current).to.eq(rate0);
+            expect(rates[1].current).to.eq(rate1);
+        });
+
+        it("Calls the default rate controller to get the rates at the desired index", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            const rates = await computer["getRates(address,uint256,uint256,uint256)"](USDC, 2, 0, 1);
+
+            expect(rates).lengthOf(2);
+
+            expect(rates[0].current).to.eq(rate0);
+            expect(rates[1].current).to.eq(rate1);
+        });
+    });
+
+    describe("getRatesCount", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer.getRatesCount(USDC)).to.be.revertedWith("MissingConfig");
+        });
+
+        it("Calls the rate controller to get the rates count", async function () {
+            expect(await computer.getRatesCount(token)).to.eq(2);
+        });
+
+        it("Calls the default rate controller to get the rates count", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            expect(await computer.getRatesCount(USDC)).to.eq(2);
+        });
+    });
+
+    describe("getRatesCapacity", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer.getRatesCapacity(USDC)).to.be.revertedWith("MissingConfig");
+        });
+
+        it("Calls the rate controller to get the rates capacity", async function () {
+            expect(await computer.getRatesCapacity(token)).to.eq(DEFAULT_INITIAL_BUFFER_CARDINALITY);
+        });
+
+        it("Calls the default rate controller to get the rates capacity", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            expect(await computer.getRatesCapacity(USDC)).to.eq(DEFAULT_INITIAL_BUFFER_CARDINALITY);
+        });
+    });
+
+    describe("setRatesCapacity", function () {
+        it("Reverts if there's no config for the token", async function () {
+            await expect(computer.setRatesCapacity(USDC, 100)).to.be.revertedWith("MissingConfig");
+        });
+
+        it("Calls the rate controller to set the rates capacity", async function () {
+            // Grant the computer the admin role to set the rates capacity
+            await rateController.grantRole(ADMIN_ROLE, computer.address);
+
+            await computer.setRatesCapacity(token, 100);
+
+            expect(await computer.getRatesCapacity(token)).to.eq(100);
+        });
+
+        it("Calls the default rate controller to set the rates capacity", async function () {
+            // Set the default
+            await computer.setConfig(AddressZero, {
+                rateProvider: rateController.address,
+                index: 0,
+                highAvailability: false,
+            });
+
+            // Grant the computer the admin role to set the rates capacity
+            await rateController.grantRole(ADMIN_ROLE, computer.address);
+
+            await computer.setRatesCapacity(USDC, 100);
+
+            expect(await computer.getRatesCapacity(USDC)).to.eq(100);
+        });
+    });
+});
+
 describe("HistoricalRatesComputer#supportsInterface", function () {
     var computerFactory;
     var computer;
@@ -822,6 +1144,11 @@ describe("HistoricalRatesComputer#supportsInterface", function () {
 
     it("Should support IRateComputer", async () => {
         const interfaceId = await interfaceIds.iRateComputer();
+        expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IHistoricalRates", async () => {
+        const interfaceId = await interfaceIds.iHistoricalRates();
         expect(await computer["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
 });

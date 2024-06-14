@@ -5,6 +5,7 @@ import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 
 import "../IHistoricalRates.sol";
 import "../IRateComputer.sol";
+import "../IHistoricalRates.sol";
 
 /**
  * @title HistoricalRatesComputer
@@ -20,7 +21,7 @@ import "../IRateComputer.sol";
  * construction, if provided, or with setConfig using address(0) as the token. The default config can be disabled by
  * setting the rate provider to address(0).
  */
-abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
+abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalRates {
     struct Config {
         IHistoricalRates rateProvider;
         uint16 index;
@@ -73,12 +74,6 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
     error AlreadyUsingDefaultConfig(address token);
 
     /**
-     * @notice An error thrown when a rate is not available for a token.
-     * @param token The token that the rate is not available for.
-     */
-    error RateNotAvailable(address token);
-
-    /**
      * @notice Constructs a new HistoricalRatesComputer instance.
      * @param defaultRateProvider The default rate provider. Use address(0) to disable the default config.
      * @param defaultIndex The default index, with 0 being the first index (newest rate).
@@ -98,37 +93,25 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
     }
 
     /**
+     * @notice Computes the rate index to be used for a token. Note that it's not guaranteed that the rate at the index
+     * is available.
+     *
+     * @param token The token address.
+     *
+     * @return index The index to use.
+     */
+    function computeRateIndex(address token) external view virtual returns (uint16 index) {
+        (index, ) = _computeRateIndex(token);
+    }
+
+    /**
      * @notice Computes the rate for a token using the rate provider and index specified in the config. If the config
      * has not been set for the token, the default config is used if set. If the rate is not available, the computation
      * reverts.
      * @param token The token address.
      */
     function computeRate(address token) external view virtual override returns (uint64) {
-        if (token == address(0)) {
-            revert InvalidInput(token);
-        }
-
-        Config memory config = getConfigOrDefault(token);
-        if (config.rateProvider == IHistoricalRates(address(0))) {
-            revert MissingConfig(token);
-        }
-
-        if (!config.highAvailability) {
-            // We want the rate at the specific index. This will revert if the rate is not available.
-            return config.rateProvider.getRateAt(token, config.index).current;
-        }
-
-        uint256 ratesCount = config.rateProvider.getRatesCount(token);
-        if (ratesCount == 0) {
-            // No rates available
-            revert RateNotAvailable(token);
-        }
-
-        uint256 useIndex = config.index;
-        if (useIndex >= ratesCount) {
-            // The rate at the specific index is not available. Use the last available rate.
-            useIndex = ratesCount - 1;
-        }
+        (uint16 useIndex, Config memory config) = _computeRateIndex(token);
 
         return config.rateProvider.getRateAt(token, useIndex).current;
     }
@@ -228,9 +211,77 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
         }
     }
 
+    /// @inheritdoc IHistoricalRates
+    function getRateAt(address token, uint256 index) external view override returns (RateLibrary.Rate memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRateAt(token, index);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRates(address token, uint256 amount) external view override returns (RateLibrary.Rate[] memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRates(token, amount);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRates(
+        address token,
+        uint256 amount,
+        uint256 offset,
+        uint256 increment
+    ) external view override returns (RateLibrary.Rate[] memory) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRates(token, amount, offset, increment);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRatesCount(address token) external view override returns (uint256) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRatesCount(token);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function getRatesCapacity(address token) external view override returns (uint256) {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        return config.rateProvider.getRatesCapacity(token);
+    }
+
+    /// @inheritdoc IHistoricalRates
+    function setRatesCapacity(address token, uint256 amount) external override {
+        Config memory config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        config.rateProvider.setRatesCapacity(token, amount);
+    }
+
     /// @inheritdoc IERC165
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IRateComputer).interfaceId || interfaceId == type(IERC165).interfaceId;
+        return
+            interfaceId == type(IRateComputer).interfaceId ||
+            interfaceId == type(IHistoricalRates).interfaceId ||
+            interfaceId == type(IERC165).interfaceId;
     }
 
     function getConfigOrDefault(address token) internal view virtual returns (Config memory) {
@@ -240,6 +291,37 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer {
         }
 
         return config;
+    }
+
+    function _computeRateIndex(address token) internal view virtual returns (uint16, Config memory config) {
+        if (token == address(0)) {
+            revert InvalidInput(token);
+        }
+
+        config = getConfigOrDefault(token);
+        if (config.rateProvider == IHistoricalRates(address(0))) {
+            revert MissingConfig(token);
+        }
+
+        if (!config.highAvailability) {
+            // We want the rate at the specific index. Return that index even if it's not available.
+            return (config.index, config);
+        }
+
+        uint256 ratesCount = config.rateProvider.getRatesCount(token);
+        if (ratesCount == 0) {
+            // No rates available. To conform with the logic for non-HA, we return 0 as it will likely be the index used
+            // once a rate is available.
+            return (0, config);
+        }
+
+        uint256 useIndex = config.index;
+        if (useIndex >= ratesCount) {
+            // The rate at the specific index is not available. Use the last available rate.
+            useIndex = ratesCount - 1;
+        }
+
+        return (uint16(useIndex), config);
     }
 
     /**
