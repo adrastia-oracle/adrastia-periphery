@@ -3,7 +3,7 @@
 ## v4.8.0
 ### Dependencies
 - Upgrade adrastia-core to v4.8.0.
-- 
+
 ### Accumulators
 - Add ManagedAdrastiaUtilizationAndErrorAccumulator: An AdrastiaUtilizationAndErrorAccumulator that implements standard management functions.
 
