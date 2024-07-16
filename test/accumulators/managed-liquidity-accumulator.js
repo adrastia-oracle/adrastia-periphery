@@ -27,8 +27,8 @@ const RATE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("RATE_AD
 const UPDATE_PAUSE_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATE_PAUSE_ADMIN_ROLE"));
 const TARGET_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("TARGET_ADMIN_ROLE"));
 
-const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
-const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const BAL = "0xba100000625a3754423978a60c9317c58a424e3D";
 
 const MIN_UPDATE_DELAY = 1;
@@ -1103,6 +1103,39 @@ async function deployAlocUtilizationAndErrorAccumulator() {
     );
 }
 
+async function deployAdrastiaUtilizationAndErrorAccumulator() {
+    const mockOracleFactory = await ethers.getContractFactory("MockOracle");
+    const mockOracle = await mockOracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS);
+    await mockOracle.deployed();
+
+    // Set an observation for USDC
+    const totalBorrow = ethers.utils.parseUnits("90", DEFAULT_DECIMALS);
+    const totalSupply = ethers.utils.parseUnits("100", DEFAULT_DECIMALS);
+
+    await mockOracle.stubSetObservationNow(USDC, 0, totalBorrow, totalSupply);
+
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    // Deploy accumulator
+    const accumulatorFactory = await ethers.getContractFactory("ManagedAdrastiaUtilizationAndErrorAccumulator");
+    return await accumulatorFactory.deploy(
+        mockOracle.address,
+        true,
+        DEFAULT_UTILIZATION_TARGET,
+        averagingStrategy.address,
+        DEFAULT_UTILIZATION_DECIMALS,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function deployTrueFiAloc() {
     const alocFactory = await ethers.getContractFactory("AlocStub");
     const aloc = await alocFactory.deploy();
@@ -1301,3 +1334,17 @@ describeLiquidityAccumulatorTests(
 describeRefreshTokenMappingsTests("ManagedCompoundV2SBAccumulator", deployCompoundV2SBAccumulator);
 describeRefreshTokenMappingsTests("ManagedIonicSBAccumulator", deployIonicSBAccumulator);
 describeRefreshTokenMappingsTests("ManagedVenusIsolatedSBAccumulator", deployVenusIsolatedSBAccumulator);
+
+describeLiquidityAccumulatorTests(
+    "ManagedAdrastiaUtilizationAndErrorAccumulator",
+    deployAdrastiaUtilizationAndErrorAccumulator,
+    generateDexBasedUpdateData,
+    true,
+    /*
+    Smart contracts can update the accumulator because it reads from a secured oracle and thus isn't susceptible to
+    manipulation.
+    */
+    true,
+    () => USDC,
+    describeUtilizationAndErrorAccumulatorTests
+);
