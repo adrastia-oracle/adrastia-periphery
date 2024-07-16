@@ -1,5 +1,9 @@
 # Changelog
 
+## v4.8.0
+### Accumulators
+- Add ManagedAdrastiaUtilizationAndErrorAccumulator: An AdrastiaUtilizationAndErrorAccumulator that implements standard management functions.
+
 ## v4.7.4
 ### Prudentia
 #### Computers
