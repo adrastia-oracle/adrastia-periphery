@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.8.1
+### Prudentia
+#### Controllers
+- Adjust role hierarchy to make UPDATER_ADMIN self-managed.
+- Add IonicPidController: A PidController that accrues interest on Ionic tokens.
+
 ## v4.8.0
 ### Dependencies
 - Upgrade adrastia-core to v4.8.0.
