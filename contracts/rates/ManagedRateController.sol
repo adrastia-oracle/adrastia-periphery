@@ -91,8 +91,10 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
         // Set admin of UPDATE_PAUSE_ADMIN as ADMIN
         _setRoleAdmin(Roles.UPDATE_PAUSE_ADMIN, Roles.ADMIN);
 
-        // Set admin of UPDATER_ADMIN as ADMIN
-        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.ADMIN);
+        // Set msg.sender as updater admin
+        _setupRole(Roles.UPDATER_ADMIN, msg.sender);
+        // Set admin of UPDATER_ADMIN as UPDATER_ADMIN
+        _setRoleAdmin(Roles.UPDATER_ADMIN, Roles.UPDATER_ADMIN);
 
         // Set admin of ORACLE_UPDATER as UPDATER_ADMIN
         _setRoleAdmin(Roles.ORACLE_UPDATER, Roles.UPDATER_ADMIN);
@@ -100,8 +102,8 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
         // Hierarchy:
         // ADMIN
         //   - RATE_ADMIN
-        //   - UPDATER_ADMIN
-        //     - ORACLE_UPDATER
         //   - UPDATE_PAUSE_ADMIN
+        // UPDATER_ADMIN
+        //   - ORACLE_UPDATER
     }
 }
