@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import {IIonicCToken} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/ionic/IonicSBAccumulator.sol";
-import {ICToken} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/compound/CompoundV2SBAccumulator.sol";
+import {ICToken} from "../../../vendor/ionic/ICToken.sol";
+import {IRateComputer} from "../../../rates/IRateComputer.sol";
 
-contract IonicCTokenStub is IIonicCToken, ICToken {
+contract IonicCTokenStub is ICToken {
     uint256 public _totalUnderlyingSupplied;
     address public _underlying;
 
@@ -14,6 +14,10 @@ contract IonicCTokenStub is IIonicCToken, ICToken {
     uint256 public _badDebt;
 
     bool internal _isCEther;
+
+    uint256 internal _accrueInterestReturnCode;
+
+    event InterestAccrued(uint64 rate);
 
     constructor(address underlying_) {
         _underlying = underlying_;
@@ -43,6 +47,10 @@ contract IonicCTokenStub is IIonicCToken, ICToken {
         _badDebt = badDebt_;
     }
 
+    function stubSetAccrueInterestReturnCode(uint256 accrueInterestReturnCode_) external {
+        _accrueInterestReturnCode = accrueInterestReturnCode_;
+    }
+
     function getTotalUnderlyingSupplied() external view override returns (uint256) {
         return _totalUnderlyingSupplied;
     }
@@ -69,5 +77,15 @@ contract IonicCTokenStub is IIonicCToken, ICToken {
 
     function badDebt() external view returns (uint256) {
         return _badDebt;
+    }
+
+    function accrueInterest() external override returns (uint256) {
+        // Extract the rate from the message sender
+        uint64 rate = IRateComputer(msg.sender).computeRate(_underlying);
+
+        // Emit an event
+        emit InterestAccrued(rate);
+
+        return _accrueInterestReturnCode;
     }
 }

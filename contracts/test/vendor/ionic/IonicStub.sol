@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import {IIonicComptroller} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/ionic/IonicSBAccumulator.sol";
-import {IComptroller} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/compound/CompoundV2SBAccumulator.sol";
-import {ICToken} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/compound/CompoundV2SBAccumulator.sol";
+import {IComptroller} from "../../../vendor/ionic/IComptroller.sol";
+import {ICToken} from "../../../vendor/ionic/ICToken.sol";
 
-contract IonicStub is IIonicComptroller, IComptroller {
+contract IonicStub is IComptroller {
     mapping(address => address) public _cTokensByUnderlying;
     address[] public _allMarkets;
 
