@@ -33,6 +33,9 @@ const USDC = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 const wstETH = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
 const BAL = "0xba100000625a3754423978a60c9317c58a424e3D";
 
+const ERC4626_ADAPTERFI_RSWETH = "0xe6cD0b7800cA3e297b8fBd7697Df9E9F6A27f0F5";
+const RSWETH = "0xFAe103DC9cf190eD75350761e95403b7b8aFa6c0";
+
 const SUPPLY_RATE_TOKEN = "0x0000000000000000000000000000000000000010";
 
 const MIN_UPDATE_DELAY = 1;
@@ -362,6 +365,30 @@ async function deployAdrastiaPriceAccumulator() {
     );
 }
 
+async function deploySAVPriceAccumulator() {
+    const oracleFactory = await ethers.getContractFactory("MockOracle");
+    const oracle = await oracleFactory.deploy(WETH, 0);
+    await oracle.deployed();
+
+    // Deploy the averaging strategy
+    const averagingStrategyFactory = await ethers.getContractFactory(
+        ARITHMETIC_AVERAGING_ABI,
+        ARITHMETIC_AVERAGING_BYTECODE
+    );
+    const averagingStrategy = await averagingStrategyFactory.deploy();
+    await averagingStrategy.deployed();
+
+    const accumulatorFactory = await ethers.getContractFactory("ManagedSAVPriceAccumulator");
+    return await accumulatorFactory.deploy(
+        oracle.address,
+        averagingStrategy.address,
+        WETH,
+        TWO_PERCENT_CHANGE,
+        MIN_UPDATE_DELAY,
+        MAX_UPDATE_DELAY
+    );
+}
+
 async function deployOffchainPriceAccumulator() {
     // Deploy the averaging strategy
     const averagingStrategyFactory = await ethers.getContractFactory(
@@ -640,6 +667,24 @@ async function generateAdrastiaAccumulatorUpdateData(accumulator, token) {
     return updateData;
 }
 
+async function generateSAVPriceAccumulatorUpdateData(accumulator, token) {
+    // Get the oracle as a MockOracle contract
+    const oracle = await accumulator.underlyingAssetOracle();
+    const oracleFactory = await ethers.getContractFactory("MockOracle");
+    const mockOracle = oracleFactory.attach(oracle);
+    // Set an observation so that the accumulator can update
+    await mockOracle.stubSetObservationNow(RSWETH, 2, 3, 4);
+
+    const price = await accumulator["consultPrice(address,uint256)"](token, 0);
+
+    const updateData = ethers.utils.defaultAbiCoder.encode(
+        ["address", "uint", "uint"],
+        [token, price, await currentBlockTimestamp()]
+    );
+
+    return updateData;
+}
+
 describePriceAccumulatorTests(
     "ManagedAdrastiaPriceAccumulator",
     deployAdrastiaPriceAccumulator,
@@ -654,6 +699,23 @@ describePriceAccumulatorTests(
     */
     true,
     WETH
+);
+
+describePriceAccumulatorTests(
+    "ManagedSAVPriceAccumulator",
+    deploySAVPriceAccumulator,
+    generateSAVPriceAccumulatorUpdateData,
+    /*
+    The role can be open because updaters don't have full control over the data that the accumulator stores. There are
+    cases where it would be beneficial to allow anyone to update the accumulator.
+    */
+    true,
+    /*
+    Some vaults may be susceptible to reentrancy attacks or flash loan attacks, so we ensure that smart contracts can't
+    update the accumulator.
+    */
+    false,
+    ERC4626_ADAPTERFI_RSWETH
 );
 
 describePriceAccumulatorTests(
