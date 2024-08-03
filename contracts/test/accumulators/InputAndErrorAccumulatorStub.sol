@@ -2,11 +2,8 @@
 pragma solidity =0.8.13;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/ILiquidityOracle.sol";
-import "@adrastia-oracle/adrastia-core/contracts/libraries/SafeCastExt.sol";
 
 contract InputAndErrorAccumulatorStub is ILiquidityOracle {
-    using SafeCastExt for uint256;
-
     struct InputAndError {
         uint112 input;
         uint112 target;

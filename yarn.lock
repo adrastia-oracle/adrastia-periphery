@@ -2,12 +2,12 @@
 # yarn lockfile v1
 
 
-"@adrastia-oracle/adrastia-core@4.8.0":
-  version "4.8.0"
-  resolved "https://registry.yarnpkg.com/@adrastia-oracle/adrastia-core/-/adrastia-core-4.8.0.tgz#3eb9f7b93ada156ea2be9439e2e41f5ecf07cdb4"
-  integrity sha512-iGAgKwLzJE+PE/TDtXRUQxiyF7zqdgtCv5QZj03PxORiLuoQbL0Q9rh8awhrXm6MoOJ2AVrn4T8X7/KFtx1/GQ==
+"@adrastia-oracle/adrastia-core@4.9.0":
+  version "4.9.0"
+  resolved "https://registry.yarnpkg.com/@adrastia-oracle/adrastia-core/-/adrastia-core-4.9.0.tgz#26723a35d1061ec6da3a9444f7a06060dc71ea12"
+  integrity sha512-kPKd10W2IfmCXsr+ym8bzQWAcro7NeW8Bj3I8AqwWMZ9YTWR+s3Au6NFZymwf+osOROJma1bz23Lqv8L92RZxw==
   dependencies:
-    "@openzeppelin-v4/contracts" "npm:@openzeppelin/contracts@4.6.0"
+    "@openzeppelin-v4/contracts" "npm:@openzeppelin/contracts@4.9.6"
     "@prb/math" "^2.5.0"
     "@uniswap/v2-core" "^1.0.1"
     "@uniswap/v3-core" "^1.0.1"
@@ -893,10 +893,10 @@
   resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-3.4.2.tgz#d81f786fda2871d1eb8a8c5a73e455753ba53527"
   integrity sha512-z0zMCjyhhp4y7XKAcDAi3Vgms4T2PstwBdahiO0+9NaGICQKjynK3wduSRplTgk4LXmoO1yfDGO5RbjKYxtuxA==
 
-"@openzeppelin-v4/contracts@npm:@openzeppelin/contracts@4.6.0":
-  version "4.6.0"
-  resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.6.0.tgz#c91cf64bc27f573836dba4122758b4743418c1b3"
-  integrity sha512-8vi4d50NNya/bQqCmaVzvHNmwHvS0OBKb7HNtuNwEE3scXWrP31fKQoGxNMT+KbzmrNZzatE3QK5p2gFONI/hg==
+"@openzeppelin-v4/contracts@npm:@openzeppelin/contracts@4.9.6":
+  version "4.9.6"
+  resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.9.6.tgz#2a880a24eb19b4f8b25adc2a5095f2aa27f39677"
+  integrity sha512-xSmezSupL+y9VkHZJGDoCBpmnB2ogM13ccaYDWqJTfS3dbuHkgjuwDFUmaFauBCboQMGB/S5UqUl2y54X99BmA==
 
 "@prb/math@^2.5.0":
   version "2.5.0"

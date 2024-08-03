@@ -30,9 +30,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@adrastia-oracle/adrastia-core": "4.8.0",
+    "@adrastia-oracle/adrastia-core": "4.9.0",
     "@openzeppelin-v3/contracts": "npm:@openzeppelin/contracts@3.4.2",
-    "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.6.0"
+    "@openzeppelin-v4/contracts": "npm:@openzeppelin/contracts@4.9.6"
   },
   "devDependencies": {
     "@atixlabs/hardhat-time-n-mine": "^0.0.5",

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/balancer/BalancerV2StablePriceAccumulator.sol";
+import {BalancerV2StablePriceAccumulator, IAveragingStrategy, PriceAccumulator} from "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/balancer/BalancerV2StablePriceAccumulator.sol";
 
-import "../../AccumulatorConfig.sol";
+import {AccumulatorConfig, AccessControlEnumerable, Roles} from "../../AccumulatorConfig.sol";
 
 contract ManagedBalancerV2StablePriceAccumulator is BalancerV2StablePriceAccumulator, AccumulatorConfig {
     constructor(
