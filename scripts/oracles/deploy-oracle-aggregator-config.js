@@ -26,6 +26,9 @@ const oracles = {
         "pyth-eth-usd": "0x4e22Ea0CB77B5aE0085551EF0fC5026C82c07e1D",
         "median-dao-usd": "0x41F14ed7e7E8034a5EB4EC72BdE3C94F91ECfa10",
         "liquidation-oracle-usd": "0x9EdaB5295260AC27c13564E4827b73408C132270",
+        "chainlink-ezeth-eth": "0x33eAdF30fBf8f91759E1A15571Fa157B2cCb7a12", // 4h TWAP, 1 granularity
+        "chainlink-rseth-eth": "0x400f109C7FBD51A84B388CeAa8497Cdee659FEF4", // 4h TWAP, 1 granularity
+        "chainlink-weeth-eth": "0xe781741Cdb6e1335163946ac011C88de67963fE9", // 4h TWAP, 1 granularity
     },
     optimism: {
         "chainlink-eth-usd": "0x00922ad039612B8b2DD9a8b10e6a834cec74B9DC",
@@ -42,19 +45,19 @@ const oracles = {
 };
 
 async function main() {
-    const chain = "optimism";
+    const chain = "arbitrum";
 
     // The address of the aggregation strategy.
-    const aggregationStrategy = aggregationStrategies[chain].maximum;
+    const aggregationStrategy = aggregationStrategies[chain].median;
 
     // The address of the validation strategy. Can be the zero address to skip validation.
     const validationStrategy = ethers.constants.AddressZero;
 
     // The minimum number of underlying oracle responses required to perform an update.
-    const minimumResponses = 2;
+    const minimumResponses = 1;
 
     // An array of the underlying oracle addresses.
-    const oracles_ = [oracles[chain]["median-dao-usd"], oracles[chain]["liquidation-oracle-usd"]];
+    const oracles_ = [oracles[chain]["chainlink-weeth-eth"]];
 
     const factory = await ethers.getContractFactory("OracleAggregatorTokenConfig");
     const config = await factory.deploy(aggregationStrategy, validationStrategy, minimumResponses, oracles_);
