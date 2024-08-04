@@ -2,6 +2,7 @@
 
 ## v4.9.0
 ### Dependencies
+- Upgrade adrastia-core to v4.9.0.
 - Upgrade OpenZeppelin Contracts to v4.9.6
 
 ### Accumulators
