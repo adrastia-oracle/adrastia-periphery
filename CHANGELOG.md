@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.9.0
+### Dependencies
+- Upgrade OpenZeppelin Contracts to v4.9.6
+
+### Accumulators
+- Add ManagedSAVPriceAccumulator: A managed accumulator that tracks ERC4626 vault share prices.
+
 ## v4.8.1
 ### Prudentia
 #### Controllers
