@@ -198,6 +198,12 @@ abstract contract PidController is RateController {
     }
 
     function _manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) internal virtual override {
+        if (pidData[token].config.kPDenominator == 0) {
+            // We're missing a PID config, so we can't manually push a rate.
+            // We require the PID config to be set so that we can protect against large jumps in the output rate.
+            revert MissingPidConfig(token);
+        }
+
         super._manuallyPushRate(token, target, current, amount);
 
         // Reinitialize the PID controller to avoid a large jump in the output rate with the next update.
@@ -249,7 +255,8 @@ abstract contract PidController is RateController {
     /// @dev Initializes the PID controller state for a given token.
     /// @param token The address of the token for which to initialize the PID controller.
     function initializePid(address token) internal virtual {
-        PidState storage pidState = pidData[token].state;
+        PidData storage pid = pidData[token];
+        PidState storage pidState = pid.state;
         BufferMetadata storage meta = rateBufferMetadata[token];
 
         (int256 input, int256 err) = getSignedInputAndError(token);
@@ -259,7 +266,23 @@ abstract contract PidController is RateController {
         if (meta.size > 0) {
             // We have a past rate, so set the iTerm to it to avoid a large jump.
             // We don't need to clamp this because the last rate was already clamped.
-            pidState.iTerm = int256(uint256(getLatestRate(token).current));
+
+            // Calculate the pTerm, if the PID config is set
+            PidConfig memory pidConfig = pid.config;
+            int256 pTerm = pidConfig.kPDenominator == 0
+                ? int256(0)
+                : calculatePTerm(
+                    input,
+                    err,
+                    pidConfig.kPNumerator,
+                    pidConfig.kPDenominator,
+                    pidConfig.proportionalOnMeasurement
+                );
+
+            // Subtract the pTerm from the output rate to get the iTerm. We subtract the pTerm to prevent a large jump
+            // in the output rate with the next update (as something close to it will likely be added to the iTerm with
+            // the next update to calculate the next rate).
+            pidState.iTerm = int256(uint256(getLatestRate(token).current)) - pTerm;
         }
     }
 
@@ -306,6 +329,20 @@ abstract contract PidController is RateController {
         return int256(uint256(clamped));
     }
 
+    function calculatePTerm(
+        int256 input,
+        int256 err,
+        int32 kPNumerator,
+        uint32 kPDenominator,
+        bool proportionalOnMeasurement
+    ) internal pure virtual returns (int256) {
+        if (proportionalOnMeasurement) {
+            return -(int256(kPNumerator) * input) / int256(uint256(kPDenominator));
+        } else {
+            return (int256(kPNumerator) * err) / int256(uint256(kPDenominator));
+        }
+    }
+
     function computeNextPidRate(
         address token
     ) internal view virtual returns (uint64 target, uint64 current, PidState memory newPidState) {
@@ -336,12 +373,13 @@ abstract contract PidController is RateController {
         (int256 input, int256 err) = getSignedInputAndError(token);
 
         // Compute proportional
-        int256 pTerm;
-        if (pidConfig.proportionalOnMeasurement) {
-            pTerm = -(int256(pidConfig.kPNumerator) * input) / int256(uint256(pidConfig.kPDenominator));
-        } else {
-            pTerm = (int256(pidConfig.kPNumerator) * err) / int256(uint256(pidConfig.kPDenominator));
-        }
+        int256 pTerm = calculatePTerm(
+            input,
+            err,
+            pidConfig.kPNumerator,
+            pidConfig.kPDenominator,
+            pidConfig.proportionalOnMeasurement
+        );
 
         // Compute integral
         int256 previousITerm = pidState.iTerm;

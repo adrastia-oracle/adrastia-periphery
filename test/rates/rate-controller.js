@@ -3310,6 +3310,39 @@ function describePidControllerUpdateTests(deployFunc, getController) {
         expect(currentRate).to.equal(startingRate);
     });
 
+    it("Manually pushing a rate does not result in kickback with the next update", async function () {
+        const controller = await getController();
+
+        const period = await controller.period();
+
+        // Set input and target to the same 90% (using 8 decimals of input precision)
+        const targetRate = ethers.utils.parseUnits("0.90", 8);
+        const inputRate = ethers.utils.parseUnits("0.10", 8);
+        await controller.setTarget(GRT, targetRate);
+        await controller.setInput(GRT, inputRate);
+
+        const startingRate = ethers.utils.parseUnits("0.234", 8);
+        await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
+
+        // Advance the block time by the period
+        await timeAndMine.increaseTime(period.toNumber());
+
+        // Update the rate
+        await controller.update(ethers.utils.defaultAbiCoder.encode(["address"], [GRT]));
+
+        // Get the current rate
+        const currentRate = await controller.computeRate(GRT);
+
+        // Calculate expected rate: The proportional component should not kick
+        const error = targetRate.sub(inputRate);
+        const expectedChange = error.mul(DEFAULT_PID_CONFIG.kINumerator).div(DEFAULT_PID_CONFIG.kIDenominator);
+        const expectedRate = startingRate.add(expectedChange);
+
+        // Confirm that the new rate equals the manually pushed rate
+        // If the PID controller is not reinitialized, the rate will be the same as rate before the manually pushed rate (0)
+        expect(currentRate).to.equal(expectedRate);
+    });
+
     it("It works with a transformer", async function () {
         const deployment1 = await deployFunc();
         const deployment2 = await deployFunc();
@@ -5660,6 +5693,9 @@ function describeTests(
 
             // Set config for GRT
             await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+            // Set PID config for GRT
+            await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
         });
 
         it("Should revert if the caller does not have the ADMIN role", async function () {
@@ -5690,11 +5726,17 @@ function describeTests(
             const rate = ethers.utils.parseUnits("0.1234", 18);
 
             await expect(controller.manuallyPushRate(USDC, rate, rate, 1))
-                .to.be.revertedWith("MissingConfig")
+                .to.be.revertedWith("MissingPidConfig")
+                .withArgs(USDC);
+
+            // Set config, and try again. We're still missing PID config
+            await controller.setConfig(USDC, DEFAULT_CONFIG);
+            await expect(controller.manuallyPushRate(USDC, rate, rate, 1))
+                .to.be.revertedWith("MissingPidConfig")
                 .withArgs(USDC);
 
             // Sanity check that it works if we set a config
-            await controller.setConfig(USDC, DEFAULT_CONFIG);
+            await controller.setPidConfig(USDC, DEFAULT_PID_CONFIG);
             await expect(controller.manuallyPushRate(USDC, rate, rate, 1)).to.not.be.reverted;
         });
 
