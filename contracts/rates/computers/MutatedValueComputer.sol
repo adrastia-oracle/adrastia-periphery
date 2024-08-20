@@ -127,11 +127,11 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
     }
 
     /**
-     * @notice Returns the mutated value for a given token.
+     * @notice Returns the raw value for a given token which will later be mutated.
      * @dev This is an internal virtual function that must be implemented by the derived contract to provide the
-     *   specific logic for extracting the mutated value for the token.
-     * @param token The token address for which the mutated value should be computed.
-     * @return The mutated value for the given token.
+     *   specific logic for extracting the raw value for the token.
+     * @param token The token address for which the raw value should be computed.
+     * @return The raw value for the given token.
      */
     function getValue(address token) internal view virtual returns (uint256);
 

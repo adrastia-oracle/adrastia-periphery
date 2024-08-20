@@ -192,13 +192,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         checkSetUpdatesPaused();
 
         BufferMetadata storage meta = rateBufferMetadata[token];
-        if (meta.maxSize == 0) {
-            // Uninitialized buffer means that the rate config is missing
-            // It doesn't make sense to pause updates if they can't occur in the first place
-            revert MissingConfig(token);
-        }
 
-        uint16 flags = rateBufferMetadata[token].flags;
+        uint16 flags = meta.flags;
 
         bool currentlyPaused = (flags & PAUSE_FLAG_MASK) != 0;
         if (currentlyPaused != paused) {
@@ -208,7 +203,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                 flags &= ~PAUSE_FLAG_MASK;
             }
 
-            rateBufferMetadata[token].flags = flags;
+            meta.flags = flags;
 
             emit PauseStatusChanged(token, paused);
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.9.1
+### Prudentia
+#### Controllers
+- Allow pausing updates for a token without a configuration: This allows us to manually push rates (which requires a config) before any updates occur.
+- Add another kickback prevention to PidController#manuallyPushRate and PidController unpausing.
+
 ## v4.9.0
 ### Dependencies
 - Upgrade adrastia-core to v4.9.0.
