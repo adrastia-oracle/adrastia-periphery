@@ -4161,6 +4161,7 @@ function createDescribeCanUpdateTests(isPidController) {
 function describeTests(
     contractName,
     deployFunc,
+    setDefaultConfigFunc,
     describeComputeRateTests,
     describeNeedsUpdateTests,
     describeUpdateTests,
@@ -4283,12 +4284,16 @@ function describeTests(
             await expect(controller.connect(signer).setUpdatesPaused(GRT, true)).to.not.be.reverted;
         });
 
-        it("Should revert if the token is missing a config", async function () {
-            await expect(controller.setUpdatesPaused(USDC, true)).to.be.revertedWith("MissingConfig").withArgs(USDC);
+        it("Should not revert if the token is missing a config", async function () {
+            await expect(controller.setUpdatesPaused(USDC, true))
+                .to.emit(controller, "PauseStatusChanged")
+                .withArgs(USDC, true);
 
-            // Sanity check that we can successfully call the function if we have the config
-            await controller.setConfig(USDC, DEFAULT_CONFIG);
-            await expect(controller.setUpdatesPaused(USDC, true)).to.not.be.reverted;
+            // Sanity check that the changes were made
+            expect(await controller.areUpdatesPaused(USDC)).to.equal(true);
+
+            // Sanity check that USDC is missing a config
+            await expect(controller.getConfig(USDC)).to.be.revertedWith("MissingConfig").withArgs(USDC);
         });
 
         it("Should emit an event when the updates are paused", async function () {
@@ -5692,10 +5697,7 @@ function describeTests(
             await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
 
             // Set config for GRT
-            await controller.setConfig(GRT, DEFAULT_CONFIG);
-
-            // Set PID config for GRT
-            await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+            await setDefaultConfigFunc(controller, GRT);
         });
 
         it("Should revert if the caller does not have the ADMIN role", async function () {
@@ -5726,17 +5728,11 @@ function describeTests(
             const rate = ethers.utils.parseUnits("0.1234", 18);
 
             await expect(controller.manuallyPushRate(USDC, rate, rate, 1))
-                .to.be.revertedWith("MissingPidConfig")
-                .withArgs(USDC);
-
-            // Set config, and try again. We're still missing PID config
-            await controller.setConfig(USDC, DEFAULT_CONFIG);
-            await expect(controller.manuallyPushRate(USDC, rate, rate, 1))
-                .to.be.revertedWith("MissingPidConfig")
+                .to.be.revertedWith(/MissingPidConfig|MissingConfig/)
                 .withArgs(USDC);
 
             // Sanity check that it works if we set a config
-            await controller.setPidConfig(USDC, DEFAULT_PID_CONFIG);
+            await setDefaultConfigFunc(controller, USDC);
             await expect(controller.manuallyPushRate(USDC, rate, rate, 1)).to.not.be.reverted;
         });
 
@@ -5853,9 +5849,19 @@ async function initializePidController(controller) {
     await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
 }
 
+async function setDefaultStandardConfig(controller, token) {
+    await controller.setConfig(token, DEFAULT_CONFIG);
+}
+
+async function setDefaultPidConfig(controller, token) {
+    await controller.setConfig(token, DEFAULT_CONFIG);
+    await controller.setPidConfig(token, DEFAULT_PID_CONFIG);
+}
+
 describeTests(
     "RateController",
     deployStandardController,
+    setDefaultStandardConfig,
     describeStandardControllerComputeRateTests,
     createDescribeStandardControllerNeedsUpdateTests(false, undefined, undefined),
     createDescribeStandardControllerUpdateTests(undefined, true, undefined),
@@ -5864,6 +5870,7 @@ describeTests(
 describeTests(
     "PidController",
     deployPidController,
+    setDefaultPidConfig,
     describePidControllerComputeRateTests,
     createDescribeStandardControllerNeedsUpdateTests(
         true,
