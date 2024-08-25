@@ -32,15 +32,18 @@ contract ManagedCapController is CapController, AccessControlEnumerable {
 
     /**
      * @notice Constructs the ManagedCapController contract.
+     * @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
+     * false if the returned rates should be the same as the last pushed rates (from the buffer).
      * @param period_ The period for the rate controller.
      * @param initialBufferCardinality_ The initial buffer cardinality for the rate controller.
      * @param updatersMustBeEoa_ A flag indicating if updaters must be externally owned accounts.
      */
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) CapController(period_, initialBufferCardinality_, updatersMustBeEoa_) {
+    ) CapController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {
         initializeRoles();
     }
 

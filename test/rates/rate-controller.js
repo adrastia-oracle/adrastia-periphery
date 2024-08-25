@@ -16,6 +16,7 @@ const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const PERIOD = 100;
 const INITIAL_BUFFER_CARDINALITY = 2;
 const UPDATERS_MUST_BE_EOA = false;
+const COMPUTE_AHEAD = true;
 
 const MAX_RATE = BigNumber.from(2).pow(64).sub(1);
 const MIN_RATE = BigNumber.from(0);
@@ -77,8 +78,9 @@ async function deployStandardController(overrides, contractName = "RateControlle
     const period = overrides?.period ?? PERIOD;
     const initialBufferCardinality = overrides?.initialBufferCardinality ?? INITIAL_BUFFER_CARDINALITY;
     const updaterMustBeEoa = overrides?.updaterMustBeEoa ?? UPDATERS_MUST_BE_EOA;
+    const computeAhead = overrides?.computeAhead ?? COMPUTE_AHEAD;
 
-    controller = await controllerFactory.deploy(period, initialBufferCardinality, updaterMustBeEoa);
+    controller = await controllerFactory.deploy(computeAhead, period, initialBufferCardinality, updaterMustBeEoa);
 
     return {
         controller: controller,
@@ -91,8 +93,9 @@ async function deployPidController(overrides, contractName = "PidControllerStub"
     const period = overrides?.period ?? PERIOD;
     const initialBufferCardinality = overrides?.initialBufferCardinality ?? INITIAL_BUFFER_CARDINALITY;
     const updaterMustBeEoa = overrides?.updaterMustBeEoa ?? UPDATERS_MUST_BE_EOA;
+    const computeAhead = overrides?.computeAhead ?? false;
 
-    controller = await controllerFactory.deploy(period, initialBufferCardinality, updaterMustBeEoa);
+    controller = await controllerFactory.deploy(computeAhead, period, initialBufferCardinality, updaterMustBeEoa);
 
     return {
         controller: controller,
@@ -112,17 +115,29 @@ describe("PidController#constructor", function () {
     });
 
     it("Correctly sets the input and error oracle address", async function () {
-        const controller = await factory.deploy(oracle.address, 1, 1, false);
+        const controller = await factory.deploy(oracle.address, false, 1, 1, false);
 
         expect(await controller.getInputAndErrorOracle(GRT)).to.equal(oracle.address);
     });
 
+    it("Deploys without compute ahead", async function () {
+        const controller = await factory.deploy(oracle.address, false, 1, 1, false);
+
+        expect(await controller.computeAhead()).to.equal(false);
+    });
+
+    it("Deploys with compute ahead", async function () {
+        const controller = await factory.deploy(oracle.address, true, 1, 1, false);
+
+        expect(await controller.computeAhead()).to.equal(true);
+    });
+
     it("Reverts if the period is zero", async function () {
-        await expect(factory.deploy(oracle.address, 0, 1, false)).to.be.revertedWith("InvalidPeriod");
+        await expect(factory.deploy(oracle.address, false, 0, 1, false)).to.be.revertedWith("InvalidPeriod");
     });
 
     it("Reverts if the oracle address is zero", async function () {
-        await expect(factory.deploy(AddressZero, 1, 1, false)).to.be.revertedWith("InvalidInputAndErrorOracle");
+        await expect(factory.deploy(AddressZero, false, 1, 1, false)).to.be.revertedWith("InvalidInputAndErrorOracle");
     });
 });
 
@@ -137,7 +152,7 @@ describe("PidController#setPidConfig", function () {
         oracle = await oracleFactory.deploy();
         await oracle.deployed();
 
-        controller = await factory.deploy(oracle.address, 1, 1, false);
+        controller = await factory.deploy(oracle.address, false, 1, 1, false);
         await controller.deployed();
     });
 
@@ -353,7 +368,7 @@ describe("PidController#setDefaultInputAndErrorOracle", function () {
         newOracle = await oracleFactory.deploy();
         await newOracle.deployed();
 
-        controller = await factory.deploy(oracle.address, 1, 1, false);
+        controller = await factory.deploy(oracle.address, false, 1, 1, false);
         await controller.deployed();
     });
 
@@ -425,7 +440,7 @@ describe("PidController#onPaused", function () {
         oracle = await oracleFactory.deploy();
         await oracle.deployed();
 
-        controller = await factory.deploy(oracle.address, 1, 1, false);
+        controller = await factory.deploy(oracle.address, false, 1, 1, false);
         await controller.deployed();
     });
 
@@ -478,11 +493,61 @@ describe("PidController#onPaused", function () {
 });
 
 function describeStandardControllerComputeRateTests(contractName, deployFunc) {
-    describe(contractName + "#computeRate", function () {
+    describe(contractName + "#computeRate (computeAhead = false)", function () {
         var controller;
 
         beforeEach(async () => {
-            const deployment = await deployFunc();
+            const deployment = await deployFunc({ computeAhead: false });
+            controller = deployment.controller;
+
+            // Get our signer address
+            const [signer] = await ethers.getSigners();
+
+            // Grant all roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+            // Set config for GRT
+            await controller.setConfig(GRT, DEFAULT_CONFIG);
+        });
+
+        it("Reverts if we've never updated the rate", async function () {
+            await expect(controller.computeRate(GRT)).to.be.revertedWith("InsufficientData");
+        });
+
+        it("Returns the latest current rate (n=1)", async function () {
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+            await controller.update(updateData);
+
+            // Change the base so that the next rate should change
+            await controller.setConfig(GRT, {
+                ...DEFAULT_CONFIG,
+                base: DEFAULT_CONFIG.base.div(2),
+            });
+
+            // Get the historical rate
+            const historicalRate = await controller.getRateAt(GRT, 0);
+
+            const rate = await controller.computeRate(GRT);
+
+            expect(rate).to.equal(historicalRate.current);
+
+            // Sanity check that the next rate is not the same
+            const period = await controller.period();
+            await timeAndMine.increaseTime(period.toNumber());
+            await controller.update(updateData);
+            const nextRate = await controller.computeRate(GRT);
+            expect(nextRate).to.not.equal(rate);
+        });
+    });
+
+    describe(contractName + "#computeRate (computeAhead = true)", function () {
+        var controller;
+
+        beforeEach(async () => {
+            const deployment = await deployFunc({ computeAhead: true });
             controller = deployment.controller;
 
             // Get our signer address
@@ -929,11 +994,11 @@ function describeStandardControllerComputeRateTests(contractName, deployFunc) {
 }
 
 function describePidControllerComputeRateTests(contractName, deployFunc) {
-    describe(contractName + "#computeRate", function () {
+    describe(contractName + "#computeRate (computeAhead = false)", function () {
         var controller;
 
         beforeEach(async () => {
-            const deployment = await deployFunc();
+            const deployment = await deployFunc({ computeAhead: false });
             controller = deployment.controller;
 
             // Get our signer address
@@ -995,6 +1060,84 @@ function describePidControllerComputeRateTests(contractName, deployFunc) {
             const rate = await controller.computeRate(GRT);
 
             expect(rate).to.equal(historicalRate.current);
+        });
+    });
+
+    describe(contractName + "#computeRate (computeAhead = true)", function () {
+        var controller;
+
+        beforeEach(async () => {
+            const deployment = await deployFunc({ computeAhead: true });
+            controller = deployment.controller;
+
+            // Get our signer address
+            const [signer] = await ethers.getSigners();
+
+            // Grant all roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+            // Set config for GRT
+            await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+            // Set PID config for GRT
+            await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
+
+            await controller.setTarget(GRT, ethers.utils.parseUnits("0.9", 8));
+            await controller.setInput(GRT, ethers.utils.parseUnits("1.0", 8));
+        });
+
+        it("Doesn't revert if we've never computed a rate before", async function () {
+            await expect(controller.computeRate(GRT)).to.not.be.reverted;
+        });
+
+        it("Doesn't return the last stored rate", async function () {
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+            await controller.update(updateData);
+
+            // Get the historical rate
+            const historicalRate = await controller.getRateAt(GRT, 0);
+
+            const rate = await controller.computeRate(GRT);
+
+            expect(rate).to.not.equal(historicalRate.current);
+        });
+
+        it("Applies clamping based on the last stored rate", async function () {
+            // Manually push a rate
+            const rate = ethers.utils.parseUnits("0.50", 8);
+            await controller.stubPush(GRT, rate, rate, 1);
+
+            // Set the config s.t. the rate only decreases by 0.01%
+            const config = {
+                ...DEFAULT_CONFIG,
+                maxDecrease: ethers.utils.parseUnits("0.0001", 8),
+                maxPercentDecrease: MAX_PERCENT_DECREASE,
+            };
+            await controller.setConfig(GRT, config);
+
+            // Set the input to 100% and the target to 1% so the rate decreases
+            await controller.setInput(GRT, ethers.utils.parseUnits("1.0", 8));
+            await controller.setTarget(GRT, ethers.utils.parseUnits("0.01", 8));
+
+            const expectedRate = rate.sub(config.maxDecrease);
+
+            const reportedRate = await controller.computeRate(GRT);
+
+            expect(reportedRate).to.equal(expectedRate);
+
+            // Sanity check that the rate is clamped
+            await controller.setConfig(GRT, {
+                ...config,
+                maxDecrease: MAX_RATE,
+                maxPercentDecrease: MAX_PERCENT_DECREASE,
+            });
+
+            const unclampedRate = await controller.computeRate(GRT);
+
+            expect(unclampedRate).to.be.lt(reportedRate);
         });
     });
 }
@@ -4173,31 +4316,43 @@ function describeTests(
                 period: 1,
                 initialBufferCardinality: 1,
                 updaterMustBeEoa: false,
+                computeAhead: false,
             },
             {
                 period: 2,
                 initialBufferCardinality: 1,
                 updaterMustBeEoa: false,
+                computeAhead: false,
             },
             {
                 period: 1,
                 initialBufferCardinality: 2,
                 updaterMustBeEoa: false,
+                computeAhead: false,
             },
             {
                 period: 1,
                 initialBufferCardinality: 1,
                 updaterMustBeEoa: true,
+                computeAhead: false,
             },
             {
                 period: 2,
                 initialBufferCardinality: 1,
                 updaterMustBeEoa: true,
+                computeAhead: false,
             },
             {
                 period: 1,
                 initialBufferCardinality: 2,
                 updaterMustBeEoa: true,
+                computeAhead: false,
+            },
+            {
+                period: 1,
+                initialBufferCardinality: 1,
+                updaterMustBeEoa: false,
+                computeAhead: true,
             },
         ];
 
@@ -4207,12 +4362,14 @@ function describeTests(
                     test.period +
                     ", initialBufferCardinality " +
                     test.initialBufferCardinality +
-                    ", and updaterMustBeEoa " +
-                    test.updaterMustBeEoa,
+                    ", updaterMustBeEoa " +
+                    test.updaterMustBeEoa +
+                    ", and computeAhead ",
                 async function () {
                     const deployment = await deployFunc(test);
                     const controller = deployment.controller;
 
+                    expect(await controller.computeAhead()).to.equal(test.computeAhead);
                     expect(await controller.period()).to.equal(test.period);
                     expect(await controller.getRatesCapacity(GRT)).to.equal(test.initialBufferCardinality);
                     expect(await controller.updatersMustBeEoa()).to.equal(test.updaterMustBeEoa);

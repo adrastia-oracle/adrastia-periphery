@@ -40,6 +40,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @dev This is a security feature to prevent malicious contracts from updating rates.
     bool public immutable updatersMustBeEoa;
 
+    /// @notice True if the rates returned by computeRate should be computed on-the-fly with clamping; false if the
+    /// returned rates should be the same as the last pushed rates (from the buffer).
+    bool public immutable computeAhead;
+
     /// @notice Maps a token to its rate configuration.
     mapping(address => RateConfig) internal rateConfigs;
 
@@ -82,14 +86,18 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     error PauseStatusUnchanged(address token, bool paused);
 
     /// @notice Creates a new rate controller.
+    /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
+    /// false if the returned rates should be the same as the last pushed rates (from the buffer).
     /// @param period_ The period of the rate controller, in seconds. This is the frequency at which rates are updated.
     /// @param initialBufferCardinality_ The initial capacity of the rate buffer.
     /// @param updatersMustBeEoa_ True if all rate updaters must be EOA accounts; false otherwise.
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
     ) HistoricalRates(initialBufferCardinality_) {
+        computeAhead = computeAhead_;
         period = period_;
         updatersMustBeEoa = updatersMustBeEoa_;
     }
@@ -213,11 +221,24 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
-    /// @inheritdoc IRateComputer
+    /// @notice Computes the rate for a token. If computeAhead is true, the rate is computed on-the-fly with clamping;
+    /// otherwise, the rate is the same as the last pushed rate (from the buffer).
+    /// @param token The address of the token to compute the rate for.
+    /// @return rate The rate for the token.
     function computeRate(address token) external view virtual override returns (uint64) {
-        (, uint64 newRate) = computeRateAndClamp(token);
+        if (computeAhead) {
+            (, uint64 newRate) = computeRateAndClamp(token);
 
-        return newRate;
+            return newRate;
+        } else {
+            BufferMetadata storage meta = rateBufferMetadata[token];
+            if (meta.size == 0) {
+                // We've never computed a rate, so revert.
+                revert InsufficientData(token, 0, 1);
+            }
+
+            return getLatestRate(token).current;
+        }
     }
 
     /// @inheritdoc IPeriodic
@@ -375,7 +396,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return rateBuffers[token][meta.end];
     }
 
-    /// @notice Computes the rate for the given token.
+    /// @notice Computes the target rate for the given token (without clamping).
     /// @dev This function calculates the rate for the specified token by summing its base rate
     /// and the weighted rates of its components. The component rates are computed using the `computeRate`
     /// function of each component and multiplied by the corresponding weight, then divided by 10,000.

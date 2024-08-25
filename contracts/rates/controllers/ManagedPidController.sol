@@ -30,15 +30,18 @@ contract ManagedPidController is PidController, AccessControlEnumerable {
 
     /// @notice Constructs the ManagedPidController.
     /// @param inputAndErrorOracle_ Oracle to provide input and error values.
+    /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
+    /// false if the returned rates should be the same as the last pushed rates (from the buffer).
     /// @param period_ The period for the rate controller.
     /// @param initialBufferCardinality_ Initial size of the buffer for rate storage.
     /// @param updatersMustBeEoa_ Flag to determine if updaters must be externally owned accounts.
     constructor(
         ILiquidityOracle inputAndErrorOracle_,
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) PidController(inputAndErrorOracle_, period_, initialBufferCardinality_, updatersMustBeEoa_) {
+    ) PidController(inputAndErrorOracle_, computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {
         initializeRoles();
     }
 

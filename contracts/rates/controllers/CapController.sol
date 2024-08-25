@@ -26,15 +26,18 @@ abstract contract CapController is RateController {
 
     /**
      * @notice Constructs the CapController contract.
+     * @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
+     * false if the returned rates should be the same as the last pushed rates (from the buffer).
      * @param period_ The period of the rate controller.
      * @param initialBufferCardinality_ The initial cardinality of the rate buffers.
      * @param updatersMustBeEoa_ Whether or not the updaters must be EOA.
      */
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) RateController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     /**
      * @notice Sets the change threshold for the specified token. When the rate changes by more than the threshold, an

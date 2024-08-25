@@ -16,6 +16,7 @@ const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const PERIOD = 100;
 const INITIAL_BUFFER_CARDINALITY = 2;
 const UPDATERS_MUST_BE_EOA = false;
+const COMPUTE_AHEAD = true;
 
 const TWO_PERCENT_CHANGE = ethers.utils.parseUnits("0.02", 8);
 
@@ -62,12 +63,14 @@ describe("CapController#constructor", function () {
         [1, 2], // period
         [1, 2], // initialBufferCardinality
         [false, true], // updatersMustBeEoa
+        [false, true], // computeAhead
     ];
 
     for (const test of combos(testCombinations)) {
         const period = test[0];
         const initialBufferCardinality = test[1];
         const updatersMustBeEoa = test[2];
+        const computeAhead = test[3];
 
         it(
             "Should deploy with period=" +
@@ -75,10 +78,18 @@ describe("CapController#constructor", function () {
                 ", initialBufferCardinality=" +
                 initialBufferCardinality +
                 ", updatersMustBeEoa=" +
-                updatersMustBeEoa,
+                updatersMustBeEoa +
+                ", computeAhead=" +
+                computeAhead,
             async function () {
-                const rateController = await factory.deploy(period, initialBufferCardinality, updatersMustBeEoa);
+                const rateController = await factory.deploy(
+                    computeAhead,
+                    period,
+                    initialBufferCardinality,
+                    updatersMustBeEoa
+                );
 
+                expect(await rateController.computeAhead()).to.equal(computeAhead);
                 expect(await rateController.period()).to.equal(period);
                 expect(await rateController.getRatesCapacity(GRT)).to.equal(initialBufferCardinality);
                 expect(await rateController.updatersMustBeEoa()).to.equal(updatersMustBeEoa);
@@ -95,7 +106,12 @@ describe("CapController#setRatesCapacity", function () {
 
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("ManagedCapController");
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -128,7 +144,12 @@ describe("CapController#setChangeThreshold", function () {
 
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("ManagedCapController");
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -198,7 +219,12 @@ describe("CapController#willAnythingChange", function () {
 
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -382,7 +408,12 @@ describe("CapController#changeThresholdSurpassed", function () {
 
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
     });
 
     it("Returns true when the change is enormously large", async function () {
@@ -398,7 +429,12 @@ describe("CapController#update", function () {
     async function deploy(updatersMustBeEoa) {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, updatersMustBeEoa);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            updatersMustBeEoa
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -466,7 +502,12 @@ describe("CapController#manuallyPushRate", function () {
     beforeEach(async function () {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -560,7 +601,12 @@ describe("CapController#setUpdatesPaused", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -626,7 +672,12 @@ describe("CapController#canUpdate", function () {
     async function deploy(updatersMustBeEOA) {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, updatersMustBeEOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            updatersMustBeEOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -708,7 +759,12 @@ describe("CapController#setConfig", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("CapControllerStub");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         // Get our signer address
         const [signer] = await ethers.getSigners();
@@ -766,7 +822,12 @@ describe("CapController#supportsInterface", function () {
     beforeEach(async () => {
         const controllerFactory = await ethers.getContractFactory("ManagedCapController");
 
-        controller = await controllerFactory.deploy(PERIOD, INITIAL_BUFFER_CARDINALITY, UPDATERS_MUST_BE_EOA);
+        controller = await controllerFactory.deploy(
+            COMPUTE_AHEAD,
+            PERIOD,
+            INITIAL_BUFFER_CARDINALITY,
+            UPDATERS_MUST_BE_EOA
+        );
 
         const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
         interfaceIds = await interfaceIdsFactory.deploy();

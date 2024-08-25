@@ -21,10 +21,11 @@ contract RateControllerStub is ManagedRateController {
     mapping(address => OnPauseCall) public onPauseCalls;
 
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) ManagedRateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) ManagedRateController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     function stubPush(address token, uint64 target, uint64 current, uint32 timestamp) public {
         RateLibrary.Rate memory rate;

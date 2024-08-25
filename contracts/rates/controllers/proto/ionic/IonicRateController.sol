@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import "../../ManagedPidController.sol";
+import "../../../ManagedRateController.sol";
 import "../../../../vendor/ionic/IComptroller.sol";
 import "../../../../vendor/ionic/ICToken.sol";
 
-contract IonicPidController is ManagedPidController {
+contract IonicRateController is ManagedRateController {
     IComptroller public immutable comptroller;
 
     error CTokenNotFound(address token);
@@ -14,20 +14,11 @@ contract IonicPidController is ManagedPidController {
 
     constructor(
         IComptroller comptroller_,
-        ILiquidityOracle inputAndErrorOracle_,
         bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    )
-        ManagedPidController(
-            inputAndErrorOracle_,
-            computeAhead_,
-            period_,
-            initialBufferCardinality_,
-            updatersMustBeEoa_
-        )
-    {
+    ) ManagedRateController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {
         comptroller = comptroller_;
     }
 

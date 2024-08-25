@@ -7,6 +7,7 @@ const { AddressZero } = ethers.constants;
 const DEFAULT_PERIOD = 100;
 const DEFAULT_INITIAL_BUFFER_CARDINALITY = 10;
 const DEFAULT_UPDATERS_MUST_BE_EAO = false;
+const DEFAULT_COMPUTE_AHEAD = true;
 
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
@@ -20,6 +21,7 @@ describe("HistoricalRatesComputer#constructor", function () {
     it("Sets the default config a rate provider is provided", async function () {
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         const rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -49,6 +51,7 @@ describe("HistoricalRatesComputer#constructor", function () {
     it("Sets the default config a rate provider is provided, with an alternative index and high availability", async function () {
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         const rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -111,6 +114,7 @@ describe("HistoricalRatesComputer#computeRate", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -268,11 +272,13 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
         );
         secondRateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -509,6 +515,7 @@ describe("HistoricalRatesComputer#isUsingDefaultConfig", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -626,6 +633,7 @@ describe("HistoricalRatesComputer#revertToDefaultConfig", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -703,6 +711,7 @@ describe("HistoricalRatesComputer#getConfig", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -822,6 +831,7 @@ describe("HistoricalRatesComputer#computeRateIndex", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO
@@ -932,6 +942,7 @@ describe("HistoricalRatesComputer - IHistoricalRates implementation", function (
         const [signer] = await ethers.getSigners();
 
         rateController = await rateControllerStubFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO

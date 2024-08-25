@@ -91,15 +91,18 @@ abstract contract PidController is RateController {
 
     /// @notice Constructs the PidController.
     /// @param inputAndErrorOracle_ Default oracle to provide input and error values.
+    /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
+    /// false if the returned rates should be the same as the last pushed rates (from the buffer).
     /// @param period_ The period for the rate controller.
     /// @param initialBufferCardinality_ Initial size of the buffer for rate storage.
     /// @param updatersMustBeEoa_ Flag to determine if updaters must be externally owned accounts.
     constructor(
         ILiquidityOracle inputAndErrorOracle_,
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {
+    ) RateController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {
         if (period_ == 0) revert InvalidPeriod(period_);
 
         validateInputAndErrorOracle(inputAndErrorOracle_, true);
@@ -163,18 +166,6 @@ abstract contract PidController is RateController {
             // If the old config was uninitialized, initialize the PID controller.
             initializePid(token);
         }
-    }
-
-    /// @inheritdoc RateController
-    /// @dev Returns the current rate (latest stored) for the token, reverting if the rate has never been computed.
-    function computeRate(address token) external view virtual override returns (uint64) {
-        BufferMetadata storage meta = rateBufferMetadata[token];
-        if (meta.size == 0) {
-            // We've never computed a rate, so revert.
-            revert InsufficientData(token, 0, 1);
-        }
-
-        return getLatestRate(token).current;
     }
 
     /// @inheritdoc RateController
@@ -409,8 +400,11 @@ abstract contract PidController is RateController {
 
         // Compute output
         int256 output = pTerm + pidState.iTerm - dTerm;
+        // Store last values to be used in the next iteration computation
         pidState.lastInput = input;
         pidState.lastError = err;
+
+        // Set target to the output rate (before clamping) and clamp to the range [0, 2^64) (to fit inside uint64).
         if (output < int256(0)) {
             target = 0;
         } else if (output >= int256(uint256(type(uint64).max))) {
@@ -418,6 +412,9 @@ abstract contract PidController is RateController {
         } else {
             target = uint64(uint256(output));
         }
+
+        // Clamp the output. Note that clampChange is false here but this parameter is ignored as we indicate this
+        // is the output rate, signaling to use the rate controller's main clamping function which has change clamping.
         output = clampBigSignedRate(token, output, true, false, 0);
         // Clamping the output returns a value in the range [0, 2^64), so we can safely cast it to uint64.
         current = uint64(uint256(output));
@@ -428,6 +425,10 @@ abstract contract PidController is RateController {
         (uint64 target, , ) = computeNextPidRate(token);
 
         return target;
+    }
+
+    function computeRateAndClamp(address token) internal view virtual override returns (uint64 target, uint64 newRate) {
+        (target, newRate, ) = computeNextPidRate(token);
     }
 
     /// @inheritdoc RateController
