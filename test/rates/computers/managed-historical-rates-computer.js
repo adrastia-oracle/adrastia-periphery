@@ -7,6 +7,7 @@ const { AddressZero } = ethers.constants;
 const DEFAULT_PERIOD = 100;
 const DEFAULT_INITIAL_BUFFER_CARDINALITY = 10;
 const DEFAULT_UPDATERS_MUST_BE_EAO = false;
+const DEFAULT_COMPUTE_AHEAD = true;
 
 describe("ManagedHistoricalRatesComputer#setConfig", function () {
     var computerFactory;
@@ -29,6 +30,7 @@ describe("ManagedHistoricalRatesComputer#setConfig", function () {
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
+            DEFAULT_COMPUTE_AHEAD,
             DEFAULT_PERIOD,
             DEFAULT_INITIAL_BUFFER_CARDINALITY,
             DEFAULT_UPDATERS_MUST_BE_EAO

@@ -1,6 +1,6 @@
 {
   "name": "@adrastia-oracle/adrastia-periphery",
-  "version": "4.9.1",
+  "version": "4.10.0",
   "main": "index.js",
   "author": "TRILEZ SOFTWARE INC.",
   "license": "BUSL-1.1",
@@ -45,6 +45,7 @@
     "ethereum-waffle": "^4.0.10",
     "ethers": "^5.7.2",
     "hardhat": "2.14.1",
+    "hardhat-contract-sizer": "^2.10.0",
     "hardhat-gas-reporter": "^1.0.9",
     "hardhat-tracer": "^2.3.4",
     "prettier": "^2.8.8",

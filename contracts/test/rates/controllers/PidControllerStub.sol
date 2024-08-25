@@ -22,10 +22,11 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
     mapping(address => OnPauseCall) public onPauseCalls;
 
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) ManagedPidController(this, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) ManagedPidController(this, computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     function canUpdate(
         bytes memory data

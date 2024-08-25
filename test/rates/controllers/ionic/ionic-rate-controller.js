@@ -25,25 +25,11 @@ const DEFAULT_CONFIG = {
     components: [],
 };
 
-const DEFAULT_PID_CONFIG = {
-    inputAndErrorOracle: AddressZero,
-    kPNumerator: -100,
-    kPDenominator: 10_000,
-    kINumerator: -100,
-    kIDenominator: 10_000,
-    kDNumerator: 0,
-    kDDenominator: 10_000,
-    transformer: AddressZero,
-    proportionalOnMeasurement: false,
-    derivativeOnMeasurement: false,
-};
-
 const DEFAULT_PERIOD = 100;
 
-describe("IonicPidController", function () {
-    describe("IonicPidController#update", function () {
+describe("IonicRateController", function () {
+    describe("IonicRateController#update", function () {
         var controller;
-        var oracle;
         var token;
         var cToken;
         var comptroller;
@@ -60,19 +46,8 @@ describe("IonicPidController", function () {
 
             await comptroller.stubSetCToken(token, cToken.address);
 
-            const oracleFactory = await ethers.getContractFactory("InputAndErrorAccumulatorStub");
-            oracle = await oracleFactory.deploy();
-            await oracle.deployed();
-
-            const controllerFactory = await ethers.getContractFactory("IonicPidController");
-            controller = await controllerFactory.deploy(
-                comptroller.address,
-                oracle.address,
-                false,
-                DEFAULT_PERIOD,
-                1,
-                false
-            );
+            const controllerFactory = await ethers.getContractFactory("IonicRateController");
+            controller = await controllerFactory.deploy(comptroller.address, false, DEFAULT_PERIOD, 1, false);
 
             // Grant roles
             const [signer] = await ethers.getSigners();
@@ -83,13 +58,6 @@ describe("IonicPidController", function () {
 
             // Set configs
             await controller.setConfig(token, DEFAULT_CONFIG);
-            await controller.setPidConfig(token, DEFAULT_PID_CONFIG);
-
-            // Set input and target s.t. the rate increases
-            const input = ethers.utils.parseUnits("0.95", 8);
-            const target = ethers.utils.parseUnits("0.9", 8);
-            await oracle.setInput(token, input);
-            await oracle.setTarget(token, target);
         });
 
         it("Doesn't call accrueInterest if the buffer is empty", async function () {
@@ -98,7 +66,7 @@ describe("IonicPidController", function () {
         });
 
         it("Calls accrueInterest if the buffer is not empty", async function () {
-            const startingRate = ethers.utils.parseUnits("0.2", 8);
+            const startingRate = ethers.utils.parseUnits("0.2", 18);
             await controller.manuallyPushRate(token, startingRate, startingRate, 1);
 
             const period = await controller.period();
@@ -110,7 +78,7 @@ describe("IonicPidController", function () {
         });
 
         it("Reverts if accrueInterest is not successful and the buffer is not empty", async function () {
-            const startingRate = ethers.utils.parseUnits("0.2", 8);
+            const startingRate = ethers.utils.parseUnits("0.2", 18);
             await controller.manuallyPushRate(token, startingRate, startingRate, 1);
 
             // Set the interest rate to be unavailable
@@ -127,10 +95,9 @@ describe("IonicPidController", function () {
         it("Reverts if it can't find the cToken", async function () {
             // Configure GRT
             await controller.setConfig(GRT, DEFAULT_CONFIG);
-            await controller.setPidConfig(GRT, DEFAULT_PID_CONFIG);
 
             // Push an initial rate (should succeed)
-            const startingRate = ethers.utils.parseUnits("0.2", 8);
+            const startingRate = ethers.utils.parseUnits("0.2", 18);
             await controller.manuallyPushRate(GRT, startingRate, startingRate, 1);
 
             const period = await controller.period();
@@ -142,8 +109,12 @@ describe("IonicPidController", function () {
         });
 
         it("Calls accrueInterest before pushing the new rate", async function () {
-            const startingRate = ethers.utils.parseUnits("0.2", 8);
+            const startingRate = ethers.utils.parseUnits("0.2", 18);
             await controller.manuallyPushRate(token, startingRate, startingRate, 1);
+
+            // Set a new base rate of 90%
+            const newBaseRate = ethers.utils.parseUnits("0.9", 18);
+            await controller.setConfig(token, { ...DEFAULT_CONFIG, base: newBaseRate });
 
             const period = await controller.period();
             // Advance the period

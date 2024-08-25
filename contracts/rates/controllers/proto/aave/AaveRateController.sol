@@ -29,7 +29,7 @@ contract AaveRateController is RateController {
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) RateController(period_, initialBufferCardinality_, updatersMustBeEoa_) {
+    ) RateController(false, period_, initialBufferCardinality_, updatersMustBeEoa_) {
         aclManager = aclManager_;
     }
 

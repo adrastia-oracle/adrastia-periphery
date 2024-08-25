@@ -53,7 +53,7 @@ describe("TrueFiAlocPidController", function () {
             await oracle.deployed();
 
             const controllerFactory = await ethers.getContractFactory("TrueFiAlocPidController");
-            controller = await controllerFactory.deploy(oracle.address, DEFAULT_PERIOD, 1, false);
+            controller = await controllerFactory.deploy(oracle.address, false, DEFAULT_PERIOD, 1, false);
 
             // Grant roles
             const [signer] = await ethers.getSigners();

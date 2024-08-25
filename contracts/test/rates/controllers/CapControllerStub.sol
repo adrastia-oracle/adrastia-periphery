@@ -14,10 +14,11 @@ contract CapControllerStub is ManagedCapController {
     Config public config;
 
     constructor(
+        bool computeAhead_,
         uint32 period_,
         uint8 initialBufferCardinality_,
         bool updatersMustBeEoa_
-    ) ManagedCapController(period_, initialBufferCardinality_, updatersMustBeEoa_) {}
+    ) ManagedCapController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
     function overrideNeedsUpdate(bool overridden, bool needsUpdate_) public {
         config.needsUpdateOverridden = overridden;

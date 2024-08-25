@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.10.0
+### Prudentia
+#### Controllers
+- Add flag to enable or disable compute ahead logic: If enabled, the controller's computeRate function will calculate the rate on-the-fly with clamping. Otherwise, it will return the last stored rate.
+- Add IonicRateController: A RateController that computes rates for Ionic tokens, accruing interest on the underlying tokens before pushing new rates.
+
 ## v4.9.1
 ### Prudentia
 #### Controllers
