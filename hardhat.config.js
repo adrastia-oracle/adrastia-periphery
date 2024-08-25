@@ -5,6 +5,7 @@ require("hardhat-gas-reporter");
 require("hardhat-tracer");
 require("@atixlabs/hardhat-time-n-mine");
 require("@nomiclabs/hardhat-etherscan");
+require("hardhat-contract-sizer");
 
 const SOLC_8 = {
     version: "0.8.13",
@@ -34,6 +35,7 @@ module.exports = {
                     order: "fifo",
                 },
             },
+            allowUnlimitedContractSize: true,
         },
         polygon: {
             chainId: 137,
@@ -88,5 +90,9 @@ module.exports = {
                 },
             },
         ],
+    },
+    contractSizer: {
+        runOnCompile: true,
+        except: ["test"],
     },
 };
