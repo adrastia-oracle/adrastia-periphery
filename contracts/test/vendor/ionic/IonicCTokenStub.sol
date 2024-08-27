@@ -17,6 +17,8 @@ contract IonicCTokenStub is ICToken {
 
     uint256 internal _accrueInterestReturnCode;
 
+    address internal _rateComputer;
+
     event InterestAccrued(uint64 rate);
 
     constructor(address underlying_) {
@@ -51,6 +53,10 @@ contract IonicCTokenStub is ICToken {
         _accrueInterestReturnCode = accrueInterestReturnCode_;
     }
 
+    function stubSetRateComputer(address rateComputer_) external {
+        _rateComputer = rateComputer_;
+    }
+
     function getTotalUnderlyingSupplied() external view override returns (uint256) {
         return _totalUnderlyingSupplied;
     }
@@ -80,8 +86,10 @@ contract IonicCTokenStub is ICToken {
     }
 
     function accrueInterest() external override returns (uint256) {
+        address computerAddress = _rateComputer == address(0) ? msg.sender : _rateComputer;
+
         // Extract the rate from the message sender
-        uint64 rate = IRateComputer(msg.sender).computeRate(_underlying);
+        uint64 rate = IRateComputer(computerAddress).computeRate(_underlying);
 
         // Emit an event
         emit InterestAccrued(rate);

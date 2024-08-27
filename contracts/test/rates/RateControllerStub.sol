@@ -9,6 +9,8 @@ contract RateControllerStub is ManagedRateController {
         bool needsUpdate;
         bool canComputeNextRateOverridden;
         bool canComputeNextRate;
+        bool canUpdateOverridden;
+        bool canUpdate;
     }
 
     struct OnPauseCall {
@@ -50,9 +52,19 @@ contract RateControllerStub is ManagedRateController {
         config.needsUpdate = needsUpdate_;
     }
 
+    function overrideCanUpdate(bool overridden, bool canUpdate_) public {
+        config.canUpdateOverridden = overridden;
+        config.canUpdate = canUpdate_;
+    }
+
     function overrideCanComputeNextRate(bool overridden, bool canComputeNextRate_) public {
         config.canComputeNextRateOverridden = overridden;
         config.canComputeNextRate = canComputeNextRate_;
+    }
+
+    function canUpdate(bytes memory data) public view virtual override returns (bool) {
+        if (config.canUpdateOverridden) return config.canUpdate;
+        else return super.canUpdate(data);
     }
 
     function needsUpdate(bytes memory data) public view virtual override returns (bool) {
