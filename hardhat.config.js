@@ -71,6 +71,7 @@ module.exports = {
             polygonZkEVM: process.env.POLYGONSCANZKEVM_API_KEY,
             arbitrumOne: process.env.ARBISCAN_API_KEY,
             optimisticEthereum: process.env.OPTIMISTIC_ETHERSCAN_API_KEY,
+            mode: "placeholder",
         },
         customChains: [
             {
