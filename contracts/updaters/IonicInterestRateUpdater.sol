@@ -1,4 +1,4 @@
-// License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
 import {IUpdateable} from "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
