@@ -4,13 +4,17 @@ const ethers = hre.ethers;
 
 // COMP trollers
 const MODE_COMPTROLLER = "0xfb3323e24743caf4add0fdccfb268565c0685556";
+const BASE_COMPTROLLER = "0x05c9C6417F246600f8f5f49fcA9Ee991bfF73D13";
 
 // Controllers
 const MODE_CONTROLLER = "0x4B84b0973de669Bc1a9B1cf63bFdFEfD71503063";
+const BASE_CONTROLLER = "0x01789C1E9C67EaB5E6e95e5E97fE943997B410ba";
 
 async function main() {
-    const comptroller = MODE_COMPTROLLER;
-    const controller = MODE_CONTROLLER;
+    const comptroller = BASE_COMPTROLLER;
+    const controller = BASE_CONTROLLER;
+
+    console.log("Deploying IonicInterestRateUpdater with comptroller:", comptroller, "and controller:", controller);
 
     const factory = await ethers.getContractFactory("IonicInterestRateUpdater");
     const updater = await factory.deploy(comptroller, controller);
