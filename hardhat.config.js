@@ -63,6 +63,12 @@ module.exports = {
             url: process.env.MODE_URL || "",
             accounts: [process.env.PRIVATE_KEY_DEPLOYER || ""],
         },
+        base: {
+            chainId: 8453,
+            url: process.env.BASE_URL || "",
+            accounts: [process.env.PRIVATE_KEY_DEPLOYER || ""],
+            gasPrice: 1000000000, // 1 gwei
+        },
     },
     etherscan: {
         apiKey: {
@@ -71,6 +77,8 @@ module.exports = {
             polygonZkEVM: process.env.POLYGONSCANZKEVM_API_KEY,
             arbitrumOne: process.env.ARBISCAN_API_KEY,
             optimisticEthereum: process.env.OPTIMISTIC_ETHERSCAN_API_KEY,
+            mode: "placeholder",
+            base: process.env.BASE_SCAN_API_KEY,
         },
         customChains: [
             {
@@ -87,6 +95,14 @@ module.exports = {
                 urls: {
                     apiURL: "https://explorer.mode.network/api",
                     browserURL: "https://explorer.mode.network",
+                },
+            },
+            {
+                network: "base",
+                chainId: 8453,
+                urls: {
+                    apiURL: "https://api.basescan.org/api",
+                    browserURL: "https://basescan.org",
                 },
             },
         ],

@@ -57,4 +57,10 @@ contract ManagedSAVPriceAccumulator is AccessControlEnumerable, SAVPriceAccumula
     function _updateThreshold() internal view virtual override returns (uint256) {
         return config.updateThreshold;
     }
+
+    function setConfigInternal(Config memory newConfig) internal virtual override {
+        verifyUnderlyingOracleHeartbeat(address(_underlyingAssetOracle), newConfig.heartbeat);
+
+        super.setConfigInternal(newConfig);
+    }
 }

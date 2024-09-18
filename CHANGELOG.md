@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.11.1
+### Dependencies
+- Upgrade adrastia-core to v4.9.1.
+
+### Accumulators
+- Update ManagedSAVPriceAccumulator: Add conditional underlying oracle heartbeat validation.
+
 ## v4.11.0
 ### Updaters
 - Add IonicInterestRateUpdater: A contract that accrues interest to Ionic cTokens before updating the rate controller.
