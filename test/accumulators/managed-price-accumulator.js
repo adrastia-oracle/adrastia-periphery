@@ -61,6 +61,83 @@ async function blockTimestamp(blockNum) {
     return (await ethers.provider.getBlock(blockNum)).timestamp;
 }
 
+describe("ManagedSAVPriceAccumulator#setConfig", function () {
+    it("Calls verifyUnderlyingOracleHeartbeat with a heartbeat too fast and reverts", async function () {
+        const accumulator = await deploySAVPriceAccumulator();
+
+        const [owner] = await ethers.getSigners();
+
+        // Grant owner the config admin role
+        await accumulator.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+
+        const oracleAddress = await accumulator.underlyingAssetOracle();
+
+        const oracleFactory = await ethers.getContractFactory("MockOracle");
+        const oracle = oracleFactory.attach(oracleAddress);
+
+        const oracleHeartbeat = 600;
+        await oracle.stubSetHeartbeat(oracleHeartbeat);
+
+        const config = {
+            updateThreshold: TWO_PERCENT_CHANGE,
+            updateDelay: MIN_UPDATE_DELAY,
+            heartbeat: oracleHeartbeat - 1,
+        };
+
+        await expect(accumulator.setConfig(config)).to.be.revertedWith("OracleHeartbeatIncompatible");
+    });
+
+    it("Calls verifyUnderlyingOracleHeartbeat with a heartbeat equal to the underlying heartbeat and succeeds", async function () {
+        const accumulator = await deploySAVPriceAccumulator();
+
+        const [owner] = await ethers.getSigners();
+
+        // Grant owner the config admin role
+        await accumulator.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+
+        const oracleAddress = await accumulator.underlyingAssetOracle();
+
+        const oracleFactory = await ethers.getContractFactory("MockOracle");
+        const oracle = oracleFactory.attach(oracleAddress);
+
+        const oracleHeartbeat = 600;
+        await oracle.stubSetHeartbeat(oracleHeartbeat);
+
+        const config = {
+            updateThreshold: TWO_PERCENT_CHANGE,
+            updateDelay: MIN_UPDATE_DELAY,
+            heartbeat: oracleHeartbeat,
+        };
+
+        await expect(accumulator.setConfig(config)).to.not.be.reverted;
+    });
+
+    it("Calls verifyUnderlyingOracleHeartbeat with a heartbeat greater than the underlying heartbeat and succeeds", async function () {
+        const accumulator = await deploySAVPriceAccumulator();
+
+        const [owner] = await ethers.getSigners();
+
+        // Grant owner the config admin role
+        await accumulator.grantRole(CONFIG_ADMIN_ROLE, owner.address);
+
+        const oracleAddress = await accumulator.underlyingAssetOracle();
+
+        const oracleFactory = await ethers.getContractFactory("MockOracle");
+        const oracle = oracleFactory.attach(oracleAddress);
+
+        const oracleHeartbeat = 600;
+        await oracle.stubSetHeartbeat(oracleHeartbeat);
+
+        const config = {
+            updateThreshold: TWO_PERCENT_CHANGE,
+            updateDelay: MIN_UPDATE_DELAY,
+            heartbeat: oracleHeartbeat + 1,
+        };
+
+        await expect(accumulator.setConfig(config)).to.not.be.reverted;
+    });
+});
+
 function describePriceAccumulatorTests(
     contractName,
     deployFunction,

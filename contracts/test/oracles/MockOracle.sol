@@ -6,6 +6,8 @@ import "@adrastia-oracle/adrastia-core/contracts/oracles/AbstractOracle.sol";
 contract MockOracle is AbstractOracle {
     uint8 internal immutable _liquidityDecimals;
 
+    uint256 internal _heartbeat;
+
     mapping(address => ObservationLibrary.Observation) internal observations;
 
     mapping(address => ObservationLibrary.Observation) internal instantRates;
@@ -18,6 +20,20 @@ contract MockOracle is AbstractOracle {
         address token
     ) public view virtual override returns (ObservationLibrary.Observation memory observation) {
         return observations[token];
+    }
+
+    function heartbeat() public view virtual returns (uint256) {
+        if (_heartbeat == 0) {
+            // Not implemented in the mock
+
+            revert();
+        }
+
+        return _heartbeat;
+    }
+
+    function stubSetHeartbeat(uint256 heartbeat_) public {
+        _heartbeat = heartbeat_;
     }
 
     function stubSetObservation(
