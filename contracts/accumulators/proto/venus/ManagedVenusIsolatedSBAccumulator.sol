@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.13;
 
-import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/venus/VenusIsolatedSBAccumulator.sol";
+import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/venus/VenusSBAccumulator.sol";
 
 import "../../AccumulatorConfig.sol";
 
-contract ManagedVenusIsolatedSBAccumulator is VenusIsolatedSBAccumulator, AccumulatorConfig {
+contract ManagedVenusIsolatedSBAccumulator is VenusSBAccumulator, AccumulatorConfig {
     constructor(
         IAveragingStrategy averagingStrategy_,
         address comptroller_,
@@ -14,7 +14,7 @@ contract ManagedVenusIsolatedSBAccumulator is VenusIsolatedSBAccumulator, Accumu
         uint256 minUpdateDelay_,
         uint256 maxUpdateDelay_
     )
-        VenusIsolatedSBAccumulator(
+        VenusSBAccumulator(
             averagingStrategy_,
             comptroller_,
             decimals_,
