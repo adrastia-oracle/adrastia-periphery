@@ -1059,7 +1059,7 @@ async function deployVenusIsolatedSBAccumulator() {
     await pool["stubAddMarket(address)"](cToken.address);
 
     // Deploy accumulator
-    const accumulatorFactory = await ethers.getContractFactory("ManagedVenusIsolatedSBAccumulator");
+    const accumulatorFactory = await ethers.getContractFactory("ManagedVenusSBAccumulator");
     return await accumulatorFactory.deploy(
         averagingStrategy.address,
         pool.address,
@@ -1316,7 +1316,7 @@ describeLiquidityAccumulatorTests(
 );
 
 describeLiquidityAccumulatorTests(
-    "ManagedVenusIsolatedSBAccumulator",
+    "ManagedVenusSBAccumulator",
     deployVenusIsolatedSBAccumulator,
     generateDexBasedUpdateData,
     /*
@@ -1333,7 +1333,7 @@ describeLiquidityAccumulatorTests(
 
 describeRefreshTokenMappingsTests("ManagedCompoundV2SBAccumulator", deployCompoundV2SBAccumulator);
 describeRefreshTokenMappingsTests("ManagedIonicSBAccumulator", deployIonicSBAccumulator);
-describeRefreshTokenMappingsTests("ManagedVenusIsolatedSBAccumulator", deployVenusIsolatedSBAccumulator);
+describeRefreshTokenMappingsTests("ManagedVenusSBAccumulator", deployVenusIsolatedSBAccumulator);
 
 describeLiquidityAccumulatorTests(
     "ManagedAdrastiaUtilizationAndErrorAccumulator",

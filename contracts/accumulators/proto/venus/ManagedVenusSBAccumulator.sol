@@ -5,7 +5,7 @@ import "@adrastia-oracle/adrastia-core/contracts/accumulators/proto/venus/VenusS
 
 import "../../AccumulatorConfig.sol";
 
-contract ManagedVenusIsolatedSBAccumulator is VenusSBAccumulator, AccumulatorConfig {
+contract ManagedVenusSBAccumulator is VenusSBAccumulator, AccumulatorConfig {
     constructor(
         IAveragingStrategy averagingStrategy_,
         address comptroller_,
