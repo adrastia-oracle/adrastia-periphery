@@ -7,6 +7,8 @@ require("@atixlabs/hardhat-time-n-mine");
 require("@nomiclabs/hardhat-etherscan");
 require("hardhat-contract-sizer");
 
+const forkingConfig = require("./forking").default;
+
 const SOLC_8 = {
     version: "0.8.13",
     settings: {
@@ -26,9 +28,7 @@ module.exports = {
     },
     networks: {
         hardhat: {
-            forking: {
-                url: process.env.ETHEREUM_URL || "",
-            },
+            forking: forkingConfig,
             mining: {
                 auto: true,
                 mempool: {
