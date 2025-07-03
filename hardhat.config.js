@@ -28,6 +28,7 @@ module.exports = {
     },
     networks: {
         hardhat: {
+            hardfork: process.env.HARDHAT_HARDFORK || "berlin",
             forking: forkingConfig,
             mining: {
                 auto: true,
