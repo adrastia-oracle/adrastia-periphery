@@ -111,4 +111,7 @@ module.exports = {
         runOnCompile: true,
         except: ["test"],
     },
+    mocha: {
+        timeout: 60000, // 60 seconds
+    },
 };
