@@ -21,6 +21,9 @@ contract ManagedSlopedOracleMutationComputer is SlopedOracleMutationComputer, Ac
      * @notice Constructs a new SlopedOracleMutationComputer instance.
      * @param oracle_ The address of the oracle contract.
      * @param dataSlot_  The data slot to use when consulting the oracle. See the DATA_SLOT_* constants.
+     * @param minimumFreshness_ The minimum freshness (maximum observation age), in seconds, of the oracle data. A value
+     * of 0 means instant consultations should be used. WARNING: A value of 0 may not always be secure -- use with
+     * caution.
      * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
      * @param decimalsOffset_ The decimal offset to apply when scaling the value from the token. Positive values scale
      *   up, negative values scale down. Measured in numbers of decimals places (powers of 10).
@@ -28,9 +31,10 @@ contract ManagedSlopedOracleMutationComputer is SlopedOracleMutationComputer, Ac
     constructor(
         IOracle oracle_,
         uint256 dataSlot_,
+        uint256 minimumFreshness_,
         uint32 defaultOneXScalar_,
         int8 decimalsOffset_
-    ) SlopedOracleMutationComputer(oracle_, dataSlot_, defaultOneXScalar_, decimalsOffset_) {
+    ) SlopedOracleMutationComputer(oracle_, dataSlot_, minimumFreshness_, defaultOneXScalar_, decimalsOffset_) {
         initializeRoles();
     }
 

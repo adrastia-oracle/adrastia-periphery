@@ -22,6 +22,9 @@ contract AaveOracleMutationComputer is OracleMutationComputer {
      * @param aclManager_ The address of the Aave ACL Manager.
      * @param oracle_ The address of the oracle contract.
      * @param dataSlot_ The data slot to use when consulting the oracle.
+     * @param minimumFreshness_ The minimum freshness (maximum observation age), in seconds, of the oracle data. A value
+     * of 0 means instant consultations should be used. WARNING: A value of 0 may not always be secure -- use with
+     * caution.
      * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
      * @param decimalsOffset_ The offset to apply when scaling the value from the aToken.
      */
@@ -29,9 +32,10 @@ contract AaveOracleMutationComputer is OracleMutationComputer {
         IACLManager aclManager_,
         IOracle oracle_,
         uint256 dataSlot_,
+        uint256 minimumFreshness_,
         uint32 defaultOneXScalar_,
         int8 decimalsOffset_
-    ) OracleMutationComputer(oracle_, dataSlot_, defaultOneXScalar_, decimalsOffset_) {
+    ) OracleMutationComputer(oracle_, dataSlot_, minimumFreshness_, defaultOneXScalar_, decimalsOffset_) {
         aclManager = aclManager_;
     }
 
