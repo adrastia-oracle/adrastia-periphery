@@ -32,7 +32,7 @@ const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const BAL = "0xba100000625a3754423978a60c9317c58a424e3D";
 
 const MIN_UPDATE_DELAY = 1;
-const MAX_UPDATE_DELAY = 2;
+const MAX_UPDATE_DELAY = 60;
 const TWO_PERCENT_CHANGE = 2000000;
 
 const DEFAULT_CONFIG = {
@@ -511,7 +511,8 @@ function describeLiquidityAccumulatorTests(
     updaterRoleCanBeOpen,
     smartContractsCanUpdate,
     getTokenFunc,
-    describeAdditionalTests = undefined
+    describeAdditionalTests = undefined,
+    updateUnderlyingOracleFunc = undefined
 ) {
     describe(contractName + "#setConfig", function () {
         var accumulator;
@@ -612,7 +613,7 @@ function describeLiquidityAccumulatorTests(
 
         describe("Only accounts with oracle updater role can update", function () {
             it("Accounts with oracle updater role can update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, token);
+                let updateData = await generateUpdateDataFunction(accumulator, token);
 
                 expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -621,12 +622,18 @@ function describeLiquidityAccumulatorTests(
                 // Increase time so that the accumulator needs another update
                 await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
+                // Update the underlying oracle if needed
+                await updateUnderlyingOracleFunc?.(accumulator, token);
+
+                // Regenerate the update data, as the underlying oracle might have changed
+                updateData = await generateUpdateDataFunction(accumulator, token);
+
                 // The second call has some different functionality, so ensure that the results are the same for it
                 expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
             });
 
             it("Accounts without oracle updater role cannot update", async function () {
-                const updateData = await generateUpdateDataFunction(accumulator, token);
+                let updateData = await generateUpdateDataFunction(accumulator, token);
 
                 const [, addr1] = await ethers.getSigners();
 
@@ -638,6 +645,12 @@ function describeLiquidityAccumulatorTests(
 
                 // Increase time so that the accumulator needs another update
                 await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                // Update the underlying oracle if needed
+                await updateUnderlyingOracleFunc?.(accumulator, token);
+
+                // Regenerate the update data, as the underlying oracle might have changed
+                updateData = await generateUpdateDataFunction(accumulator, token);
 
                 // The second call has some different functionality, so ensure that the results are the same for it
                 await expect(accumulator.connect(addr1).update(updateData)).to.be.revertedWith(revertReason);
@@ -699,7 +712,7 @@ function describeLiquidityAccumulatorTests(
                 });
 
                 it("Accounts with oracle updater role can still update", async function () {
-                    const updateData = await generateUpdateDataFunction(accumulator, token);
+                    let updateData = await generateUpdateDataFunction(accumulator, token);
 
                     expect(await accumulator.canUpdate(updateData)).to.equal(true);
 
@@ -708,6 +721,12 @@ function describeLiquidityAccumulatorTests(
                     // Increase time so that the accumulator needs another update
                     await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
 
+                    // Update the underlying oracle if needed
+                    await updateUnderlyingOracleFunc?.(accumulator, token);
+
+                    // Regenerate the update data, as the underlying oracle might have changed
+                    updateData = await generateUpdateDataFunction(accumulator, token);
+
                     // The second call has some different functionality, so ensure that the results are the same for it
                     expect(await accumulator.update(updateData)).to.emit(accumulator, "Updated");
                 });
@@ -715,17 +734,23 @@ function describeLiquidityAccumulatorTests(
                 it(
                     "Accounts without oracle updater role " + (updaterRoleCanBeOpen ? "can" : "cannot") + " update",
                     async function () {
-                        const updateData = await generateUpdateDataFunction(accumulator, token);
+                        let updateData = await generateUpdateDataFunction(accumulator, token);
 
                         const [owner, addr1] = await ethers.getSigners();
 
                         expect(await accumulator.connect(addr1).canUpdate(updateData)).to.equal(updaterRoleCanBeOpen);
 
                         if (updaterRoleCanBeOpen) {
-                            await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
+                            await expect(accumulator.connect(owner).update(updateData)).to.emit(accumulator, "Updated");
 
                             // Increase time so that the accumulator needs another update
                             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                            // Update the underlying oracle if needed
+                            await updateUnderlyingOracleFunc?.(accumulator, token);
+
+                            // Regenerate the update data, as the underlying oracle might have changed
+                            updateData = await generateUpdateDataFunction(accumulator, token);
 
                             // The second call has some different functionality, so ensure that the results are the same for it
                             await expect(accumulator.connect(addr1).update(updateData)).to.emit(accumulator, "Updated");
@@ -738,6 +763,12 @@ function describeLiquidityAccumulatorTests(
 
                             // Increase time so that the accumulator needs another update
                             await hre.timeAndMine.increaseTime(MAX_UPDATE_DELAY + 1);
+
+                            // Update the underlying oracle if needed
+                            await updateUnderlyingOracleFunc?.(accumulator, token);
+
+                            // Regenerate the update data, as the underlying oracle might have changed
+                            updateData = await generateUpdateDataFunction(accumulator, token);
 
                             // We make sure that the other address still can't update
                             await expect(accumulator.connect(addr1).update(updateData)).to.be.reverted;
@@ -1112,6 +1143,7 @@ async function deployAdrastiaUtilizationAndErrorAccumulator() {
     const totalBorrow = ethers.utils.parseUnits("90", DEFAULT_DECIMALS);
     const totalSupply = ethers.utils.parseUnits("100", DEFAULT_DECIMALS);
 
+    await mockOracle.stubSetInstantRates(USDC, 0, totalBorrow, totalSupply);
     await mockOracle.stubSetObservationNow(USDC, 0, totalBorrow, totalSupply);
 
     // Deploy the averaging strategy
@@ -1134,6 +1166,16 @@ async function deployAdrastiaUtilizationAndErrorAccumulator() {
         MIN_UPDATE_DELAY,
         MAX_UPDATE_DELAY
     );
+}
+
+async function updateUnderlyingAdrastiaUEOracle(accumulator, token) {
+    const oracle = await ethers.getContractAt("MockOracle", await accumulator.adrastiaOracle());
+
+    const totalBorrow = ethers.utils.parseUnits("90", DEFAULT_DECIMALS);
+    const totalSupply = ethers.utils.parseUnits("100", DEFAULT_DECIMALS);
+
+    await oracle.stubSetInstantRates(token, 0, totalBorrow, totalSupply);
+    await oracle.stubSetObservationNow(token, 0, totalBorrow, totalSupply);
 }
 
 async function deployTrueFiAloc() {
@@ -1346,5 +1388,6 @@ describeLiquidityAccumulatorTests(
     */
     true,
     () => USDC,
-    describeUtilizationAndErrorAccumulatorTests
+    describeUtilizationAndErrorAccumulatorTests,
+    updateUnderlyingAdrastiaUEOracle
 );

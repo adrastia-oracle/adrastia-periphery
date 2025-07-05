@@ -27,7 +27,8 @@ contract AlgebraLiquidityAccumulatorStub is ManagedAlgebraLiquidityAccumulator {
     {}
 
     function fetchLiquidity(
-        bytes memory
+        bytes memory,
+        uint256
     ) internal view virtual override returns (uint112 tokenLiquidity, uint112 quoteTokenLiquidity) {
         return (1e18, 1e18);
     }

@@ -10,6 +10,7 @@ const {
     abi: DEFAULT_AGGREGATION_STRATEGY_ABI,
     bytecode: DEFAULT_AGGREGATION_STRATEGY_BYTECODE,
 } = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/aggregation/QuoteTokenWeightedMeanAggregator.sol/QuoteTokenWeightedMeanAggregator.json");
+const { AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK } = require("../../../src/constants/aggregation-timestamp-strategies");
 
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 
@@ -39,7 +40,10 @@ async function deployDefaultTokenConfig(numOracles = 1, constructorOverrides = {
         DEFAULT_AGGREGATION_STRATEGY_ABI,
         DEFAULT_AGGREGATION_STRATEGY_BYTECODE
     );
-    const aggregationStrategy = await aggregationStrategyFactory.deploy(averagingStrategy.address);
+    const aggregationStrategy = await aggregationStrategyFactory.deploy(
+        averagingStrategy.address,
+        AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK
+    );
     await aggregationStrategy.deployed();
 
     const oracleStubFactory = await ethers.getContractFactory("MockOracle");
