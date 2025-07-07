@@ -9,6 +9,7 @@ contract ManagedVenusSBAccumulator is VenusSBAccumulator, AccumulatorConfig {
     constructor(
         IAveragingStrategy averagingStrategy_,
         address comptroller_,
+        bool supportsBadDebt_,
         uint8 decimals_,
         uint256 updateTheshold_,
         uint256 minUpdateDelay_,
@@ -17,6 +18,7 @@ contract ManagedVenusSBAccumulator is VenusSBAccumulator, AccumulatorConfig {
         VenusSBAccumulator(
             averagingStrategy_,
             comptroller_,
+            supportsBadDebt_,
             decimals_,
             updateTheshold_,
             minUpdateDelay_,

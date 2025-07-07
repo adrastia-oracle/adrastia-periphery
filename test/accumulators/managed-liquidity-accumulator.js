@@ -1094,6 +1094,7 @@ async function deployVenusIsolatedSBAccumulator() {
     return await accumulatorFactory.deploy(
         averagingStrategy.address,
         pool.address,
+        true,
         0, // Liquidity decimals
         TWO_PERCENT_CHANGE,
         MIN_UPDATE_DELAY,
