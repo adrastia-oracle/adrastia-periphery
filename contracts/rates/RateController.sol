@@ -7,15 +7,17 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165Checker.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin-v4/contracts/security/ReentrancyGuard.sol";
 
 import "./HistoricalRates.sol";
 import "./IRateComputer.sol";
+import "./controllers/hooks/IControllerUpdateHook.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
 /// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
-abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic {
+abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic, ReentrancyGuard {
     using SafeCast for uint256;
 
     struct RateConfig {
@@ -28,6 +30,30 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         uint64 base;
         uint16[] componentWeights; // 10000 = 100%
         IRateComputer[] components;
+    }
+
+    struct Hook {
+        /**
+         * @notice A flag indicating whether the hook is allowed to fail. If true, the hook can fail without reverting
+         * the transaction.
+         */
+        bool allowHookFailure;
+        /**
+         * @notice The gas limit for the hook. This is used to ensure that the hook does not consume too much gas and
+         * cause the transaction unintentially to fail.
+         *
+         * @dev This is a uint64 to save on storage costs, as the gas limit is typically a small number.
+         */
+        uint64 hookGasLimit;
+        /**
+         * @notice The address of the hook. The zero address indicates that no post-update hook is set.
+         */
+        address hookAddress;
+    }
+
+    enum HookType {
+        PreUpdate, // preControllerUpdate is called immediately before pushing a new rate to the buffer
+        PostUpdate // postControllerUpdate is called immediately after pushing a new rate to the buffer
     }
 
     /// @notice The flag that indicates whether rate updates are paused.
@@ -43,6 +69,16 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice True if the rates returned by computeRate should be computed on-the-fly with clamping; false if the
     /// returned rates should be the same as the last pushed rates (from the buffer).
     bool public immutable computeAhead;
+
+    /**
+     * @notice Maps a hook type to its hook configuration.
+     */
+    mapping(uint256 => Hook) internal hooks;
+
+    /**
+     * @notice A bitfield of active hook types.
+     */
+    uint256 internal activeHookTypes;
 
     /// @notice Maps a token to its rate configuration.
     mapping(address => RateConfig) internal rateConfigs;
@@ -64,6 +100,47 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The token for which the rate configuration was updated.
     event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig);
 
+    /**
+     * @notice An event emitted when the pre update hook reverts, but the failure is allowed.
+     *
+     * @param hook The address of the pre update hook that failed.
+     * @param reason The reason for the failure, encoded as bytes.
+     * @param timestamp The block timestamp at which the hook failed, in seconds since the Unix epoch.
+     */
+    event PreUpdateHookFailed(address indexed hook, bytes reason, uint256 timestamp);
+
+    /**
+     * @notice An event emitted when the post update hook reverts, but the failure is allowed.
+     *
+     * @param hook The address of the post update hook that failed.
+     * @param reason The reason for the failure, encoded as bytes.
+     * @param timestamp The block timestamp at which the hook failed, in seconds since the Unix epoch.
+     */
+    event PostUpdateHookFailed(address indexed hook, bytes reason, uint256 timestamp);
+
+    /**
+     * @notice An event emitted when a hook is changed.
+     *
+     * @param hookType The type of the hook that was changed.
+     * @param caller The address of the account that changed the hook.
+     * @param oldHook The old hook config.
+     * @param newHook The new hook config.
+     * @param timestamp The block timestamp at which the hook was changed, in seconds since the Unix epoch.
+     */
+    event HookConfigUpdated(uint256 hookType, address indexed caller, Hook oldHook, Hook newHook, uint256 timestamp);
+
+    /**
+     * @notice An error thrown when the pre update hook fails to execute.
+     * @param reason The reason for the failure, encoded as bytes.
+     */
+    error PreUpdateHookFailedError(bytes reason);
+
+    /**
+     * @notice An error thrown when the post update hook fails to execute.
+     * @param reason The reason for the failure, encoded as bytes.
+     */
+    error PostUpdateHookFailedError(bytes reason);
+
     /// @notice An error that is thrown if we try to set a rate configuration with invalid parameters.
     /// @param token The token for which we tried to set the rate configuration.
     error InvalidConfig(address token);
@@ -84,6 +161,18 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The token for which we tried to change the pause state.
     /// @param paused The pause state we tried to set.
     error PauseStatusUnchanged(address token, bool paused);
+
+    /**
+     * @notice An error thrown when attempting to set a hook, but the hook did not change.
+     *
+     * @param hookType The type of the hook that was not changed.
+     */
+    error HookConfigUnchanged(uint256 hookType);
+
+    /**
+     * @notice An error thrown when the hook configuration is invalid.
+     */
+    error InvalidHookConfig(uint256 hookType);
 
     /// @notice Creates a new rate controller.
     /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
@@ -171,6 +260,65 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    /**
+     * @notice Gets the hook configuration for a specific hook type.
+     *
+     * @param hookType The type of the hook to retrieve the configuration for.
+     *
+     * @return The configuration of the hook, including whether it allows failure, the gas limit for the hook, and the
+     * address of the hook.
+     */
+    function getHookConfig(uint8 hookType) external view virtual returns (Hook memory) {
+        return hooks[hookType];
+    }
+
+    /**
+     * @notice Sets the hook configuration for a specific hook type.
+     *
+     * @dev To uninstall a hook, all fields of the hook config must be set to zero/false.
+     *
+     * @param hookType The type of the hook to set the configuration for.
+     * @param hookConfig The configuration of the hook to set, including whether it allows failure, the gas limit for
+     * the hook, and the address of the hook.
+     */
+    function setHookConfig(uint8 hookType, Hook calldata hookConfig) external virtual {
+        Hook memory oldHook = _getHook(hookType);
+
+        if (
+            oldHook.allowHookFailure == hookConfig.allowHookFailure &&
+            oldHook.hookGasLimit == hookConfig.hookGasLimit &&
+            oldHook.hookAddress == hookConfig.hookAddress
+        ) {
+            // The hook did not change. Revert to help the user be aware of this.
+            revert HookConfigUnchanged(hookType);
+        }
+
+        if (address(hookConfig.hookAddress) == address(0)) {
+            // hookGasLimit must be 0 and allowHookFailure must be false if the hookAddress is zero
+            // This is to prevent accidental misconfiguration
+            if (hookConfig.hookGasLimit != 0 || hookConfig.allowHookFailure) {
+                revert InvalidHookConfig(hookType);
+            }
+        } else {
+            // We have an update hook. Ensure that hookGasLimit is not zero. If so, it's likely a misconfiguration.
+            if (hookConfig.hookGasLimit == 0) {
+                revert InvalidHookConfig(hookType);
+            }
+        }
+
+        if (address(hookConfig.hookAddress) != address(0)) {
+            // We are setting a new hook, so we need to add it to the active hook types
+            activeHookTypes |= (uint256(1) << hookType);
+        } else {
+            // We are removing a hook, so we need to remove it from the active hook types
+            activeHookTypes &= ~(uint256(1) << hookType);
+        }
+
+        hooks[hookType] = hookConfig;
+
+        emit HookConfigUpdated(hookType, msg.sender, oldHook, hookConfig, block.timestamp);
+    }
+
     /// @notice Manually pushes new rates for a token, bypassing the update logic, clamp logic, pause logic, and
     /// other restrictions.
     /// @dev WARNING: This function is very powerful and should only be used in emergencies. It is intended to be used
@@ -247,7 +395,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     }
 
     /// @inheritdoc IUpdateable
-    function update(bytes memory data) public virtual override returns (bool b) {
+    function update(bytes memory data) public virtual override nonReentrant returns (bool b) {
         checkUpdate();
 
         if (needsUpdate(data)) return performUpdate(data);
@@ -585,6 +733,56 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    function _isHookSet(uint256 activeHooks, uint256 hookType) internal view virtual returns (bool) {
+        return (activeHooks & (uint256(1) << hookType)) != 0;
+    }
+
+    function _getHook(uint256 hookType) internal view virtual returns (Hook memory) {
+        return hooks[hookType];
+    }
+
+    function push(address token, RateLibrary.Rate memory rate) internal virtual override {
+        uint256 activeHooks = activeHookTypes;
+
+        if (_isHookSet(activeHooks, uint256(HookType.PreUpdate))) {
+            Hook memory preUpdateHook = _getHook(uint256(HookType.PreUpdate));
+
+            (bool success, bytes memory returnData) = preUpdateHook.hookAddress.call{gas: preUpdateHook.hookGasLimit}(
+                abi.encodeWithSelector(IControllerUpdateHook.onPreControllerUpdate.selector, token, rate)
+            );
+
+            if (!success) {
+                if (preUpdateHook.allowHookFailure) {
+                    // The hook failed, but we allow it to fail
+                    emit PreUpdateHookFailed(preUpdateHook.hookAddress, returnData, block.timestamp);
+                } else {
+                    // The hook failed, and we do not allow it to fail
+                    revert PreUpdateHookFailedError(returnData);
+                }
+            }
+        }
+
+        super.push(token, rate);
+
+        if (_isHookSet(activeHooks, uint256(HookType.PostUpdate))) {
+            Hook memory postUpdateHook = _getHook(uint256(HookType.PostUpdate));
+
+            (bool success, bytes memory returnData) = postUpdateHook.hookAddress.call{gas: postUpdateHook.hookGasLimit}(
+                abi.encodeWithSelector(IControllerUpdateHook.onPostControllerUpdate.selector, token, rate)
+            );
+
+            if (!success) {
+                if (postUpdateHook.allowHookFailure) {
+                    // The hook failed, but we allow it to fail
+                    emit PostUpdateHookFailed(postUpdateHook.hookAddress, returnData, block.timestamp);
+                } else {
+                    // The hook failed, and we do not allow it to fail
+                    revert PostUpdateHookFailedError(returnData);
+                }
+            }
+        }
+    }
+
     /// @notice Called after the pause state is changed.
     /// @param token The token for which the pause state was changed.
     /// @param paused Whether rate updates are paused.
@@ -593,6 +791,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Checks if the caller is authorized to set the configuration.
     /// @dev This function should contain the access control logic for the setConfig function.
     function checkSetConfig() internal view virtual;
+
+    /// @notice Checks if the caller is authorized to set the hook configuration.
+    /// @dev This function should contain the access control logic for the setHookConfig function.
+    function checkSetHookConfig() internal view virtual;
 
     /// @notice Checks if the caller is authorized to manually push rates.
     /// @dev This function should contain the access control logic for the manuallyPushRate function.

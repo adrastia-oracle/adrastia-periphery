@@ -43,6 +43,15 @@ contract AaveRateController is RateController {
     }
 
     /**
+     * @notice Checks if the sender has the required role to set the hook config, namely, the POOL_ADMIN role.
+     */
+    function checkSetHookConfig() internal view virtual override {
+        if (!aclManager.isPoolAdmin(msg.sender)) {
+            revert NotAuthorized(msg.sender, aclManager.POOL_ADMIN_ROLE());
+        }
+    }
+
+    /**
      * @notice Checks if the sender has the required role to manually push rates, namely, the POOL_ADMIN role.
      */
     function checkManuallyPushRate() internal view virtual override {

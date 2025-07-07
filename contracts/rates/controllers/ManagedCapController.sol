@@ -70,6 +70,9 @@ contract ManagedCapController is CapController, AccessControlEnumerable {
     /// @notice Requires the sender to have the RATE_ADMIN role to call setConfig.
     function checkSetConfig() internal view virtual override onlyRole(Roles.RATE_ADMIN) {}
 
+    /// @notice Requires the sender to have the ADMIN role to call setHookConfig.
+    function checkSetHookConfig() internal view virtual override onlyRole(Roles.ADMIN) {}
+
     /// @notice Requires the sender to have the RATE_ADMIN role to call manuallyPushRate.
     function checkManuallyPushRate() internal view virtual override onlyRole(Roles.ADMIN) {}
 
