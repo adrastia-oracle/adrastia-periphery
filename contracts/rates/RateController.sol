@@ -122,7 +122,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     event HookConfigUpdated(uint256 hookType, address indexed caller, Hook oldHook, Hook newHook, uint256 timestamp);
 
     /**
-     * @notice An error thrown when the pre update hook fails to execute.
+     * @notice An error thrown when a hook fails to execute.
      *
      * @param hookType The type of the hook that failed.
      * @param reason The reason for the failure, encoded as bytes.
