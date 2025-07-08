@@ -29,7 +29,7 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
     /**
      * @notice The address of the native currency (as Ether, BNB, etc. is not a token, but an address is required).
      */
-    address public immutable vEtherAddress;
+    address public immutable nativePseudoAddress;
 
     address[] internal _vTokens;
     mapping(address => address) internal _tokenToVToken;
@@ -76,11 +76,11 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
      * @dev Remember to call `refreshTokenMappings` after deploying this contract.
      *
      * @param comptroller_ The address of the Comptroller contract.
-     * @param vEtherAddress_ The address of the native currency (e.g., vEther for Ether).
+     * @param nativePseudoAddress_ The address of the native currency.
      */
-    constructor(address comptroller_, address vEtherAddress_) {
+    constructor(address comptroller_, address nativePseudoAddress_) {
         comptroller = comptroller_;
-        vEtherAddress = vEtherAddress_;
+        nativePseudoAddress = nativePseudoAddress_;
     }
 
     /**
@@ -127,7 +127,9 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
     }
 
     /// @notice Not implemented.
-    function onPostControllerUpdate(address token, RateLibrary.Rate calldata rate) external override {}
+    function onPostControllerUpdate(address, RateLibrary.Rate calldata) external pure override {
+        revert("Not implemented");
+    }
 
     /// @dev Calls to the vToken contracts are limited to 20k gas to avoid issues with CEther fallback.
     function _refreshTokenMappings() internal virtual {
@@ -163,7 +165,7 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
                     token = abi.decode(data2, (address));
                 } else {
                     // CEther
-                    token = vEtherAddress;
+                    token = nativePseudoAddress;
                 }
 
                 if (address(_tokenToVToken[token]) != address(0)) {
