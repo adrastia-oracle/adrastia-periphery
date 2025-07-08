@@ -101,22 +101,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig);
 
     /**
-     * @notice An event emitted when the pre update hook reverts, but the failure is allowed.
+     * @notice An event emitted when a hook reverts, but the failure is allowed.
      *
-     * @param hook The address of the pre update hook that failed.
+     * @param hookType The type of the hook that failed.
+     * @param hook The address of the hook that failed.
      * @param reason The reason for the failure, encoded as bytes.
      * @param timestamp The block timestamp at which the hook failed, in seconds since the Unix epoch.
      */
-    event PreUpdateHookFailed(address indexed hook, bytes reason, uint256 timestamp);
-
-    /**
-     * @notice An event emitted when the post update hook reverts, but the failure is allowed.
-     *
-     * @param hook The address of the post update hook that failed.
-     * @param reason The reason for the failure, encoded as bytes.
-     * @param timestamp The block timestamp at which the hook failed, in seconds since the Unix epoch.
-     */
-    event PostUpdateHookFailed(address indexed hook, bytes reason, uint256 timestamp);
+    event HookFailed(uint256 indexed hookType, address indexed hook, bytes reason, uint256 timestamp);
 
     /**
      * @notice An event emitted when a hook is changed.
@@ -131,15 +123,11 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
     /**
      * @notice An error thrown when the pre update hook fails to execute.
+     *
+     * @param hookType The type of the hook that failed.
      * @param reason The reason for the failure, encoded as bytes.
      */
-    error PreUpdateHookFailedError(bytes reason);
-
-    /**
-     * @notice An error thrown when the post update hook fails to execute.
-     * @param reason The reason for the failure, encoded as bytes.
-     */
-    error PostUpdateHookFailedError(bytes reason);
+    error HookFailedError(uint256 hookType, bytes reason);
 
     /// @notice An error that is thrown if we try to set a rate configuration with invalid parameters.
     /// @param token The token for which we tried to set the rate configuration.
@@ -754,10 +742,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             if (!success) {
                 if (preUpdateHook.allowHookFailure) {
                     // The hook failed, but we allow it to fail
-                    emit PreUpdateHookFailed(preUpdateHook.hookAddress, returnData, block.timestamp);
+                    emit HookFailed(
+                        uint256(HookType.PreUpdate),
+                        preUpdateHook.hookAddress,
+                        returnData,
+                        block.timestamp
+                    );
                 } else {
                     // The hook failed, and we do not allow it to fail
-                    revert PreUpdateHookFailedError(returnData);
+                    revert HookFailedError(uint256(HookType.PreUpdate), returnData);
                 }
             }
         }
@@ -774,10 +767,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             if (!success) {
                 if (postUpdateHook.allowHookFailure) {
                     // The hook failed, but we allow it to fail
-                    emit PostUpdateHookFailed(postUpdateHook.hookAddress, returnData, block.timestamp);
+                    emit HookFailed(
+                        uint256(HookType.PreUpdate),
+                        postUpdateHook.hookAddress,
+                        returnData,
+                        block.timestamp
+                    );
                 } else {
                     // The hook failed, and we do not allow it to fail
-                    revert PostUpdateHookFailedError(returnData);
+                    revert HookFailedError(uint256(HookType.PreUpdate), returnData);
                 }
             }
         }
