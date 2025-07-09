@@ -125,9 +125,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
      * @notice An error thrown when a hook fails to execute.
      *
      * @param hookType The type of the hook that failed.
+     * @param hookAddress The address of the hook that failed.
      * @param reason The reason for the failure, encoded as bytes.
      */
-    error HookFailedError(uint256 hookType, bytes reason);
+    error HookFailedError(uint256 hookType, address hookAddress, bytes reason);
 
     /// @notice An error that is thrown if we try to set a rate configuration with invalid parameters.
     /// @param token The token for which we tried to set the rate configuration.
@@ -750,7 +751,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     );
                 } else {
                     // The hook failed, and we do not allow it to fail
-                    revert HookFailedError(uint256(HookType.PreUpdate), returnData);
+                    revert HookFailedError(uint256(HookType.PreUpdate), preUpdateHook.hookAddress, returnData);
                 }
             }
         }
@@ -775,7 +776,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                     );
                 } else {
                     // The hook failed, and we do not allow it to fail
-                    revert HookFailedError(uint256(HookType.PostUpdate), returnData);
+                    revert HookFailedError(uint256(HookType.PostUpdate), postUpdateHook.hookAddress, returnData);
                 }
             }
         }
