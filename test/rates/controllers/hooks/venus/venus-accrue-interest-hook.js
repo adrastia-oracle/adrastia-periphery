@@ -519,7 +519,7 @@ describe("VenusAccrueInterestHook - integration tests", function () {
 
         await expect(controller.update(updateData))
             .to.be.revertedWith("HookFailedError")
-            .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, expectedInnerError);
+            .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, token, expectedInnerError);
 
         expect(await cToken.stubAccrueInterestCallTimes()).to.equal(0);
     });
@@ -558,7 +558,7 @@ describe("VenusAccrueInterestHook - integration tests", function () {
 
         await expect(updatePromise)
             .to.emit(controller, "HookFailed")
-            .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, expectedInnerError, timestamp);
+            .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, token, expectedInnerError, timestamp);
 
         expect(await cToken.stubAccrueInterestCallTimes()).to.equal(0);
     });
