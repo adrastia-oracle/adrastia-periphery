@@ -20,6 +20,10 @@ contract CapControllerStub is ManagedCapController {
         bool updatersMustBeEoa_
     ) ManagedCapController(computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
+    function stubActiveHookTypes() public view returns (uint256) {
+        return activeHookTypes;
+    }
+
     function overrideNeedsUpdate(bool overridden, bool needsUpdate_) public {
         config.needsUpdateOverridden = overridden;
         config.needsUpdate = needsUpdate_;

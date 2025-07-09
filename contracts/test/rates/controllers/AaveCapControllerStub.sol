@@ -39,4 +39,8 @@ contract AaveCapControllerStub is AaveCapController {
     function stubChangeThresholdSurpassed(uint256 a, uint256 b, uint256 changeThreshold) public view returns (bool) {
         return changeThresholdSurpassed(a, b, changeThreshold);
     }
+
+    function stubActiveHookTypes() public view returns (uint256) {
+        return activeHookTypes;
+    }
 }

@@ -39,6 +39,10 @@ contract RateControllerStub is ManagedRateController {
         push(token, rate);
     }
 
+    function stubActiveHookTypes() public view returns (uint256) {
+        return activeHookTypes;
+    }
+
     function stubInitializeBuffers(address token) public {
         initializeBuffers(token);
     }

@@ -1,5 +1,7 @@
 const { expect } = require("chai");
+const { keccak256, toUtf8Bytes, defaultAbiCoder } = require("ethers/lib/utils");
 const { ethers, timeAndMine } = require("hardhat");
+const { wrapHardhatProvider } = require("hardhat-tracer");
 
 const BigNumber = ethers.BigNumber;
 const AddressZero = ethers.constants.AddressZero;
@@ -23,6 +25,9 @@ const MIN_RATE = BigNumber.from(0);
 
 const MAX_PERCENT_INCREASE = 2 ** 32 - 1;
 const MAX_PERCENT_DECREASE = 10000;
+
+const HOOK_TYPE_PRE_UPDATE = 0;
+const HOOK_TYPE_POST_UPDATE = 1;
 
 // In this example, 1e18 = 100%
 const DEFAULT_CONFIG = {
@@ -60,6 +65,12 @@ const DEFAULT_PID_CONFIG = {
     transformer: AddressZero,
     proportionalOnMeasurement: false,
     derivativeOnMeasurement: false,
+};
+
+const DISABLED_HOOK_CONFIG = {
+    allowHookFailure: false,
+    hookGasLimit: BigNumber.from(0),
+    hookAddress: AddressZero,
 };
 
 async function currentBlockTimestamp() {
@@ -2193,6 +2204,317 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
                     expect(latestRate.timestamp).to.equal(currentTime);
                 });
             }
+
+            describe("Update hooks", function () {
+                let hookFactory;
+
+                let hook;
+
+                before(async function () {
+                    hookFactory = await ethers.getContractFactory("HookStub");
+                });
+
+                beforeEach(async function () {
+                    hook = await hookFactory.deploy();
+                    await hook.deployed();
+                });
+
+                it("Calls only the pre update hook", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTxPromise = controller.update(updateData);
+
+                    await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                    expect(await hook.preUpdateCallCount()).to.equal(1);
+                    expect(await hook.postUpdateCallCount()).to.equal(0);
+                });
+
+                it("Calls only the post update hook", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTxPromise = controller.update(updateData);
+
+                    await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                    expect(await hook.preUpdateCallCount()).to.equal(0);
+                    expect(await hook.postUpdateCallCount()).to.equal(1);
+                });
+
+                it("Reverts when the pre update hook fails (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the pre update hook fail
+                    await hook.stubSetRevertPreUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PreUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError);
+                });
+
+                it("Reverts when the post update hook fails (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the post update hook fail
+                    await hook.stubSetRevertPostUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PostUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError);
+                });
+
+                it("Emits a failure event when the pre update hook fails (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the pre update hook fail
+                    await hook.stubSetRevertPreUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PreUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+                });
+
+                it("Emits a failure event when the post update hook fails (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the post update hook fail
+                    await hook.stubSetRevertPostUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PostUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+                });
+
+                it("Reverts when the pre update hook runs out of gas (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x");
+                });
+
+                it("Reverts when the post update hook runs out of gas (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x");
+                });
+
+                it("Emits a failure event when the pre update hook runs out of gas (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x", timestamp);
+                });
+
+                it("Emits a failure event when the post update hook runs out of gas (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x", timestamp);
+                });
+            });
+
+            it("Updating is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Updating is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
 
             if (describeAdditionalTests) {
                 describeAdditionalTests(deployFunc, () => controller);
@@ -4975,6 +5297,482 @@ function describeTests(
         });
     });
 
+    describe(contractName + "#setHookConfig", function () {
+        var controller;
+
+        var hook;
+
+        beforeEach(async () => {
+            const deployment = await deployFunc();
+            controller = deployment.controller;
+            // Get our signer address
+            const [signer] = await ethers.getSigners();
+
+            // Deploy a hook
+            const hookFactory = await ethers.getContractFactory("HookStub");
+            hook = await hookFactory.deploy();
+            await hook.deployed();
+
+            // Grant all roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+        });
+
+        it("Reverts if the caller does not have the ADMIN role", async function () {
+            // Get the second signer
+            const [, signer] = await ethers.getSigners();
+
+            // Format the signer's address to be lowercase
+            const signerAddress = signer.address.toLowerCase();
+
+            // Grant all other roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+            await expect(
+                controller.connect(signer).setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                })
+            ).to.be.revertedWith("AccessControl: account " + signerAddress + " is missing role " + ADMIN_ROLE);
+        });
+
+        it("Reverts if we try to disable the hook when it's already disabled", async function () {
+            // Try with the pre update hook
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try with the post update hook
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if we try to set the hook config to the same value", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            };
+
+            // Set the pre update hook config
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Try to set the same config again
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+        });
+
+        it("Reverts if we try setting the hook address to the zero address, but the other values are non-zero, without active hooks", async function () {
+            const hookConfig1 = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig2 = {
+                allowHookFailure: true,
+                hookGasLimit: 0,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig3 = {
+                allowHookFailure: true,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            // Try to set the pre update hook config
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try to set the post update hook config
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if we try setting the hook address to the zero address, but the other values are non-zero, with active hooks", async function () {
+            const hookConfig1 = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig2 = {
+                allowHookFailure: true,
+                hookGasLimit: 0,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig3 = {
+                allowHookFailure: true,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            // Set the pre update hook config
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            });
+
+            // Try to set the pre update hook config with the zero address
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Set the post update hook config
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            });
+
+            // Try to set the post update hook config with the zero address
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if the hook gas limit is zero", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 0, // Zero gas limit
+                hookAddress: hook.address,
+            };
+
+            // Try to set the pre update hook config with zero gas limit
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try to set the post update hook config with zero gas limit
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if the hook type is not valid", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            };
+
+            const hookType = HOOK_TYPE_POST_UPDATE + 1; // Invalid hook type
+
+            // Try to set the hook config with an invalid hook type
+            await expect(controller.setHookConfig(hookType, hookConfig))
+                .to.be.revertedWith("InvalidHookType")
+                .withArgs(BigNumber.from(hookType));
+        });
+
+        it("Sets the pre update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_PRE_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(hookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(hookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(hookConfig.hookAddress);
+        });
+
+        it("Sets the post update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(hookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(hookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(hookConfig.hookAddress);
+        });
+
+        it("Changes the pre update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the pre update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Change the pre update hook config
+            const newHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, newHookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, hookConfig, newHookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_PRE_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(newHookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(newHookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(newHookConfig.hookAddress);
+        });
+
+        it("Changes the post update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the post update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            // Change the post update hook config
+            const newHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, newHookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, hookConfig, newHookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(newHookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(newHookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(newHookConfig.hookAddress);
+        });
+
+        it("Disables the pre update hook", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the pre update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Disable the pre update hook
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(0);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(DISABLED_HOOK_CONFIG.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(DISABLED_HOOK_CONFIG.hookGasLimit);
+            expect(config.hookAddress).to.equal(DISABLED_HOOK_CONFIG.hookAddress);
+        });
+
+        it("Disables the post update hook", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the post update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            // Disable the post update hook
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(0);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(DISABLED_HOOK_CONFIG.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(DISABLED_HOOK_CONFIG.hookGasLimit);
+            expect(config.hookAddress).to.equal(DISABLED_HOOK_CONFIG.hookAddress);
+        });
+
+        it("Sets both pre and post update hooks", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookFactory = await ethers.getContractFactory("HookStub");
+            const hook2 = await hookFactory.deploy();
+            await hook2.deployed();
+
+            // Set the pre update hook config
+            const preUpdateHookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+            const preUpdateTx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, preUpdateHookConfig);
+
+            const preUpdateTxTimestamp = blockTimestamp(preUpdateTx.blockNumber);
+
+            await expect(preUpdateTx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(
+                    HOOK_TYPE_PRE_UPDATE,
+                    signerAddress,
+                    DISABLED_HOOK_CONFIG,
+                    preUpdateHookConfig,
+                    preUpdateTxTimestamp
+                );
+
+            // Set the post update hook config
+            const postUpdateHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook2.address,
+            };
+            const postUpdateTx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, postUpdateHookConfig);
+            const postUpdateTxTimestamp = blockTimestamp(postUpdateTx.blockNumber);
+            await expect(postUpdateTx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(
+                    HOOK_TYPE_POST_UPDATE,
+                    signerAddress,
+                    DISABLED_HOOK_CONFIG,
+                    postUpdateHookConfig,
+                    postUpdateTxTimestamp
+                );
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1)
+                .shl(HOOK_TYPE_PRE_UPDATE)
+                .or(BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE));
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the configs were set
+            const preUpdateConfig = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(preUpdateConfig.allowHookFailure).to.equal(preUpdateHookConfig.allowHookFailure);
+            expect(preUpdateConfig.hookGasLimit).to.equal(preUpdateHookConfig.hookGasLimit);
+            expect(preUpdateConfig.hookAddress).to.equal(preUpdateHookConfig.hookAddress);
+
+            const postUpdateConfig = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(postUpdateConfig.allowHookFailure).to.equal(postUpdateHookConfig.allowHookFailure);
+            expect(postUpdateConfig.hookGasLimit).to.equal(postUpdateHookConfig.hookGasLimit);
+            expect(postUpdateConfig.hookAddress).to.equal(postUpdateHookConfig.hookAddress);
+        });
+    });
+
     describeComputeRateTests(contractName, deployFunc);
 
     describe(contractName + "#timeSinceLastUpdate", function () {
@@ -5950,6 +6748,289 @@ function describeTests(
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
+        });
+
+        describe("Update hooks", function () {
+            let hookFactory;
+
+            let hook;
+
+            before(async function () {
+                hookFactory = await ethers.getContractFactory("HookStub");
+            });
+
+            beforeEach(async function () {
+                hook = await hookFactory.deploy();
+                await hook.deployed();
+            });
+
+            it("Calls only the pre update hook", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                const updateTxPromise = controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                expect(await hook.preUpdateCallCount()).to.equal(1);
+                expect(await hook.postUpdateCallCount()).to.equal(0);
+            });
+
+            it("Calls only the post update hook", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                const updateTxPromise = controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                expect(await hook.preUpdateCallCount()).to.equal(0);
+                expect(await hook.postUpdateCallCount()).to.equal(1);
+            });
+
+            it("Reverts when the pre update hook fails (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the pre update hook fail
+                await hook.stubSetRevertPreUpdate(true);
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PreUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError);
+            });
+
+            it("Reverts when the post update hook fails (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the post update hook fail
+                await hook.stubSetRevertPostUpdate(true);
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PostUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError);
+            });
+
+            it("Emits a failure event when the pre update hook fails (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the pre update hook fail
+                await hook.stubSetRevertPreUpdate(true);
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PreUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+            });
+
+            it("Emits a failure event when the post update hook fails (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the post update hook fail
+                await hook.stubSetRevertPostUpdate(true);
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PostUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+            });
+
+            it("Reverts when the pre update hook runs out of gas (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x");
+            });
+
+            it("Reverts when the post update hook runs out of gas (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x");
+            });
+
+            it("Emits a failure event when the pre update hook runs out of gas (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x", timestamp);
+            });
+
+            it("Emits a failure event when the post update hook runs out of gas (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x", timestamp);
+            });
+
+            it("Updating is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Updating is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
         });
     });
 
