@@ -279,6 +279,8 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
      * the hook, and the address of the hook.
      */
     function setHookConfig(uint8 hookType, Hook calldata hookConfig) external virtual {
+        checkSetHookConfig();
+
         Hook memory oldHook = _getHook(hookType);
 
         if (
