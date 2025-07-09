@@ -171,6 +171,11 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
      */
     error InvalidHookConfig(uint256 hookType);
 
+    /**
+     * @notice An error thrown when an invalid hook type is provided.
+     */
+    error InvalidHookType(uint256 hookType);
+
     /// @notice Creates a new rate controller.
     /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
     /// false if the returned rates should be the same as the last pushed rates (from the buffer).
@@ -281,15 +286,9 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function setHookConfig(uint8 hookType, Hook calldata hookConfig) external virtual {
         checkSetHookConfig();
 
-        Hook memory oldHook = _getHook(hookType);
-
-        if (
-            oldHook.allowHookFailure == hookConfig.allowHookFailure &&
-            oldHook.hookGasLimit == hookConfig.hookGasLimit &&
-            oldHook.hookAddress == hookConfig.hookAddress
-        ) {
-            // The hook did not change. Revert to help the user be aware of this.
-            revert HookConfigUnchanged(hookType);
+        if (!_isHookTypeValid(hookType)) {
+            // The hook type is invalid. Revert to help the user be aware of this.
+            revert InvalidHookType(hookType);
         }
 
         if (address(hookConfig.hookAddress) == address(0)) {
@@ -303,6 +302,17 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             if (hookConfig.hookGasLimit == 0) {
                 revert InvalidHookConfig(hookType);
             }
+        }
+
+        Hook memory oldHook = _getHook(hookType);
+
+        if (
+            oldHook.allowHookFailure == hookConfig.allowHookFailure &&
+            oldHook.hookGasLimit == hookConfig.hookGasLimit &&
+            oldHook.hookAddress == hookConfig.hookAddress
+        ) {
+            // The hook did not change. Revert to help the user be aware of this.
+            revert HookConfigUnchanged(hookType);
         }
 
         if (address(hookConfig.hookAddress) != address(0)) {
@@ -730,6 +740,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         if (amount > 0) {
             emit RatePushedManually(token, target, current, block.timestamp, amount);
         }
+    }
+
+    function _isHookTypeValid(uint256 hookType) internal pure virtual returns (bool) {
+        return hookType == uint256(HookType.PreUpdate) || hookType == uint256(HookType.PostUpdate);
     }
 
     function _isHookSet(uint256 activeHooks, uint256 hookType) internal view virtual returns (bool) {
