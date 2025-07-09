@@ -768,14 +768,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
                 if (postUpdateHook.allowHookFailure) {
                     // The hook failed, but we allow it to fail
                     emit HookFailed(
-                        uint256(HookType.PreUpdate),
+                        uint256(HookType.PostUpdate),
                         postUpdateHook.hookAddress,
                         returnData,
                         block.timestamp
                     );
                 } else {
                     // The hook failed, and we do not allow it to fail
-                    revert HookFailedError(uint256(HookType.PreUpdate), returnData);
+                    revert HookFailedError(uint256(HookType.PostUpdate), returnData);
                 }
             }
         }
