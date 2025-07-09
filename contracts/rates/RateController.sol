@@ -337,7 +337,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param target The target rate to push.
     /// @param current The current rate to push.
     /// @param amount The number of times to push the rate.
-    function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external {
+    function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external nonReentrant {
         checkManuallyPushRate();
 
         _manuallyPushRate(token, target, current, amount);
