@@ -56,6 +56,9 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         PostUpdate // postControllerUpdate is called immediately after pushing a new rate to the buffer
     }
 
+    /// @notice The precision used for change calculations. This is used to represent percentages as integers.
+    uint256 public constant CHANGE_PRECISION = 10 ** 8;
+
     /// @notice The flag that indicates whether rate updates are paused.
     uint16 internal constant PAUSE_FLAG_MASK = 0x0000000000000001;
 
@@ -127,6 +130,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
      * @param timestamp The block timestamp at which the hook was changed, in seconds since the Unix epoch.
      */
     event HookConfigUpdated(uint256 hookType, address indexed caller, Hook oldHook, Hook newHook, uint256 timestamp);
+
+    /**
+     * @notice An event emitted when the change threshold for a token is updated.
+     * @param token The token whose change threshold was updated.
+     * @param oldChangeThreshold The old change threshold.
+     * @param newChangeThreshold The new change threshold.
+     */
+    event ChangeThresholdUpdated(address indexed token, uint256 oldChangeThreshold, uint256 newChangeThreshold);
 
     /**
      * @notice An error thrown when a hook fails to execute.
@@ -378,6 +389,39 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    /**
+     * @notice Sets the change threshold for the specified token. When the rate changes by more than the threshold, an
+     *   update is triggered, assuming the period has been surpassed.
+     * @param token The token to set the change threshold for.
+     * @param changeThreshold Percent change that allows an update to make place, respresented as the numerator of a
+     *   fraction with a denominator of `CHANGE_PRECISION`. Ex: With `CHANGE_PRECISION` of 1e8, a change threshold of
+     *   2% would be represented as 2e6 (2000000).
+     */
+    function setChangeThreshold(address token, uint32 changeThreshold) external virtual {
+        checkSetChangeThreshold();
+
+        BufferMetadata storage metadata = rateBufferMetadata[token];
+
+        uint256 oldChangeThreshold = metadata.changeThreshold;
+
+        if (oldChangeThreshold != changeThreshold) {
+            metadata.changeThreshold = changeThreshold;
+
+            emit ChangeThresholdUpdated(token, oldChangeThreshold, changeThreshold);
+        }
+    }
+
+    /**
+     * @notice Gets the change threshold for the specified token.
+     * @param token The token to get the change threshold for.
+     * @return uint32 Percent change that allows an update to make place, respresented as the numerator of a
+     *   fraction with a denominator of `CHANGE_PRECISION`. Ex: With `CHANGE_PRECISION` of 1e8, a change threshold of
+     *   2% would be represented as 2e6 (2000000).
+     */
+    function getChangeThreshold(address token) external view virtual returns (uint32) {
+        return rateBufferMetadata[token].changeThreshold;
+    }
+
     /// @notice Computes the rate for a token. If computeAhead is true, the rate is computed on-the-fly with clamping;
     /// otherwise, the rate is the same as the last pushed rate (from the buffer).
     /// @param token The address of the token to compute the rate for.
@@ -516,27 +560,26 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return (rateBufferMetadata[token].flags & PAUSE_FLAG_MASK) != 0;
     }
 
-    /// @notice Determines if any changes will occur in the rate buffer after a new rate is added.
-    /// @dev This function is used to reduce the amount of gas used by updaters when the rate is not changing.
+    /// @notice Determines if there's enough of a change in the rate to trigger an update.
     /// @param data A bytes array containing the token address to be decoded.
-    /// @return bool A boolean value indicating whether any changes will occur in the rate buffer.
+    /// @return bool A boolean value indicating whether there's enough of a change in the rate to trigger an update.
     function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
         address token = abi.decode(data, (address));
 
         BufferMetadata memory meta = rateBufferMetadata[token];
 
-        // If the buffer has empty slots, they can be filled
-        if (meta.size != meta.maxSize) return true;
+        // No rates in the buffer, so the rate will change.
+        if (meta.size == 0) return true;
 
-        // All current rates in the buffer should match the next rate. Otherwise, the rate will change.
-        // We don't check target rates because if the rate is capped, the current rate may never reach the target rate.
-        (, uint64 nextRate) = computeRateAndClamp(token);
-        RateLibrary.Rate[] memory rates = _getRates(token, meta.size, 0, 1);
-        for (uint256 i = 0; i < rates.length; ++i) {
-            if (rates[i].current != nextRate) return true;
+        if (meta.changeThreshold == 0) {
+            // If the change threshold is zero, we always signal something will change.
+            return true;
         }
 
-        return false;
+        uint256 lastRate = _getRates(token, 1, 0, 1)[0].current;
+        (, uint64 nextRate) = computeRateAndClamp(token);
+
+        return changeThresholdSurpassed(lastRate, nextRate, meta.changeThreshold);
     }
 
     /// @notice Gets the latest rate for a token. If the buffer is empty, returns a zero rate.
@@ -808,6 +851,54 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
+    /// @dev Taken from adrastia-core/contracts/accumulators/AbstractAccumulator.
+    /// @custom:todo Add this to a library upstream.
+    function calculateChange(uint256 a, uint256 b) internal view virtual returns (uint256 change, bool isInfinite) {
+        // Ensure a is never smaller than b
+        if (a < b) {
+            uint256 temp = a;
+            a = b;
+            b = temp;
+        }
+
+        // a >= b
+
+        if (a == 0) {
+            // a == b == 0 (since a >= b), therefore no change
+            return (0, false);
+        } else if (b == 0) {
+            // (a > 0 && b == 0) => change threshold passed
+            // Zero to non-zero always returns true
+            return (0, true);
+        }
+
+        unchecked {
+            uint256 delta = a - b; // a >= b, therefore no underflow
+            uint256 preciseDelta = delta * CHANGE_PRECISION;
+
+            // If the delta is so large that multiplying by CHANGE_PRECISION overflows, we assume that
+            // the change threshold has been surpassed.
+            // If our assumption is incorrect, the accumulator will be extra-up-to-date, which won't
+            // really break anything, but will cost more gas in keeping this accumulator updated.
+            if (preciseDelta < delta) return (0, true);
+
+            change = preciseDelta / b;
+            isInfinite = false;
+        }
+    }
+
+    /// @dev Taken from adrastia-core/contracts/accumulators/AbstractAccumulator.
+    /// @custom:todo Add this to a library upstream.
+    function changeThresholdSurpassed(
+        uint256 a,
+        uint256 b,
+        uint256 changeThreshold
+    ) internal view virtual returns (bool) {
+        (uint256 change, bool isInfinite) = calculateChange(a, b);
+
+        return isInfinite || change >= changeThreshold;
+    }
+
     /// @notice Called after the pause state is changed.
     /// @param token The token for which the pause state was changed.
     /// @param paused Whether rate updates are paused.
@@ -830,6 +921,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Checks if the caller is authorized to pause or resume updates.
     /// @dev This function should contain the access control logic for the setUpdatesPaused function.
     function checkSetUpdatesPaused() internal view virtual;
+
+    /// @notice Checks if the sender has the required role to set the change threshold.
+    /// @dev This function should contain the access control logic for the setChangeThreshold function.
+    function checkSetChangeThreshold() internal view virtual;
 
     /// @notice Checks if the caller is authorized to set the rates capacity.
     /// @dev This function should contain the access control logic for the setRatesCapacity function.

@@ -79,6 +79,9 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
     /// @notice Requires the sender to have the UPDATE_PAUSE_ADMIN role to call setUpdatesPaused.
     function checkSetUpdatesPaused() internal view virtual override onlyRole(Roles.UPDATE_PAUSE_ADMIN) {}
 
+    /// @notice Requires the sender to have the ADMIN role to call setChangeThreshold.
+    function checkSetChangeThreshold() internal view virtual override onlyRole(Roles.ADMIN) {}
+
     /// @notice Requires the sender to have the ADMIN role to call setRatesCapacity.
     function checkSetRatesCapacity() internal view virtual override onlyRole(Roles.ADMIN) {}
 

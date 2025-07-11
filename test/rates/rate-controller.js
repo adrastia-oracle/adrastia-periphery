@@ -29,6 +29,12 @@ const MAX_PERCENT_DECREASE = 10000;
 const HOOK_TYPE_PRE_UPDATE = 0;
 const HOOK_TYPE_POST_UPDATE = 1;
 
+const CHANGE_THRESHOLD_DECIMALS = 8;
+
+const TWO_PERCENT_CHANGE = ethers.utils.parseUnits("0.02", CHANGE_THRESHOLD_DECIMALS);
+
+const MAX_UINT_64 = BigNumber.from(2).pow(64).sub(1);
+
 // In this example, 1e18 = 100%
 const DEFAULT_CONFIG = {
     max: ethers.utils.parseUnits("1.0", 18), // 100%
@@ -37,6 +43,18 @@ const DEFAULT_CONFIG = {
     maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
     maxPercentIncrease: 10000, // 100%
     maxPercentDecrease: 10000, // 100%
+    base: ethers.utils.parseUnits("0.6", 18), // 60%
+    componentWeights: [],
+    components: [],
+};
+
+const UNBOUNDED_CHANGE_CONFIG = {
+    max: MAX_RATE,
+    min: MIN_RATE,
+    maxIncrease: MAX_RATE,
+    maxDecrease: MAX_RATE,
+    maxPercentIncrease: MAX_PERCENT_INCREASE,
+    maxPercentDecrease: MAX_PERCENT_DECREASE,
     base: ethers.utils.parseUnits("0.6", 18), // 60%
     componentWeights: [],
     components: [],
@@ -1173,7 +1191,7 @@ function describePidControllerNeedsUpdateTests(deployFunc, getController) {
 }
 
 function createDescribeStandardControllerNeedsUpdateTests(
-    alwaysNeedsUpdateOncePerPeriod,
+    supportsChangeThresholds,
     beforeEachCallback,
     describeAdditionalTests
 ) {
@@ -1236,25 +1254,6 @@ function createDescribeStandardControllerNeedsUpdateTests(
 
                 expect(needsUpdate).to.be.false;
             });
-
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it("Should return false if the update period has been passed but nothing will change", async function () {
-                    // Push INITIAL_BUFFER_CARDINALITY updates
-                    for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                        await controller.stubPush(GRT, currentRate, currentRate, 1);
-                    }
-
-                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-                    const needsUpdate = await controller.needsUpdate(updateData);
-
-                    expect(needsUpdate).to.be.false;
-
-                    // Sanity check that it needs an update if the rate changes
-                    await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base.add(1) });
-                    expect(await controller.needsUpdate(updateData)).to.be.true;
-                });
-            }
 
             it("Should return true if it is ready for its first update", async function () {
                 const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
@@ -1322,108 +1321,211 @@ function createDescribeStandardControllerNeedsUpdateTests(
                 expect(needsUpdate).to.be.true;
             });
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is higher than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxIncrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+            if (supportsChangeThresholds) {
+                it("Should return false if the rate change is less than the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxIncrease: 0,
-                            base: DEFAULT_CONFIG.base.add(1),
-                        });
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    // Set the new rate to the current rate + 1% - 1
+                    const newRate = currentRate.add(currentRate.mul(1).div(100)).sub(1);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is higher than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxPercentIncrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    const needsUpdate = await controller.needsUpdate(updateData);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxPercentIncrease: 0,
-                            base: DEFAULT_CONFIG.base.add(1),
-                        });
+                    expect(needsUpdate).to.be.false;
+                });
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                it("Should return true if the rate change is meets the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                    // Set the new rate to the current rate + 1%
+                    const newRate = currentRate.add(currentRate.mul(1).div(100));
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is lower than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxDecrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxDecrease: 0,
-                            base: DEFAULT_CONFIG.base.sub(1),
-                        });
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    const needsUpdate = await controller.needsUpdate(updateData);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    expect(needsUpdate).to.be.true;
+                });
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                it("Should return true if the rate change is exceeds the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is lower than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxPercentDecrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxPercentDecrease: 0,
-                            base: DEFAULT_CONFIG.base.sub(1),
-                        });
+                    // Set the new rate to the current rate + 1% + 1
+                    const newRate = currentRate.add(currentRate.mul(1).div(100)).add(1);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return false if the rate change is less than the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 25%
+                    const changeThreshold = ethers.utils.parseUnits("0.25", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange).add(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
+
+                it("Should return true if the rate change is meets the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true if the rate change is exceeds the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange).sub(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true moving from 0 to 1", async function () {
+                    // Push the initial rate, which is 0
+                    await controller.stubPush(GRT, 0, 0, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 0 to 1
+                    const newRate = BigNumber.from(1);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true moving from 1 to 0", async function () {
+                    // Push the initial rate, which is 1
+                    await controller.stubPush(GRT, 1, 1, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 1 to 0
+                    const newRate = BigNumber.from(0);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return false moving from 0 to 0", async function () {
+                    // Push the initial rate, which is 0
+                    await controller.stubPush(GRT, 0, 0, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 0 to 0
+                    const newRate = BigNumber.from(0);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
+
+                it("Should return false moving from currentRate to currentRate", async function () {
+                    // Push the initial rate, which is currentRate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from currentRate to currentRate
+                    const newRate = currentRate;
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
             }
 
             if (describeAdditionalTests) {
@@ -4623,6 +4725,314 @@ function createDescribeCanUpdateTests(isPidController) {
     };
 }
 
+function createDecreaseChangeThresholdTests(isPidController, supportsChangeThresholds) {
+    return function describeStandardControllerSetChangeThresholdsTests(contractName, deployFunc) {
+        describe(contractName + "#setChangeThreshold", function () {
+            var controller;
+
+            async function deploy(updaterMustBeEoa) {
+                const deployment = await deployFunc({
+                    updaterMustBeEoa: updaterMustBeEoa,
+                });
+                controller = deployment.controller;
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Grant all roles to the signer
+                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+                // Set config for GRT
+                await controller.setConfig(USDC, DEFAULT_CONFIG);
+
+                if (isPidController) {
+                    // Set PID config for GRT
+                    await controller.setPidConfig(USDC, DEFAULT_PID_CONFIG);
+                }
+            }
+
+            beforeEach(async () => {
+                await deploy(false);
+            });
+
+            if (supportsChangeThresholds) {
+                it("Should work if the caller has all roles", async function () {
+                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+                });
+
+                it("Should work if the caller has the admin role", async function () {
+                    const [, other] = await ethers.getSigners();
+
+                    await controller.grantRole(ADMIN_ROLE, other.address);
+
+                    await expect(controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+                });
+
+                it("Should revert if the caller doesn't have any role", async function () {
+                    const [, other] = await ethers.getSigners();
+
+                    await expect(
+                        controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE)
+                    ).to.be.revertedWith(/AccessControl: .*/);
+                });
+
+                it("Should work when the threshold changes to above zero then to zero", async function () {
+                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+
+                    await expect(controller.setChangeThreshold(USDC, 0))
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(USDC, TWO_PERCENT_CHANGE, 0);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(0);
+                });
+
+                it("Should not emit an event if the threshold doesn't change", async function () {
+                    await expect(controller.setChangeThreshold(USDC, 0)).to.not.emit(
+                        controller,
+                        "ChangeThresholdUpdated"
+                    );
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(0);
+                });
+            } else {
+                it("Reverts even if the caller has all roles", async function () {
+                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE)).to.be.revertedWith(
+                        "Not supported"
+                    );
+                });
+            }
+        });
+    };
+}
+
+function createStandardWillAnythingChangeTests() {
+    return function describeStandardControllerWillAnythingChangeTests(contractName, deployFunc) {
+        describe(contractName + "#willAnythingChange", function () {
+            var controller;
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [USDC]);
+
+            beforeEach(async () => {
+                const deployment = await deployFunc();
+                controller = deployment.controller;
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Grant all roles to the signer
+                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+                await controller.setConfig(USDC, DEFAULT_CONFIG);
+            });
+
+            const tests = [
+                {
+                    lastRate: 0,
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 0,
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 101,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 101,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 102,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 102,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 103,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 103,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 0,
+                    newRate: 0,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 1,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+            ];
+
+            for (const test of tests) {
+                it(
+                    "Returns " +
+                        test.expected +
+                        " when lastRate is " +
+                        test.lastRate +
+                        ", newRate is " +
+                        test.newRate +
+                        ", and changeThreshold is " +
+                        ethers.utils.formatUnits(test.changeThreshold, 6) +
+                        "%",
+                    async function () {
+                        await controller.setChangeThreshold(USDC, test.changeThreshold);
+
+                        await controller.stubPush(USDC, test.lastRate, test.lastRate, 1);
+
+                        const newConfig = {
+                            ...DEFAULT_CONFIG,
+                            base: test.newRate,
+                        };
+
+                        await controller.setConfig(USDC, newConfig);
+
+                        const tx = await controller.stubWillAnythingChange(updateData);
+
+                        expect(tx).to.equal(test.expected);
+                    }
+                );
+            }
+
+            const initialTests = [
+                {
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: MAX_UINT_64,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: 0,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    newRate: 1,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    newRate: MAX_UINT_64,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+            ];
+
+            for (const test of initialTests) {
+                it(
+                    "Returns " +
+                        test.expected +
+                        " when the first rate (initial) is " +
+                        test.newRate +
+                        " and changeThreshold is " +
+                        ethers.utils.formatUnits(test.changeThreshold, 6) +
+                        "%",
+                    async function () {
+                        await controller.setChangeThreshold(USDC, test.changeThreshold);
+
+                        const newConfig = {
+                            ...DEFAULT_CONFIG,
+                            base: test.newRate,
+                        };
+
+                        await controller.setConfig(USDC, newConfig);
+
+                        const tx = await controller.stubWillAnythingChange(updateData);
+
+                        expect(tx).to.equal(test.expected);
+                    }
+                );
+            }
+        });
+    };
+}
+
+function createStandardCalculateChangeTests() {
+    return function describeStandardControllerCalculateChangeTests(contractName, deployFunc) {
+        describe(contractName + "#calculateChange", function () {
+            var controller;
+
+            beforeEach(async () => {
+                const deployment = await deployFunc();
+                controller = deployment.controller;
+            });
+
+            it("Returns isInfinite=true if the change overflows", async function () {
+                const [change, isInfinite] = await controller.stubCalculateChange(
+                    BigNumber.from(1),
+                    BigNumber.from(2).pow(256).sub(1) // MAX_UINT_256 - 1
+                );
+
+                expect(change).to.equal(0);
+                expect(isInfinite).to.be.true;
+            });
+        });
+    };
+}
+
 function describeTests(
     contractName,
     deployFunc,
@@ -4630,7 +5040,10 @@ function describeTests(
     describeComputeRateTests,
     describeNeedsUpdateTests,
     describeUpdateTests,
-    describeCanUpdateTests
+    describeCanUpdateTests,
+    describeSetChangeThresholdTests,
+    describeWillAnythingChangeTests,
+    describeCalculateChangeTests
 ) {
     describe(contractName + "#constructor", function () {
         const tests = [
@@ -5873,6 +6286,12 @@ function describeTests(
 
     describeUpdateTests(contractName, deployFunc);
 
+    describeSetChangeThresholdTests?.(contractName, deployFunc);
+
+    describeWillAnythingChangeTests?.(contractName, deployFunc);
+
+    describeCalculateChangeTests?.(contractName, deployFunc);
+
     describe(contractName + " - IHistoricalRates implementation", function () {
         var controller;
 
@@ -7101,9 +7520,12 @@ describeTests(
     deployStandardController,
     setDefaultStandardConfig,
     describeStandardControllerComputeRateTests,
-    createDescribeStandardControllerNeedsUpdateTests(false, undefined, undefined),
+    createDescribeStandardControllerNeedsUpdateTests(/* supportsChangeThresholds */ true, undefined, undefined),
     createDescribeStandardControllerUpdateTests(undefined, true, undefined),
-    createDescribeCanUpdateTests(false)
+    createDescribeCanUpdateTests(false),
+    createDecreaseChangeThresholdTests(false, true),
+    createStandardWillAnythingChangeTests(),
+    createStandardCalculateChangeTests()
 );
 describeTests(
     "PidController",
@@ -7111,10 +7533,13 @@ describeTests(
     setDefaultPidConfig,
     describePidControllerComputeRateTests,
     createDescribeStandardControllerNeedsUpdateTests(
-        true,
+        /* supportsChangeThresholds */ false,
         initializePidController,
         describePidControllerNeedsUpdateTests
     ),
     createDescribeStandardControllerUpdateTests(initializePidController, false, describePidControllerUpdateTests),
-    createDescribeCanUpdateTests(true)
+    createDescribeCanUpdateTests(true),
+    createDecreaseChangeThresholdTests(true, false),
+    undefined,
+    createStandardCalculateChangeTests()
 );

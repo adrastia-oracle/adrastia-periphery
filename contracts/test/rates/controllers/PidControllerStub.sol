@@ -32,6 +32,18 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
         return activeHookTypes;
     }
 
+    function stubCalculateChange(uint256 a, uint256 b) public view returns (uint256, bool) {
+        return calculateChange(a, b);
+    }
+
+    function stubWillAnythingChange(bytes memory data) public view returns (bool) {
+        return willAnythingChange(data);
+    }
+
+    function stubChangeThresholdSurpassed(uint256 a, uint256 b, uint256 threshold) public view returns (bool) {
+        return changeThresholdSurpassed(a, b, threshold);
+    }
+
     function canUpdate(
         bytes memory data
     ) public view virtual override(ManagedPidController, InputAndErrorAccumulatorStub) returns (bool) {
@@ -109,5 +121,7 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
 
         call.paused = paused;
         ++call.callCount;
+
+        super.onPaused(token, paused);
     }
 }
