@@ -461,13 +461,22 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     function update(bytes memory data) public virtual override nonReentrant returns (bool b) {
         checkUpdate();
 
-        if (needsUpdate(data)) return performUpdate(data);
+        (bool needsUpdate_, bool nextRateComputed, uint64 targetRate, uint64 nextRate) = _needsUpdate(data);
+        if (needsUpdate_) {
+            return performUpdate(data, nextRateComputed, targetRate, nextRate);
+        }
 
         return false;
     }
 
     /// @inheritdoc IUpdateable
     function needsUpdate(bytes memory data) public view virtual override returns (bool b) {
+        (b, , , ) = _needsUpdate(data);
+    }
+
+    function _needsUpdate(
+        bytes memory data
+    ) internal view virtual returns (bool b, bool nextRateComputed, uint64 targetRate, uint64 nextRate) {
         address token = abi.decode(data, (address));
 
         BufferMetadata memory meta = rateBufferMetadata[token];
@@ -477,11 +486,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         //   1. The buffer is initialized. We do this to prevent zero values from being pushed to the buffer.
         //   2. Updates are not paused.
         //   3. Something will change. Otherwise, updating is a waste of gas.
-        return
-            timeSinceLastUpdate(data) >= period &&
-            meta.maxSize > 0 &&
-            !_areUpdatesPaused(token) &&
-            willAnythingChange(data);
+
+        if (!(timeSinceLastUpdate(data) >= period) || !(meta.maxSize > 0) || _areUpdatesPaused(token)) {
+            // If the update period has not elapsed, the buffer is not initialized, or updates are paused, we cannot
+            // update.
+            return (false, false, 0, 0);
+        }
+
+        // Now we check if anything will change
+        (b, nextRateComputed, targetRate, nextRate) = willAnythingChange(data);
     }
 
     /**
@@ -572,24 +585,31 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
     /// @notice Determines if there's enough of a change in the rate to trigger an update.
     /// @param data A bytes array containing the token address to be decoded.
-    /// @return bool A boolean value indicating whether there's enough of a change in the rate to trigger an update.
-    function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
+    /// @return willChange A boolean value indicating whether there's enough of a change in the rate to trigger an update.
+    /// @return nextRateComputed A boolean value indicating whether the next rate was computed.
+    /// @return targetRate The target rate for the token, if it was computed.
+    /// @return nextRate The next rate for the token, if it was computed.
+    function willAnythingChange(
+        bytes memory data
+    ) internal view virtual returns (bool willChange, bool nextRateComputed, uint64 targetRate, uint64 nextRate) {
         address token = abi.decode(data, (address));
 
         BufferMetadata memory meta = rateBufferMetadata[token];
 
         // No rates in the buffer, so the rate will change.
-        if (meta.size == 0) return true;
+        if (meta.size == 0) return (true, false, 0, 0);
 
         if (meta.changeThreshold == 0) {
             // If the change threshold is zero, we always signal something will change.
-            return true;
+            return (true, false, 0, 0);
         }
 
         uint256 lastRate = _getRates(token, 1, 0, 1)[0].current;
-        (, uint64 nextRate) = computeRateAndClamp(token);
+        (targetRate, nextRate) = computeRateAndClamp(token);
 
-        return changeThresholdSurpassed(lastRate, nextRate, meta.changeThreshold);
+        nextRateComputed = true;
+
+        willChange = changeThresholdSurpassed(lastRate, nextRate, meta.changeThreshold);
     }
 
     /// @notice Gets the latest rate for a token. If the buffer is empty, returns a zero rate.
@@ -742,9 +762,20 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
-    function updateAndCompute(address token) internal virtual returns (uint64 target, uint64 newRate) {
-        // Compute the new rate and clamp it
-        (target, newRate) = computeRateAndClamp(token);
+    function updateAndCompute(
+        address token,
+        bool nextRateComputed,
+        uint64 targetRate,
+        uint64 nextRate
+    ) internal virtual returns (uint64 target, uint64 newRate) {
+        if (nextRateComputed) {
+            // The target and new rate was already computed, so we can just return it
+            target = targetRate;
+            newRate = nextRate;
+        } else {
+            // Compute the new rate and clamp it
+            (target, newRate) = computeRateAndClamp(token);
+        }
     }
 
     /// @notice Performs an update of the token's rate based on the provided data.
@@ -752,8 +783,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// if `updatersMustBeEoa` is set to true. It decodes the token address from the input data, computes
     /// the new clamped rate using `computeRateAndClamp`, and then pushes the new rate to the rate buffer.
     /// @param data The input data, containing the token address to be updated.
+    /// @param nextRateComputed A boolean indicating whether the next rate was computed.
+    /// @param nextRate The next rate that was computed for the token.
     /// @return bool Returns true if the update is successful.
-    function performUpdate(bytes memory data) internal virtual returns (bool) {
+    function performUpdate(
+        bytes memory data,
+        bool nextRateComputed,
+        uint64 targetRate,
+        uint64 nextRate
+    ) internal virtual returns (bool) {
         if (updatersMustBeEoa && msg.sender != tx.origin) {
             // Only EOA can update
             revert UpdaterMustBeEoa(tx.origin, msg.sender);
@@ -762,7 +800,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         address token = abi.decode(data, (address));
 
         // Compute the new rates and do any other necessary work
-        (uint64 target, uint64 newRate) = updateAndCompute(token);
+        (uint64 target, uint64 newRate) = updateAndCompute(token, nextRateComputed, targetRate, nextRate);
 
         // Push the new rate
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));

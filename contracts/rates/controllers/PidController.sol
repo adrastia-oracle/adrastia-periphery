@@ -432,7 +432,12 @@ abstract contract PidController is RateController {
     }
 
     /// @inheritdoc RateController
-    function updateAndCompute(address token) internal virtual override returns (uint64 target, uint64 current) {
+    function updateAndCompute(
+        address token,
+        bool,
+        uint64,
+        uint64
+    ) internal virtual override returns (uint64 target, uint64 current) {
         PidState memory newPidState;
         (target, current, newPidState) = computeNextPidRate(token);
 
@@ -443,8 +448,8 @@ abstract contract PidController is RateController {
 
     /// @inheritdoc RateController
     /// @dev Always returns true to ensure continuous updates.
-    function willAnythingChange(bytes memory) internal view virtual override returns (bool) {
-        return true;
+    function willAnythingChange(bytes memory) internal view virtual override returns (bool, bool, uint64, uint64) {
+        return (true, false, 0, 0);
     }
 
     function _inputAndErrorOracle(address token) internal view virtual returns (ILiquidityOracle) {
