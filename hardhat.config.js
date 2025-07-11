@@ -19,12 +19,22 @@ const SOLC_8 = {
     },
 };
 
+const SOLC_8_30 = {
+    version: "0.8.30",
+    settings: {
+        optimizer: {
+            enabled: true,
+            runs: 200,
+        },
+    },
+};
+
 /**
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
     solidity: {
-        compilers: [SOLC_8],
+        compilers: [SOLC_8, SOLC_8_30],
     },
     networks: {
         hardhat: {
@@ -115,5 +125,9 @@ module.exports = {
     },
     mocha: {
         timeout: 60000, // 60 seconds
+    },
+    gasReporter: {
+        enabled: true,
+        trackGasDeltas: true,
     },
 };
