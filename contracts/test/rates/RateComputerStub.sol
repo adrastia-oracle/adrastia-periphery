@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 // Import ERC165
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";

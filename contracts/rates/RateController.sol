@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
