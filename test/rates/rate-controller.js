@@ -7141,7 +7141,7 @@ function describeTests(
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
             expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
@@ -7163,7 +7163,7 @@ function describeTests(
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
             expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);

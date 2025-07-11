@@ -90,9 +90,9 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The token for which the rate was pushed.
     /// @param target The target rate.
     /// @param current The effective rate.
-    /// @param timestamp The timestamp at which the rate was pushed.
     /// @param amount The amount of times the rate was pushed.
-    event RatePushedManually(address indexed token, uint256 target, uint256 current, uint256 timestamp, uint256 amount);
+    /// @param timestamp The timestamp at which the rate was pushed.
+    event RatePushedManually(address indexed token, uint256 target, uint256 current, uint256 amount, uint256 timestamp);
 
     /// @notice Event emitted when the pause status of rate updates for a token is changed.
     /// @param token The token for which the pause status of rate updates was changed.
@@ -781,7 +781,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         if (amount > 0) {
-            emit RatePushedManually(token, target, current, block.timestamp, amount);
+            emit RatePushedManually(token, target, current, amount, block.timestamp);
         }
     }
 
