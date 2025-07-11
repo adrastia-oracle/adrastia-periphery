@@ -97,11 +97,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Event emitted when the pause status of rate updates for a token is changed.
     /// @param token The token for which the pause status of rate updates was changed.
     /// @param areUpdatesPaused Whether rate updates are paused for the token.
-    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
+    /// @param timestamp The timestamp at which the pause status was changed, in seconds since the Unix epoch.
+    event PauseStatusChanged(address indexed token, bool areUpdatesPaused, uint256 timestamp);
 
     /// @notice Event emitted when the rate configuration for a token is updated.
     /// @param token The token for which the rate configuration was updated.
-    event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig);
+    /// @param oldConfig The old rate configuration.
+    /// @param newConfig The new rate configuration.
+    /// @param timestamp The block timestamp at which the rate configuration was updated, in seconds since the Unix epoch.
+    event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig, uint256 timestamp);
 
     /**
      * @notice An event emitted when a hook reverts, but the failure is allowed.
@@ -136,8 +140,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
      * @param token The token whose change threshold was updated.
      * @param oldChangeThreshold The old change threshold.
      * @param newChangeThreshold The new change threshold.
+     * @param timestamp The block timestamp at which the change threshold was updated, in seconds since the Unix epoch.
      */
-    event ChangeThresholdUpdated(address indexed token, uint256 oldChangeThreshold, uint256 newChangeThreshold);
+    event ChangeThresholdUpdated(
+        address indexed token,
+        uint256 oldChangeThreshold,
+        uint256 newChangeThreshold,
+        uint256 timestamp
+    );
 
     /**
      * @notice An error thrown when a hook fails to execute.
@@ -264,7 +274,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         rateConfigs[token] = config;
 
-        emit RateConfigUpdated(token, oldConfig, config);
+        emit RateConfigUpdated(token, oldConfig, config, block.timestamp);
 
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
@@ -381,7 +391,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
             meta.flags = flags;
 
-            emit PauseStatusChanged(token, paused);
+            emit PauseStatusChanged(token, paused, block.timestamp);
 
             onPaused(token, paused);
         } else {
@@ -407,7 +417,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         if (oldChangeThreshold != changeThreshold) {
             metadata.changeThreshold = changeThreshold;
 
-            emit ChangeThresholdUpdated(token, oldChangeThreshold, changeThreshold);
+            emit ChangeThresholdUpdated(token, oldChangeThreshold, changeThreshold, block.timestamp);
         }
     }
 

@@ -4760,9 +4760,13 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
             if (supportsChangeThresholds) {
                 it("Should work if the caller has all roles", async function () {
-                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                    const tx = await controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+
+                    const timestamp = await blockTimestamp(tx.blockNumber);
+
+                    await expect(tx)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
                 });
@@ -4772,9 +4776,13 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await controller.grantRole(ADMIN_ROLE, other.address);
 
-                    await expect(controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                    const tx = await controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+
+                    const timestamp = await blockTimestamp(tx.blockNumber);
+
+                    await expect(tx)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
                 });
@@ -4788,15 +4796,21 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
                 });
 
                 it("Should work when the threshold changes to above zero then to zero", async function () {
-                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE))
+                    const tx1 = await controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+                    const timestamp1 = await blockTimestamp(tx1.blockNumber);
+
+                    await expect(tx1)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE);
+                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp1);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
 
-                    await expect(controller.setChangeThreshold(USDC, 0))
+                    const tx2 = await controller.setChangeThreshold(USDC, 0);
+                    const timestamp2 = await blockTimestamp(tx2.blockNumber);
+
+                    await expect(tx2)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, TWO_PERCENT_CHANGE, 0);
+                        .withArgs(USDC, TWO_PERCENT_CHANGE, 0, timestamp2);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(0);
                 });
@@ -5177,9 +5191,10 @@ function describeTests(
         });
 
         it("Should not revert if the token is missing a config", async function () {
-            await expect(controller.setUpdatesPaused(USDC, true))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(USDC, true);
+            const tx = await controller.setUpdatesPaused(USDC, true);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(USDC, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(USDC)).to.equal(true);
@@ -5189,9 +5204,10 @@ function describeTests(
         });
 
         it("Should emit an event when the updates are paused", async function () {
-            await expect(controller.setUpdatesPaused(GRT, true))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(GRT, true);
+            const tx = await controller.setUpdatesPaused(GRT, true);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(GRT, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -5200,9 +5216,10 @@ function describeTests(
         it("Should emit an event when the updates are unpaused", async function () {
             await controller.setUpdatesPaused(GRT, true);
 
-            await expect(controller.setUpdatesPaused(GRT, false))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(GRT, false);
+            const tx = await controller.setUpdatesPaused(GRT, false);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(GRT, false, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
@@ -5498,6 +5515,8 @@ function describeTests(
                 components: [],
             });
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
@@ -5506,6 +5525,7 @@ function describeTests(
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -5528,6 +5548,8 @@ function describeTests(
 
             const tx = await controller.setConfig(GRT, config);
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
@@ -5536,6 +5558,7 @@ function describeTests(
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(config));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -5551,12 +5574,15 @@ function describeTests(
 
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -5570,6 +5596,8 @@ function describeTests(
         it("Should emit a RateConfigUpdated event if the config is valid and we call the function multiple times", async function () {
             const tx1 = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
+            const timestamp1 = await blockTimestamp(tx1.blockNumber);
+
             await expect(tx1).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
@@ -5578,8 +5606,11 @@ function describeTests(
             expect(event1?.args?.token).to.equal(GRT);
             expect(event1?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event1?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event1?.args?.timestamp).to.equal(timestamp1);
 
             const tx2 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+            const timestamp2 = await blockTimestamp(tx2.blockNumber);
 
             await expect(tx2).to.emit(controller, "RateConfigUpdated");
 
@@ -5589,6 +5620,7 @@ function describeTests(
             expect(event2?.args?.token).to.equal(GRT);
             expect(event2?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event2?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event2?.args?.timestamp).to.equal(timestamp2);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -5654,6 +5686,8 @@ function describeTests(
 
             const tx = await controller.setConfig(GRT, secondConfig);
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
@@ -5662,6 +5696,7 @@ function describeTests(
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(secondConfig));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig2 = await controller.getConfig(GRT);
