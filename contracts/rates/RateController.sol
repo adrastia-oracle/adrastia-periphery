@@ -17,7 +17,8 @@ import "./controllers/hooks/IControllerPostUpdateHook.sol";
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetHookConfig, checkSetChangeThreshold,
+/// and checkUpdate to add restrictions.
 abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic, ReentrancyGuard {
     using SafeCast for uint256;
 

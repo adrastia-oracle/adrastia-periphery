@@ -24,8 +24,8 @@ import "../RateController.sol";
 /// (i.e. considering a positive rate as zero and adjusting the output rates accordingly.)
 /// This same rebasing can be used to handle negative rates.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetDefaultInputAndErrorOracle, and
-/// checkUpdate to add restrictions.
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetDefaultInputAndErrorOracle,
+/// checkSetChangeThreshold, checkSetHookConfig, and checkUpdate to add restrictions.
 abstract contract PidController is RateController {
     /// @notice Struct to hold PID configuration.
     struct PidConfig {
