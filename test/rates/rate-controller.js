@@ -1545,6 +1545,8 @@ function createDescribeStandardControllerUpdateTests(
         describe(contractName + "#update", function () {
             var controller;
 
+            let adminAddress;
+
             async function deploy(updatersMustBeEoa) {
                 const deployment = await deployFunc({
                     updaterMustBeEoa: updatersMustBeEoa,
@@ -1553,6 +1555,8 @@ function createDescribeStandardControllerUpdateTests(
 
                 // Get our signer address
                 const [signer] = await ethers.getSigners();
+
+                adminAddress = await signer.getAddress();
 
                 // Grant all roles to the signer
                 await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -1624,7 +1628,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, newRate, newRate, timestamp);
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
                 });
 
                 it("Updates when pushing a second rate with a change threshold specified and the change threshold is just met (upwards change)", async function () {
@@ -1651,7 +1655,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, newRate, newRate, timestamp);
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
                 });
 
                 it("Doesn't update when pushing a second rate with a change threshold specified and the change threshold is not met (upwards change)", async function () {
@@ -1701,7 +1705,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, newRate, newRate, timestamp);
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
                 });
 
                 it("Updates when pushing a second rate with a change threshold specified and the change threshold is just met (downwards change)", async function () {
@@ -1730,7 +1734,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, newRate, newRate, timestamp);
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
                 });
 
                 it("Doesn't update when pushing a second rate with a change threshold specified and the change threshold is not met (downwards change)", async function () {
@@ -1777,7 +1781,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, newRate, newRate, timestamp);
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
                 });
             }
 
@@ -1942,7 +1946,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, targetRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, targetRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1968,7 +1972,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1994,7 +1998,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2024,7 +2028,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2054,7 +2058,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2090,7 +2094,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2126,7 +2130,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2169,7 +2173,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2212,7 +2216,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2256,7 +2260,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2300,7 +2304,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2343,7 +2347,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, cappedRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, cappedRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2386,7 +2390,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, cappedRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, cappedRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2422,7 +2426,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2458,7 +2462,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2484,7 +2488,7 @@ function createDescribeStandardControllerUpdateTests(
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, currentRate, currentRate, currentTime);
+                        .withArgs(adminAddress, GRT, currentRate, currentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -4916,6 +4920,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
     return function describeStandardControllerSetChangeThresholdsTests(contractName, deployFunc) {
         describe(contractName + "#setChangeThreshold", function () {
             var controller;
+            var adminAddress;
 
             async function deploy(updaterMustBeEoa) {
                 const deployment = await deployFunc({
@@ -4925,6 +4930,8 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                 // Get our signer address
                 const [signer] = await ethers.getSigners();
+
+                adminAddress = await signer.getAddress();
 
                 // Grant all roles to the signer
                 await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -4953,7 +4960,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await expect(tx)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp);
+                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
                 });
@@ -4969,7 +4976,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await expect(tx)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp);
+                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
                 });
@@ -4988,7 +4995,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await expect(tx1)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, 0, TWO_PERCENT_CHANGE, timestamp1);
+                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp1);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
 
@@ -4997,7 +5004,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await expect(tx2)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(USDC, TWO_PERCENT_CHANGE, 0, timestamp2);
+                        .withArgs(adminAddress, USDC, TWO_PERCENT_CHANGE, 0, timestamp2);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(0);
                 });
@@ -5320,9 +5327,14 @@ function describeTests(
     describe(contractName + "#push", function () {
         var controller;
 
+        let adminAddress;
+
         beforeEach(async () => {
             const deployment = await deployFunc();
             controller = deployment.controller;
+
+            const [signer] = await ethers.getSigners();
+            adminAddress = await signer.getAddress();
         });
 
         it("Should initialize the buffer if it hasn't been initialized", async function () {
@@ -5331,12 +5343,14 @@ function describeTests(
             // Check that the buffer initialized event was emitted
             await expect(pushTx)
                 .to.emit(controller, "RatesCapacityInitialized")
-                .withArgs(USDC, INITIAL_BUFFER_CARDINALITY);
+                .withArgs(adminAddress, USDC, INITIAL_BUFFER_CARDINALITY);
         });
     });
 
     describe(contractName + "#setUpdatesPaused", function () {
         var controller;
+
+        let adminAddress;
 
         beforeEach(async () => {
             const deployment = await deployFunc();
@@ -5344,6 +5358,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -5381,7 +5397,7 @@ function describeTests(
             const tx = await controller.setUpdatesPaused(USDC, true);
             const timestamp = await blockTimestamp(tx.blockNumber);
 
-            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(USDC, true, timestamp);
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, USDC, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(USDC)).to.equal(true);
@@ -5394,7 +5410,7 @@ function describeTests(
             const tx = await controller.setUpdatesPaused(GRT, true);
             const timestamp = await blockTimestamp(tx.blockNumber);
 
-            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(GRT, true, timestamp);
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, GRT, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -5406,7 +5422,7 @@ function describeTests(
             const tx = await controller.setUpdatesPaused(GRT, false);
             const timestamp = await blockTimestamp(tx.blockNumber);
 
-            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(GRT, false, timestamp);
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, GRT, false, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
@@ -5492,6 +5508,8 @@ function describeTests(
         var controller;
         var computer;
 
+        var adminAddress;
+
         before(async function () {
             computerFactory = await ethers.getContractFactory("RateComputerStub");
         });
@@ -5506,6 +5524,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -5709,6 +5729,7 @@ function describeTests(
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -5742,6 +5763,7 @@ function describeTests(
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(config));
@@ -5766,6 +5788,7 @@ function describeTests(
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -5790,6 +5813,7 @@ function describeTests(
             // Check the event args
             const receipt1 = await tx1.wait();
             const event1 = receipt1.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event1?.args?.caller).to.equal(adminAddress);
             expect(event1?.args?.token).to.equal(GRT);
             expect(event1?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event1?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -5804,6 +5828,7 @@ function describeTests(
             // Check the event args
             const receipt2 = await tx2.wait();
             const event2 = receipt2.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event2?.args?.caller).to.equal(adminAddress);
             expect(event2?.args?.token).to.equal(GRT);
             expect(event2?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event2?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
@@ -5821,7 +5846,7 @@ function describeTests(
         it("Should initialize the buffers if the config is valid and it's the first time the config is being set", async function () {
             await expect(controller.setConfig(GRT, DEFAULT_CONFIG))
                 .to.emit(controller, "RatesCapacityInitialized")
-                .withArgs(GRT, INITIAL_BUFFER_CARDINALITY);
+                .withArgs(adminAddress, GRT, INITIAL_BUFFER_CARDINALITY);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -5880,6 +5905,7 @@ function describeTests(
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(secondConfig));
@@ -6580,12 +6606,16 @@ function describeTests(
     describe(contractName + " - IHistoricalRates implementation", function () {
         var controller;
 
+        let adminAddress;
+
         beforeEach(async () => {
             const deployment = await deployFunc();
             controller = deployment.controller;
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -6614,22 +6644,21 @@ function describeTests(
         });
 
         describe(contractName + "#setRatesCapacity", function () {
-            it("Should revert if the caller does not have the ADMIN role", async function () {
-                // Get the second signer
-                const [, signer] = await ethers.getSigners();
+            it("Should work when the caller has no roles", async function () {
+                const [, nonRoleCaller] = await ethers.getSigners();
 
-                // Assign the signer all of the other roles
-                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
-                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
-                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
-                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+                const nonRoleCallerAddress = await nonRoleCaller.getAddress();
 
-                // Format the signer's address to be lowercase
-                const signerAddress = signer.address.toLowerCase();
+                const amount = 20;
 
-                await expect(controller.connect(signer).setRatesCapacity(GRT, 2)).to.be.revertedWith(
-                    "AccessControl: account " + signerAddress + " is missing role " + ADMIN_ROLE
-                );
+                const initialAmount = await controller.getRatesCapacity(GRT);
+
+                // Sanity check that the new amount is greater than the initial amount
+                expect(amount).to.be.greaterThan(initialAmount.toNumber());
+
+                await expect(controller.connect(nonRoleCaller).setRatesCapacity(GRT, amount))
+                    .to.emit(controller, "RatesCapacityIncreased")
+                    .withArgs(nonRoleCallerAddress, GRT, initialAmount, amount);
             });
 
             it("Should revert if the token is missing a config", async function () {
@@ -6660,7 +6689,7 @@ function describeTests(
 
                 await expect(controller.setRatesCapacity(GRT, amount))
                     .to.emit(controller, "RatesCapacityIncreased")
-                    .withArgs(GRT, initialAmount, amount);
+                    .withArgs(adminAddress, GRT, initialAmount, amount);
             });
 
             it("Should not emit an event when the capacity is not changed (with default capacity)", async function () {
@@ -7342,12 +7371,16 @@ function describeTests(
     describe(contractName + "#manuallyPushRate", function () {
         var controller;
 
+        let adminAddress;
+
         beforeEach(async function () {
             const deployment = await deployFunc();
             controller = deployment.controller;
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -7425,8 +7458,10 @@ function describeTests(
             const receipt = await tx.wait();
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
-            expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, amount, timestamp);
+            expect(receipt).to.emit(controller, "RateUpdated").withArgs(adminAddress, GRT, rate, rate, timestamp);
+            expect(receipt)
+                .to.emit(controller, "RatePushedManually")
+                .withArgs(adminAddress, GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
@@ -7447,8 +7482,10 @@ function describeTests(
             const receipt = await tx.wait();
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
-            expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, amount, timestamp);
+            expect(receipt).to.emit(controller, "RateUpdated").withArgs(adminAddress, GRT, rate, rate, timestamp);
+            expect(receipt)
+                .to.emit(controller, "RatePushedManually")
+                .withArgs(adminAddress, GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
