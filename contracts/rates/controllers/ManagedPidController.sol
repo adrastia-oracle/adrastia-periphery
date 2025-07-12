@@ -82,8 +82,8 @@ contract ManagedPidController is PidController, AccessControlEnumerable {
         revert("Not supported");
     }
 
-    /// @notice Requires the sender to have the ADMIN role to call setRatesCapacity.
-    function checkSetRatesCapacity() internal view virtual override onlyRole(Roles.ADMIN) {}
+    /// @notice Anyone can increase the rates capacity.
+    function checkSetRatesCapacity() internal view virtual override {}
 
     /// @notice Requires the sender to have the ORACLE_UPDATER role to call update.
     function checkUpdate() internal view virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) {}
