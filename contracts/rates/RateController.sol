@@ -11,7 +11,8 @@ import "@openzeppelin-v4/contracts/security/ReentrancyGuard.sol";
 
 import "./HistoricalRates.sol";
 import "./IRateComputer.sol";
-import "./controllers/hooks/IControllerUpdateHook.sol";
+import "./controllers/hooks/IControllerPreUpdateHook.sol";
+import "./controllers/hooks/IControllerPostUpdateHook.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
@@ -193,6 +194,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     error InvalidHookConfig(uint256 hookType);
 
     /**
+     * @notice An error thrown when a hook does not support the expected interface.
+     *
+     * @param hookType The type of the hook that does not support the interface.
+     * @param hookAddress The address of the hook that does not support the interface.
+     * @param interfaceId The interface ID that the hook is expected to support.
+     */
+    error HookDoesntSupportInterface(uint256 hookType, address hookAddress, bytes4 interfaceId);
+
+    /**
      * @notice An error thrown when an invalid hook type is provided.
      */
     error InvalidHookType(uint256 hookType);
@@ -334,6 +344,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         ) {
             // The hook did not change. Revert to help the user be aware of this.
             revert HookConfigUnchanged(hookType);
+        }
+
+        if (address(hookConfig.hookAddress) != address(0)) {
+            // Ensure that the hook supports the expected interface
+            bytes4 expectedInterfaceId = _getHookInterfaceId(hookType);
+            if (!ERC165Checker.supportsInterface(hookConfig.hookAddress, expectedInterfaceId)) {
+                revert HookDoesntSupportInterface(hookType, hookConfig.hookAddress, expectedInterfaceId);
+            }
         }
 
         if (address(hookConfig.hookAddress) != address(0)) {
@@ -837,6 +855,16 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return hookType == uint256(HookType.PreUpdate) || hookType == uint256(HookType.PostUpdate);
     }
 
+    function _getHookInterfaceId(uint256 hookType) internal pure virtual returns (bytes4) {
+        if (hookType == uint256(HookType.PreUpdate)) {
+            return type(IControllerPreUpdateHook).interfaceId;
+        } else if (hookType == uint256(HookType.PostUpdate)) {
+            return type(IControllerPostUpdateHook).interfaceId;
+        } else {
+            revert InvalidHookType(hookType);
+        }
+    }
+
     function _isHookSet(uint256 activeHooks, uint256 hookType) internal view virtual returns (bool) {
         return (activeHooks & (uint256(1) << hookType)) != 0;
     }
@@ -852,7 +880,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             Hook memory preUpdateHook = _getHook(uint256(HookType.PreUpdate));
 
             (bool success, bytes memory returnData) = preUpdateHook.hookAddress.call{gas: preUpdateHook.hookGasLimit}(
-                abi.encodeWithSelector(IControllerUpdateHook.onPreControllerUpdate.selector, token, rate)
+                abi.encodeWithSelector(IControllerPreUpdateHook.onPreControllerUpdate.selector, token, rate)
             );
 
             if (!success) {
@@ -878,7 +906,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             Hook memory postUpdateHook = _getHook(uint256(HookType.PostUpdate));
 
             (bool success, bytes memory returnData) = postUpdateHook.hookAddress.call{gas: postUpdateHook.hookGasLimit}(
-                abi.encodeWithSelector(IControllerUpdateHook.onPostControllerUpdate.selector, token, rate)
+                abi.encodeWithSelector(IControllerPostUpdateHook.onPostControllerUpdate.selector, token, rate)
             );
 
             if (!success) {

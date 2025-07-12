@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.30;
 
+import {ERC165} from "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
+
 import {IHistoricalRates} from "../../../../IHistoricalRates.sol";
-import {IControllerUpdateHook} from "../../IControllerUpdateHook.sol";
+import {IControllerPreUpdateHook} from "../../IControllerPreUpdateHook.sol";
 import {RateLibrary} from "../../../../RateLibrary.sol";
 
 interface IComptroller {
@@ -20,7 +22,7 @@ interface IVToken {
  * @author Tyler Loewen, TRILEZ SOFTWARE INC. dba. Adrastia
  * @notice A hook that accrues interest for a Venus market before the controller updates the rate.
  */
-contract VenusAccrueInterestHook is IControllerUpdateHook {
+contract VenusAccrueInterestHook is IControllerPreUpdateHook, ERC165 {
     /**
      * @notice The Comptroller contract address.
      */
@@ -107,7 +109,7 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
         return IVToken(vTokenAddress);
     }
 
-    /// @inheritdoc IControllerUpdateHook
+    /// @inheritdoc IControllerPreUpdateHook
     /// @dev This hook accrues interest for a Venus market before the controller updates the rate.
     function onPreControllerUpdate(address token, RateLibrary.Rate calldata) external override {
         if (IHistoricalRates(msg.sender).getRatesCount(token) == 0) {
@@ -126,9 +128,11 @@ contract VenusAccrueInterestHook is IControllerUpdateHook {
         }
     }
 
-    /// @notice Not implemented.
-    function onPostControllerUpdate(address, RateLibrary.Rate calldata) external pure override {
-        revert("Not implemented");
+    /// @inheritdoc ERC165
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return
+            interfaceId == type(IControllerPreUpdateHook).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
     /// @dev Calls to the vToken contracts are limited to 20k gas to avoid issues with CEther fallback.
