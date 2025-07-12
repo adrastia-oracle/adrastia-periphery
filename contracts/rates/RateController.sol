@@ -128,13 +128,13 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /**
      * @notice An event emitted when a hook is changed.
      *
-     * @param hookType The type of the hook that was changed.
      * @param caller The address of the account that changed the hook.
+     * @param hookType The type of the hook that was changed.
      * @param oldHook The old hook config.
      * @param newHook The new hook config.
      * @param timestamp The block timestamp at which the hook was changed, in seconds since the Unix epoch.
      */
-    event HookConfigUpdated(uint256 hookType, address indexed caller, Hook oldHook, Hook newHook, uint256 timestamp);
+    event HookConfigUpdated(address indexed caller, uint256 hookType, Hook oldHook, Hook newHook, uint256 timestamp);
 
     /**
      * @notice An event emitted when the change threshold for a token is updated.
