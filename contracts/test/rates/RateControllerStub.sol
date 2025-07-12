@@ -39,6 +39,10 @@ contract RateControllerStub is ManagedRateController {
         push(token, rate);
     }
 
+    function stubGetHookInterfaceId(uint256 hookType) public pure returns (bytes4) {
+        return _getHookInterfaceId(hookType);
+    }
+
     function stubCalculateChange(uint256 a, uint256 b) public view returns (uint256, bool) {
         return calculateChange(a, b);
     }

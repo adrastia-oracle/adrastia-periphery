@@ -6639,7 +6639,7 @@ function describeTests(
             it("Emits the correct event", async function () {
                 await expect(controller.stubInitializeBuffers(USDC))
                     .to.emit(controller, "RatesCapacityInitialized")
-                    .withArgs(USDC, INITIAL_BUFFER_CARDINALITY);
+                    .withArgs(adminAddress, USDC, INITIAL_BUFFER_CARDINALITY);
             });
         });
 
@@ -7365,6 +7365,39 @@ function describeTests(
                 expect(rate.current).to.equal(1);
                 expect(rate.timestamp).to.equal(1);
             });
+        });
+    });
+
+    describe(contractName + "#_getHookInterfaceId", function () {
+        let controller;
+        let interfaceIds;
+
+        beforeEach(async function () {
+            const deployment = await deployFunc();
+            controller = deployment.controller;
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            interfaceIds = await interfaceIdsFactory.deploy();
+        });
+
+        it("Should return the correct interface ID for the pre update hook", async function () {
+            const interfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            expect(await controller.stubGetHookInterfaceId(HOOK_TYPE_PRE_UPDATE)).to.equal(interfaceId);
+        });
+
+        it("Should return the correct interface ID for the post update hook", async function () {
+            const interfaceId = await interfaceIds.iControllerPostUpdateHook();
+
+            expect(await controller.stubGetHookInterfaceId(HOOK_TYPE_POST_UPDATE)).to.equal(interfaceId);
+        });
+
+        it("Should revert if the hook type is not recognized", async function () {
+            const hookType = 255; // Invalid hook type
+
+            await expect(controller.stubGetHookInterfaceId(hookType))
+                .to.be.revertedWith("InvalidHookType")
+                .withArgs(hookType);
         });
     });
 

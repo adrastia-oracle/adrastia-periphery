@@ -28,6 +28,10 @@ contract PidControllerStub is ManagedPidController, InputAndErrorAccumulatorStub
         bool updatersMustBeEoa_
     ) ManagedPidController(this, computeAhead_, period_, initialBufferCardinality_, updatersMustBeEoa_) {}
 
+    function stubGetHookInterfaceId(uint256 hookType) public pure returns (bytes4) {
+        return _getHookInterfaceId(hookType);
+    }
+
     function stubActiveHookTypes() public view returns (uint256) {
         return activeHookTypes;
     }
