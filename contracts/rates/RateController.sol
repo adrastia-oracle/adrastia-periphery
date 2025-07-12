@@ -88,25 +88,41 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     mapping(address => RateConfig) internal rateConfigs;
 
     /// @notice Event emitted when a new rate is manually pushed to the rate buffer.
+    /// @param caller The address of the account that pushed the rate.
     /// @param token The token for which the rate was pushed.
     /// @param target The target rate.
     /// @param current The effective rate.
     /// @param amount The amount of times the rate was pushed.
     /// @param timestamp The timestamp at which the rate was pushed.
-    event RatePushedManually(address indexed token, uint256 target, uint256 current, uint256 amount, uint256 timestamp);
+    event RatePushedManually(
+        address indexed caller,
+        address indexed token,
+        uint256 target,
+        uint256 current,
+        uint256 amount,
+        uint256 timestamp
+    );
 
     /// @notice Event emitted when the pause status of rate updates for a token is changed.
+    /// @param caller The address of the account that changed the pause status.
     /// @param token The token for which the pause status of rate updates was changed.
     /// @param areUpdatesPaused Whether rate updates are paused for the token.
     /// @param timestamp The timestamp at which the pause status was changed, in seconds since the Unix epoch.
-    event PauseStatusChanged(address indexed token, bool areUpdatesPaused, uint256 timestamp);
+    event PauseStatusChanged(address indexed caller, address indexed token, bool areUpdatesPaused, uint256 timestamp);
 
     /// @notice Event emitted when the rate configuration for a token is updated.
+    /// @param caller The address of the account that updated the rate configuration.
     /// @param token The token for which the rate configuration was updated.
     /// @param oldConfig The old rate configuration.
     /// @param newConfig The new rate configuration.
     /// @param timestamp The block timestamp at which the rate configuration was updated, in seconds since the Unix epoch.
-    event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig, uint256 timestamp);
+    event RateConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        RateConfig oldConfig,
+        RateConfig newConfig,
+        uint256 timestamp
+    );
 
     /**
      * @notice An event emitted when a hook reverts, but the failure is allowed.
@@ -144,12 +160,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
     /**
      * @notice An event emitted when the change threshold for a token is updated.
+     * @param caller The address of the account that updated the change threshold.
      * @param token The token whose change threshold was updated.
      * @param oldChangeThreshold The old change threshold.
      * @param newChangeThreshold The new change threshold.
      * @param timestamp The block timestamp at which the change threshold was updated, in seconds since the Unix epoch.
      */
     event ChangeThresholdUpdated(
+        address indexed caller,
         address indexed token,
         uint256 oldChangeThreshold,
         uint256 newChangeThreshold,
@@ -290,7 +308,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         rateConfigs[token] = config;
 
-        emit RateConfigUpdated(token, oldConfig, config, block.timestamp);
+        emit RateConfigUpdated(msg.sender, token, oldConfig, config, block.timestamp);
 
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
@@ -370,7 +388,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         hooks[hookType] = hookConfig;
 
-        emit HookConfigUpdated(hookType, msg.sender, oldHook, hookConfig, block.timestamp);
+        emit HookConfigUpdated(msg.sender, hookType, oldHook, hookConfig, block.timestamp);
     }
 
     /// @notice Manually pushes new rates for a token, bypassing the update logic, clamp logic, pause logic, and
@@ -415,7 +433,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
             meta.flags = flags;
 
-            emit PauseStatusChanged(token, paused, block.timestamp);
+            emit PauseStatusChanged(msg.sender, token, paused, block.timestamp);
 
             onPaused(token, paused);
         } else {
@@ -441,7 +459,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         if (oldChangeThreshold != changeThreshold) {
             metadata.changeThreshold = changeThreshold;
 
-            emit ChangeThresholdUpdated(token, oldChangeThreshold, changeThreshold, block.timestamp);
+            emit ChangeThresholdUpdated(msg.sender, token, oldChangeThreshold, changeThreshold, block.timestamp);
         }
     }
 
@@ -853,7 +871,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         if (amount > 0) {
-            emit RatePushedManually(token, target, current, amount, block.timestamp);
+            emit RatePushedManually(msg.sender, token, target, current, amount, block.timestamp);
         }
     }
 
