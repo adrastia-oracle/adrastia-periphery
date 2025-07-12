@@ -14,6 +14,8 @@ import "@openzeppelin-v4/contracts/access/IAccessControlEnumerable.sol";
 
 import "../rates/IHistoricalRates.sol";
 import "../rates/IRateComputer.sol";
+import "../rates/controllers/hooks/IControllerPostUpdateHook.sol";
+import "../rates/controllers/hooks/IControllerPreUpdateHook.sol";
 import "../vendor/chainlink/AggregatorV3Interface.sol";
 
 contract InterfaceIds {
@@ -63,5 +65,13 @@ contract InterfaceIds {
 
     function iHistoricalOracle() external pure returns (bytes4) {
         return type(IHistoricalOracle).interfaceId;
+    }
+
+    function iControllerPostUpdateHook() external pure returns (bytes4) {
+        return type(IControllerPostUpdateHook).interfaceId;
+    }
+
+    function iControllerPreUpdateHook() external pure returns (bytes4) {
+        return type(IControllerPreUpdateHook).interfaceId;
     }
 }

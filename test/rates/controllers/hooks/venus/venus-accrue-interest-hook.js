@@ -399,26 +399,6 @@ describe("VenusAccrueInterestHook#refreshTokenMappings", function () {
     });
 });
 
-describe("VenusAccrueInterestHook#onPostControllerUpdate", function () {
-    it("Reverts", async function () {
-        const poolStubFactory = await ethers.getContractFactory("IonicStub");
-        const hookFactory = await ethers.getContractFactory("VenusAccrueInterestHook");
-
-        poolStub = await poolStubFactory.deploy();
-        await poolStub.deployed();
-        hook = await hookFactory.deploy(poolStub.address, PSEUDO_BNB);
-        await hook.deployed();
-
-        await expect(
-            hook.onPostControllerUpdate(USDC, {
-                target: 1,
-                current: 1,
-                timestamp: 1,
-            })
-        ).to.be.revertedWith("Not implemented");
-    });
-});
-
 describe("VenusAccrueInterestHook - integration tests", function () {
     let poolStubFactory;
     let cTokenFactory;
@@ -561,5 +541,32 @@ describe("VenusAccrueInterestHook - integration tests", function () {
             .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, token, expectedInnerError, timestamp);
 
         expect(await cToken.stubAccrueInterestCallTimes()).to.equal(0);
+    });
+});
+
+describe("VenusAccrueInterestHook#supportsInterface", function () {
+    let hook;
+    let interfaceIds;
+
+    beforeEach(async function () {
+        const poolStubFactory = await ethers.getContractFactory("IonicStub");
+        const poolStub = await poolStubFactory.deploy();
+        await poolStub.deployed();
+
+        const hookFactory = await ethers.getContractFactory("VenusAccrueInterestHook");
+        hook = await hookFactory.deploy(poolStub.address, PSEUDO_BNB);
+
+        const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+        interfaceIds = await interfaceIdsFactory.deploy();
+    });
+
+    it("Should support IERC165", async () => {
+        const interfaceId = await interfaceIds.iERC165();
+        expect(await hook["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
+    });
+
+    it("Should support IControllerPreUpdateHook", async () => {
+        const interfaceId = await interfaceIds.iControllerPreUpdateHook();
+        expect(await hook["supportsInterface(bytes4)"](interfaceId)).to.equal(true);
     });
 });

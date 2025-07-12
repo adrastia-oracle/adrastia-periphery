@@ -5955,6 +5955,69 @@ function describeTests(
             await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
         });
 
+        it("Reverts if the hook doesn't implement ERC165", async function () {
+            const hookFactory = await ethers.getContractFactory("HookNoErc165");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
+        it("Reverts if the hook is a pre update hook, but we try to set it as a post update hook", async function () {
+            const hookFactory = await ethers.getContractFactory("ControllerPreUpdateHookStub");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPostUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_POST_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
+        it("Reverts if the hook is a post update hook, but we try to set it as a pre update hook", async function () {
+            const hookFactory = await ethers.getContractFactory("ControllerPostUpdateHookStub");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
         it("Reverts if the caller does not have the ADMIN role", async function () {
             // Get the second signer
             const [, signer] = await ethers.getSigners();
@@ -6154,7 +6217,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6184,7 +6247,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6223,7 +6286,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, hookConfig, newHookConfig, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, hookConfig, newHookConfig, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6262,7 +6325,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, hookConfig, newHookConfig, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, hookConfig, newHookConfig, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6295,7 +6358,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_PRE_UPDATE, signerAddress, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6328,7 +6391,7 @@ function describeTests(
 
             await expect(tx)
                 .to.emit(controller, "HookConfigUpdated")
-                .withArgs(HOOK_TYPE_POST_UPDATE, signerAddress, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
 
             const activeHookTypes = await controller.stubActiveHookTypes();
 
@@ -6363,8 +6426,8 @@ function describeTests(
             await expect(preUpdateTx)
                 .to.emit(controller, "HookConfigUpdated")
                 .withArgs(
-                    HOOK_TYPE_PRE_UPDATE,
                     signerAddress,
+                    HOOK_TYPE_PRE_UPDATE,
                     DISABLED_HOOK_CONFIG,
                     preUpdateHookConfig,
                     preUpdateTxTimestamp
@@ -6381,8 +6444,8 @@ function describeTests(
             await expect(postUpdateTx)
                 .to.emit(controller, "HookConfigUpdated")
                 .withArgs(
-                    HOOK_TYPE_POST_UPDATE,
                     signerAddress,
+                    HOOK_TYPE_POST_UPDATE,
                     DISABLED_HOOK_CONFIG,
                     postUpdateHookConfig,
                     postUpdateTxTimestamp
