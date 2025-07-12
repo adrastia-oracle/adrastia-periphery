@@ -22,9 +22,11 @@ abstract contract ManualRateComputer is IERC165, IRateComputer {
     mapping(address => Rate) internal rates;
 
     /// @notice An event emitted when a rate is updated.
+    /// @param caller The address of the caller that updated the rate.
     /// @param token The address of the token that had its rate updated.
     /// @param rate The new rate for the token.
-    event RateUpdated(address indexed token, uint64 rate);
+    /// @param timestamp The timestamp when the rate was updated.
+    event RateUpdated(address indexed caller, address indexed token, uint64 rate, uint256 timestamp);
 
     /// @notice Custom error for when the rate is not set.
     /// @param token The address of the token that does not have a rate set.
@@ -57,7 +59,7 @@ abstract contract ManualRateComputer is IERC165, IRateComputer {
 
         rates[token] = Rate(rate, uint32(block.timestamp));
 
-        emit RateUpdated(token, rate);
+        emit RateUpdated(msg.sender, token, rate, block.timestamp);
     }
 
     /// @inheritdoc IERC165

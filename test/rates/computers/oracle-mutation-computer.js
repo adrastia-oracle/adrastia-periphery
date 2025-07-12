@@ -701,6 +701,8 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
     var token;
     var oracle;
 
+    let adminAddress;
+
     before(async function () {
         const tokenFactory = await ethers.getContractFactory("FakeERC20");
         const tokenContract = await tokenFactory.deploy("Token", "TKN", decimals);
@@ -723,6 +725,10 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
             DEFAULT_ONE_X_SCALAR,
             decimals
         );
+
+        const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
     });
 
     it("Reverts if everyting is zero", async function () {
@@ -766,7 +772,29 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
         const kink = ethers.constants.One;
         const kinkSlope = ethers.constants.One;
 
-        await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
+        const tx = await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "SlopeConfigUpdated")
+            .withArgs(
+                adminAddress,
+                token,
+                {
+                    base: BigNumber.from(0),
+                    baseSlope: BigNumber.from(0),
+                    kinkSlope: BigNumber.from(0),
+                    kink: BigNumber.from(0),
+                },
+                {
+                    base: base,
+                    baseSlope: baseSlope,
+                    kinkSlope: kinkSlope,
+                    kink: kink,
+                },
+                timestamp
+            );
 
         const config = await computer.getSlopeConfig(token);
 
@@ -844,9 +872,31 @@ describe("ManagedSlopedOracleMutationComputer#setSlopeConfig", function () {
     it("Works if the caller has the rate admin role", async function () {
         await computer.grantRole(RATE_ADMIN_ROLE, signer2Address);
 
-        await computer
+        const tx = await computer
             .connect(signer2)
             .setSlopeConfig(token, DEFAULT_BASE, DEFAULT_BASE_SLOPE, DEFAULT_KINK, DEFAULT_KINK_SLOPE);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "SlopeConfigUpdated")
+            .withArgs(
+                await signer2.getAddress(),
+                token,
+                {
+                    base: BigNumber.from(0),
+                    baseSlope: BigNumber.from(0),
+                    kinkSlope: BigNumber.from(0),
+                    kink: BigNumber.from(0),
+                },
+                {
+                    base: DEFAULT_BASE,
+                    baseSlope: DEFAULT_BASE_SLOPE,
+                    kinkSlope: DEFAULT_KINK_SLOPE,
+                    kink: DEFAULT_KINK,
+                },
+                timestamp
+            );
 
         const config = await computer.getSlopeConfig(token);
 
@@ -920,7 +970,31 @@ describe("ManagedSlopedOracleMutationComputer#setConfig", function () {
     it("Works if the caller has the rate admin role", async function () {
         await computer.grantRole(RATE_ADMIN_ROLE, signer2Address);
 
-        await computer.connect(signer2).setConfig(token, DEFAULT_MAX, DEFAULT_MIN, DEFAULT_OFFSET, DEFAULT_SCALAR);
+        const tx = await computer
+            .connect(signer2)
+            .setConfig(token, DEFAULT_MAX, DEFAULT_MIN, DEFAULT_OFFSET, DEFAULT_SCALAR);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "ConfigUpdated")
+            .withArgs(
+                await signer2.getAddress(),
+                token,
+                {
+                    max: BigNumber.from(0),
+                    min: BigNumber.from(0),
+                    offset: BigNumber.from(0),
+                    scalar: 0,
+                },
+                {
+                    max: DEFAULT_MAX,
+                    min: DEFAULT_MIN,
+                    offset: DEFAULT_OFFSET,
+                    scalar: DEFAULT_SCALAR,
+                },
+                timestamp
+            );
 
         const config = await computer.getConfig(token);
 

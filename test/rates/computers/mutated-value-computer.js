@@ -84,10 +84,16 @@ describe("MutatedValueComputer#constructor", function () {
 describe("MutatedValueComputer#setConfig", function () {
     var computer;
 
+    let adminAddress;
+
     beforeEach(async function () {
         const factory = await ethers.getContractFactory("MutatedValueComputerStub");
 
         computer = await factory.deploy(DEFAULT_ONE_X_SCALAR);
+
+        const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
     });
 
     it("Works with a pass-through config", async function () {
@@ -98,12 +104,15 @@ describe("MutatedValueComputer#setConfig", function () {
             PASS_THROUGH_CONFIG.offset,
             PASS_THROUGH_CONFIG.scalar
         );
+        const timestamp = await blockTimestamp(tx.blockNumber);
         await expect(tx).to.emit(computer, "ConfigUpdated");
         const receipt = await tx.wait();
         const event = receipt.events?.find((e) => e.event === "ConfigUpdated");
+        expect(event?.args?.caller).to.equal(adminAddress);
         expect(event?.args?.token).to.equal(USDC);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(PASS_THROUGH_CONFIG));
+        expect(event?.args?.timestamp).to.equal(timestamp);
 
         const config = await computer.getConfig(USDC);
 
@@ -133,12 +142,15 @@ describe("MutatedValueComputer#setConfig", function () {
             MINIMAL_CONFIG.offset,
             MINIMAL_CONFIG.scalar
         );
+        const timestamp = await blockTimestamp(tx.blockNumber);
         await expect(tx).to.emit(computer, "ConfigUpdated");
         const receipt = await tx.wait();
         const event = receipt.events?.find((e) => e.event === "ConfigUpdated");
+        expect(event?.args?.caller).to.equal(adminAddress);
         expect(event?.args?.token).to.equal(USDC);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(MINIMAL_CONFIG));
+        expect(event?.args?.timestamp).to.equal(timestamp);
 
         const config = await computer.getConfig(USDC);
 
@@ -166,12 +178,15 @@ describe("MutatedValueComputer#setConfig", function () {
         };
 
         const tx2 = await computer.setConfig(USDC, newConfig.max, newConfig.min, newConfig.offset, newConfig.scalar);
+        const timestamp = await blockTimestamp(tx2.blockNumber);
         await expect(tx2).to.emit(computer, "ConfigUpdated");
         const receipt = await tx2.wait();
         const event = receipt.events?.find((e) => e.event === "ConfigUpdated");
+        expect(event?.args?.caller).to.equal(adminAddress);
         expect(event?.args?.token).to.equal(USDC);
         expect(event?.args?.oldConfig).to.deep.equal(Object.values(PASS_THROUGH_CONFIG));
         expect(event?.args?.newConfig).to.deep.equal(Object.values(newConfig));
+        expect(event?.args?.timestamp).to.equal(timestamp);
 
         const config = await computer.getConfig(USDC);
 

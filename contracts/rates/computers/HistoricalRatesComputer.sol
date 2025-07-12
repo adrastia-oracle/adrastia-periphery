@@ -31,16 +31,25 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
     mapping(address => Config) internal configs;
 
     /// @notice An event emitted when a config is initialized or uninitialized.
+    /// @param caller The address of the caller that initialized or uninitialized the config.
     /// @param token The token that is initialized. address(0) is used for the default config.
     /// @param initialized Whether the config is initialized or uninitialized.
-    event ConfigInitialized(address indexed token, bool initialized);
+    /// @param timestamp The timestamp when the config was initialized or uninitialized.
+    event ConfigInitialized(address indexed caller, address indexed token, bool initialized, uint256 timestamp);
 
     /**
      * @notice Emitted when a new config is set for a token.
      * @param token The token that the config is for.
-     * @param config The new config.
+     * @param oldConfig The old config.
+     * @param newConfig The new config.
      */
-    event ConfigUpdated(address indexed token, Config config);
+    event ConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        Config oldConfig,
+        Config newConfig,
+        uint256 timestamp
+    );
 
     /**
      * @notice An error thrown when attempting to set a new config that is the same as the current config.
@@ -81,14 +90,16 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
      */
     constructor(IHistoricalRates defaultRateProvider, uint16 defaultIndex, bool defaultHighAvailability) {
         if (defaultRateProvider != IHistoricalRates(address(0))) {
+            Config memory oldConfig = configs[address(0)];
+
             configs[address(0)] = Config({
                 rateProvider: defaultRateProvider,
                 index: defaultIndex,
                 highAvailability: defaultHighAvailability
             });
 
-            emit ConfigInitialized(address(0), true);
-            emit ConfigUpdated(address(0), configs[address(0)]);
+            emit ConfigInitialized(msg.sender, address(0), true, block.timestamp);
+            emit ConfigUpdated(msg.sender, address(0), oldConfig, configs[address(0)], block.timestamp);
         }
     }
 
@@ -125,7 +136,7 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
     function setConfig(address token, Config calldata newConfig) external virtual {
         checkSetConfig(token);
 
-        Config storage config = configs[token];
+        Config memory oldConfig = configs[token];
 
         if (newConfig.rateProvider == IHistoricalRates(address(0))) {
             // No rate provider specified.
@@ -141,24 +152,24 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
         }
 
         if (
-            config.rateProvider == newConfig.rateProvider &&
-            config.index == newConfig.index &&
-            config.highAvailability == newConfig.highAvailability
+            oldConfig.rateProvider == newConfig.rateProvider &&
+            oldConfig.index == newConfig.index &&
+            oldConfig.highAvailability == newConfig.highAvailability
         ) {
             revert ConfigNotChanged(token);
         }
 
-        if (config.rateProvider == IHistoricalRates(address(0))) {
+        if (oldConfig.rateProvider == IHistoricalRates(address(0))) {
             // Old config is unset. New config is set.
-            emit ConfigInitialized(token, true);
+            emit ConfigInitialized(msg.sender, token, true, block.timestamp);
         } else if (newConfig.rateProvider == IHistoricalRates(address(0))) {
             // Old config is set. New config is unset.
-            emit ConfigInitialized(token, false);
+            emit ConfigInitialized(msg.sender, token, false, block.timestamp);
         }
 
         configs[token] = newConfig;
 
-        emit ConfigUpdated(token, newConfig);
+        emit ConfigUpdated(msg.sender, token, oldConfig, newConfig, block.timestamp);
     }
 
     /**
@@ -186,17 +197,17 @@ abstract contract HistoricalRatesComputer is ERC165, IRateComputer, IHistoricalR
             revert AlreadyUsingDefaultConfig(token);
         }
 
-        Config storage config = configs[token];
-        if (config.rateProvider == IHistoricalRates(address(0))) {
+        Config memory oldConfig = configs[token];
+        if (oldConfig.rateProvider == IHistoricalRates(address(0))) {
             // Already using the default config
             revert AlreadyUsingDefaultConfig(token);
         }
 
-        emit ConfigInitialized(token, false);
+        emit ConfigInitialized(msg.sender, token, false, block.timestamp);
 
         configs[token] = Config({rateProvider: IHistoricalRates(address(0)), index: 0, highAvailability: false});
 
-        emit ConfigUpdated(token, configs[token]);
+        emit ConfigUpdated(msg.sender, token, oldConfig, configs[token], block.timestamp);
     }
 
     /**

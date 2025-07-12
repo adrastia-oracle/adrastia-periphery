@@ -45,11 +45,19 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
 
     /**
      * @notice Emitted when a token's slope configuration is updated.
+     * @param caller The address of the caller that updated the config.
      * @param token The address of the token.
      * @param oldConfig The old configuration.
      * @param newConfig The new configuration.
+     * @param timestamp The timestamp when the config was updated.
      */
-    event SlopeConfigUpdated(address indexed token, SlopeConfig oldConfig, SlopeConfig newConfig);
+    event SlopeConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        SlopeConfig oldConfig,
+        SlopeConfig newConfig,
+        uint256 timestamp
+    );
 
     /**
      * @notice An error thrown when the input value is too large.
@@ -139,7 +147,7 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
         }
 
         slopeConfigs[token] = SlopeConfig({base: base, baseSlope: baseSlope, kink: kink, kinkSlope: kinkSlope});
-        emit SlopeConfigUpdated(token, oldConfig, slopeConfigs[token]);
+        emit SlopeConfigUpdated(msg.sender, token, oldConfig, slopeConfigs[token], block.timestamp);
     }
 
     /**
