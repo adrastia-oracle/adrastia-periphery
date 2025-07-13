@@ -4976,7 +4976,7 @@ function createDecreaseChangeThresholdTests(isPidController, supportsChangeThres
 
                     await expect(tx)
                         .to.emit(controller, "ChangeThresholdUpdated")
-                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp);
+                        .withArgs(await other.getAddress(), USDC, 0, TWO_PERCENT_CHANGE, timestamp);
 
                     expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
                 });
