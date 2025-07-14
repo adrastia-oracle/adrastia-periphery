@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "../../../rates/computers/OracleMutationComputer.sol";
 
@@ -9,9 +9,10 @@ contract OracleMutationComputerStub is OracleMutationComputer {
     constructor(
         IOracle oracle_,
         uint256 dataSlot_,
+        uint256 minimumFreshness_,
         uint32 defaultOneXScalar_,
         int8 decimalsOffset_
-    ) OracleMutationComputer(oracle_, dataSlot_, defaultOneXScalar_, decimalsOffset_) {
+    ) OracleMutationComputer(oracle_, dataSlot_, minimumFreshness_, defaultOneXScalar_, decimalsOffset_) {
         revertOnSetConfig = false;
     }
 

@@ -1,5 +1,7 @@
 const { expect } = require("chai");
+const { keccak256, toUtf8Bytes, defaultAbiCoder } = require("ethers/lib/utils");
 const { ethers, timeAndMine } = require("hardhat");
+const { wrapHardhatProvider } = require("hardhat-tracer");
 
 const BigNumber = ethers.BigNumber;
 const AddressZero = ethers.constants.AddressZero;
@@ -24,6 +26,15 @@ const MIN_RATE = BigNumber.from(0);
 const MAX_PERCENT_INCREASE = 2 ** 32 - 1;
 const MAX_PERCENT_DECREASE = 10000;
 
+const HOOK_TYPE_PRE_UPDATE = 0;
+const HOOK_TYPE_POST_UPDATE = 1;
+
+const CHANGE_THRESHOLD_DECIMALS = 8;
+
+const TWO_PERCENT_CHANGE = ethers.utils.parseUnits("0.02", CHANGE_THRESHOLD_DECIMALS);
+
+const MAX_UINT_64 = BigNumber.from(2).pow(64).sub(1);
+
 // In this example, 1e18 = 100%
 const DEFAULT_CONFIG = {
     max: ethers.utils.parseUnits("1.0", 18), // 100%
@@ -32,6 +43,18 @@ const DEFAULT_CONFIG = {
     maxDecrease: ethers.utils.parseUnits("0.01", 18), // 1%
     maxPercentIncrease: 10000, // 100%
     maxPercentDecrease: 10000, // 100%
+    base: ethers.utils.parseUnits("0.6", 18), // 60%
+    componentWeights: [],
+    components: [],
+};
+
+const UNBOUNDED_CHANGE_CONFIG = {
+    max: MAX_RATE,
+    min: MIN_RATE,
+    maxIncrease: MAX_RATE,
+    maxDecrease: MAX_RATE,
+    maxPercentIncrease: MAX_PERCENT_INCREASE,
+    maxPercentDecrease: MAX_PERCENT_DECREASE,
     base: ethers.utils.parseUnits("0.6", 18), // 60%
     componentWeights: [],
     components: [],
@@ -60,6 +83,12 @@ const DEFAULT_PID_CONFIG = {
     transformer: AddressZero,
     proportionalOnMeasurement: false,
     derivativeOnMeasurement: false,
+};
+
+const DISABLED_HOOK_CONFIG = {
+    allowHookFailure: false,
+    hookGasLimit: BigNumber.from(0),
+    hookAddress: AddressZero,
 };
 
 async function currentBlockTimestamp() {
@@ -1162,7 +1191,7 @@ function describePidControllerNeedsUpdateTests(deployFunc, getController) {
 }
 
 function createDescribeStandardControllerNeedsUpdateTests(
-    alwaysNeedsUpdateOncePerPeriod,
+    supportsChangeThresholds,
     beforeEachCallback,
     describeAdditionalTests
 ) {
@@ -1225,25 +1254,6 @@ function createDescribeStandardControllerNeedsUpdateTests(
 
                 expect(needsUpdate).to.be.false;
             });
-
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it("Should return false if the update period has been passed but nothing will change", async function () {
-                    // Push INITIAL_BUFFER_CARDINALITY updates
-                    for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                        await controller.stubPush(GRT, currentRate, currentRate, 1);
-                    }
-
-                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
-
-                    const needsUpdate = await controller.needsUpdate(updateData);
-
-                    expect(needsUpdate).to.be.false;
-
-                    // Sanity check that it needs an update if the rate changes
-                    await controller.setConfig(GRT, { ...DEFAULT_CONFIG, base: DEFAULT_CONFIG.base.add(1) });
-                    expect(await controller.needsUpdate(updateData)).to.be.true;
-                });
-            }
 
             it("Should return true if it is ready for its first update", async function () {
                 const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
@@ -1311,108 +1321,211 @@ function createDescribeStandardControllerNeedsUpdateTests(
                 expect(needsUpdate).to.be.true;
             });
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is higher than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxIncrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+            if (supportsChangeThresholds) {
+                it("Should return false if the rate change is less than the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxIncrease: 0,
-                            base: DEFAULT_CONFIG.base.add(1),
-                        });
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    // Set the new rate to the current rate + 1% - 1
+                    const newRate = currentRate.add(currentRate.mul(1).div(100)).sub(1);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is higher than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxPercentIncrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    const needsUpdate = await controller.needsUpdate(updateData);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxPercentIncrease: 0,
-                            base: DEFAULT_CONFIG.base.add(1),
-                        });
+                    expect(needsUpdate).to.be.false;
+                });
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                it("Should return true if the rate change is meets the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                    // Set the new rate to the current rate + 1%
+                    const newRate = currentRate.add(currentRate.mul(1).div(100));
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is lower than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxDecrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxDecrease: 0,
-                            base: DEFAULT_CONFIG.base.sub(1),
-                        });
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    const needsUpdate = await controller.needsUpdate(updateData);
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    expect(needsUpdate).to.be.true;
+                });
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
-            }
+                it("Should return true if the rate change is exceeds the change threshold (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
 
-            if (!alwaysNeedsUpdateOncePerPeriod) {
-                it(
-                    "Should return false if the update period has been passed and the target rate is lower than the current " +
-                        "rate, but the target rate is clamped to the current rate using maxPercentDecrease",
-                    async function () {
-                        // Push INITIAL_BUFFER_CARDINALITY updates
-                        for (let i = 0; i < INITIAL_BUFFER_CARDINALITY; i++) {
-                            await controller.stubPush(GRT, currentRate, currentRate, 1);
-                        }
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
 
-                        // Change the base
-                        await controller.setConfig(GRT, {
-                            ...DEFAULT_CONFIG,
-                            maxPercentDecrease: 0,
-                            base: DEFAULT_CONFIG.base.sub(1),
-                        });
+                    // Set the new rate to the current rate + 1% + 1
+                    const newRate = currentRate.add(currentRate.mul(1).div(100)).add(1);
 
-                        const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
 
-                        const needsUpdate = await controller.needsUpdate(updateData);
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
 
-                        expect(needsUpdate).to.be.false;
-                    }
-                );
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return false if the rate change is less than the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 25%
+                    const changeThreshold = ethers.utils.parseUnits("0.25", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange).add(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
+
+                it("Should return true if the rate change is meets the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true if the rate change is exceeds the change threshold (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = currentRate.mul(20_00).div(100_00);
+                    const newRate = currentRate.sub(upwardsChange).sub(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true moving from 0 to 1", async function () {
+                    // Push the initial rate, which is 0
+                    await controller.stubPush(GRT, 0, 0, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 0 to 1
+                    const newRate = BigNumber.from(1);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return true moving from 1 to 0", async function () {
+                    // Push the initial rate, which is 1
+                    await controller.stubPush(GRT, 1, 1, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 1 to 0
+                    const newRate = BigNumber.from(0);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.true;
+                });
+
+                it("Should return false moving from 0 to 0", async function () {
+                    // Push the initial rate, which is 0
+                    await controller.stubPush(GRT, 0, 0, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from 0 to 0
+                    const newRate = BigNumber.from(0);
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
+
+                it("Should return false moving from currentRate to currentRate", async function () {
+                    // Push the initial rate, which is currentRate
+                    await controller.stubPush(GRT, currentRate, currentRate, 1);
+
+                    // Set the change threshold to 10%
+                    const changeThreshold = ethers.utils.parseUnits("0.10", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // Change the base from currentRate to currentRate
+                    const newRate = currentRate;
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const needsUpdate = await controller.needsUpdate(updateData);
+
+                    expect(needsUpdate).to.be.false;
+                });
             }
 
             if (describeAdditionalTests) {
@@ -1422,10 +1535,17 @@ function createDescribeStandardControllerNeedsUpdateTests(
     };
 }
 
-function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRateSetting, describeAdditionalTests) {
+function createDescribeStandardControllerUpdateTests(
+    beforeEachCallback,
+    testRateSetting,
+    describeAdditionalTests,
+    supportsChangeThresholds
+) {
     return function describeStandardControllerUpdateTests(contractName, deployFunc) {
         describe(contractName + "#update", function () {
             var controller;
+
+            let adminAddress;
 
             async function deploy(updatersMustBeEoa) {
                 const deployment = await deployFunc({
@@ -1435,6 +1555,8 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                 // Get our signer address
                 const [signer] = await ethers.getSigners();
+
+                adminAddress = await signer.getAddress();
 
                 // Grant all roles to the signer
                 await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -1480,6 +1602,188 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
                 // Sanity check that the signer can update
                 await expect(controller.update(updateData)).to.not.be.reverted;
             });
+
+            if (supportsChangeThresholds) {
+                it("Updates when pushing a second rate with a change threshold specified and the change threshold is exceeded (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    const newRate = DEFAULT_CONFIG.base.add(DEFAULT_CONFIG.base.mul(1).div(100)).add(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.true;
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await blockTimestamp(updateTx.blockNumber);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "RateUpdated")
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
+                });
+
+                it("Updates when pushing a second rate with a change threshold specified and the change threshold is just met (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    const newRate = DEFAULT_CONFIG.base.add(DEFAULT_CONFIG.base.mul(1).div(100));
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.true;
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await blockTimestamp(updateTx.blockNumber);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "RateUpdated")
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
+                });
+
+                it("Doesn't update when pushing a second rate with a change threshold specified and the change threshold is not met (upwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    const newRate = DEFAULT_CONFIG.base.add(DEFAULT_CONFIG.base.mul(1).div(100)).sub(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.false;
+
+                    await expect(controller.update(updateData)).to.not.emit(controller, "RateUpdated");
+                });
+
+                it("Updates when pushing a second rate with a change threshold specified and the change threshold is exceeded (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 25%
+                    const changeThreshold = ethers.utils.parseUnits("0.25", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = DEFAULT_CONFIG.base.mul(20_00).div(100_00);
+                    const newRate = DEFAULT_CONFIG.base.sub(upwardsChange).sub(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.true;
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await blockTimestamp(updateTx.blockNumber);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "RateUpdated")
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
+                });
+
+                it("Updates when pushing a second rate with a change threshold specified and the change threshold is just met (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 25%
+                    const changeThreshold = ethers.utils.parseUnits("0.25", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = DEFAULT_CONFIG.base.mul(20_00).div(100_00);
+                    const newRate = DEFAULT_CONFIG.base.sub(upwardsChange);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.true;
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await blockTimestamp(updateTx.blockNumber);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "RateUpdated")
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
+                });
+
+                it("Doesn't update when pushing a second rate with a change threshold specified and the change threshold is not met (downwards change)", async function () {
+                    // Push the initial rate
+                    await controller.stubPush(GRT, DEFAULT_CONFIG.base, DEFAULT_CONFIG.base, 1);
+
+                    // Set the change threshold to 25%
+                    const changeThreshold = ethers.utils.parseUnits("0.25", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    // A 20% change threshold is normalized to a 20% downwards change
+                    const upwardsChange = DEFAULT_CONFIG.base.mul(20_00).div(100_00);
+                    const newRate = DEFAULT_CONFIG.base.sub(upwardsChange).add(1);
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.false;
+
+                    await expect(controller.update(updateData)).to.not.emit(controller, "RateUpdated");
+                });
+
+                it("[TT1] Performs an initial update okay when the change threshold is set", async function () {
+                    // Set the change threshold to 1%
+                    const changeThreshold = ethers.utils.parseUnits("0.01", CHANGE_THRESHOLD_DECIMALS);
+                    await controller.setChangeThreshold(GRT, changeThreshold);
+
+                    const newRate = DEFAULT_CONFIG.base;
+
+                    // Change the base
+                    await controller.setConfig(GRT, { ...UNBOUNDED_CHANGE_CONFIG, base: newRate });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updated = await controller.callStatic.update(updateData);
+                    expect(updated).to.be.true;
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await blockTimestamp(updateTx.blockNumber);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "RateUpdated")
+                        .withArgs(adminAddress, GRT, newRate, newRate, timestamp);
+                });
+            }
 
             it("Reverts if the caller is a smart contract and updatersMustBeEoa is true, with the required role being open", async function () {
                 // Deploy a new controller with updatersMustBeEoa set to true
@@ -1642,7 +1946,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, targetRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, targetRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1668,7 +1972,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1694,7 +1998,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1724,7 +2028,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1754,7 +2058,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1790,7 +2094,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1826,7 +2130,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1869,7 +2173,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1912,7 +2216,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -1956,7 +2260,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2000,7 +2304,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2043,7 +2347,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, cappedRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, cappedRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2086,7 +2390,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, cappedRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, cappedRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2122,7 +2426,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2158,7 +2462,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, targetRate, expectedCurrentRate, currentTime);
+                        .withArgs(adminAddress, GRT, targetRate, expectedCurrentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2184,7 +2488,7 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
 
                     await expect(updateTx)
                         .to.emit(controller, "RateUpdated")
-                        .withArgs(GRT, currentRate, currentRate, currentTime);
+                        .withArgs(adminAddress, GRT, currentRate, currentRate, currentTime);
 
                     const latestRate = await controller.getRateAt(GRT, 0);
 
@@ -2193,6 +2497,317 @@ function createDescribeStandardControllerUpdateTests(beforeEachCallback, testRat
                     expect(latestRate.timestamp).to.equal(currentTime);
                 });
             }
+
+            describe("Update hooks", function () {
+                let hookFactory;
+
+                let hook;
+
+                before(async function () {
+                    hookFactory = await ethers.getContractFactory("HookStub");
+                });
+
+                beforeEach(async function () {
+                    hook = await hookFactory.deploy();
+                    await hook.deployed();
+                });
+
+                it("Calls only the pre update hook", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTxPromise = controller.update(updateData);
+
+                    await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                    expect(await hook.preUpdateCallCount()).to.equal(1);
+                    expect(await hook.postUpdateCallCount()).to.equal(0);
+                });
+
+                it("Calls only the post update hook", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTxPromise = controller.update(updateData);
+
+                    await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                    expect(await hook.preUpdateCallCount()).to.equal(0);
+                    expect(await hook.postUpdateCallCount()).to.equal(1);
+                });
+
+                it("Reverts when the pre update hook fails (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the pre update hook fail
+                    await hook.stubSetRevertPreUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PreUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError);
+                });
+
+                it("Reverts when the post update hook fails (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the post update hook fail
+                    await hook.stubSetRevertPostUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PostUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError);
+                });
+
+                it("Emits a failure event when the pre update hook fails (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the pre update hook fail
+                    await hook.stubSetRevertPreUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PreUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+                });
+
+                it("Emits a failure event when the post update hook fails (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1_000_000,
+                        hookAddress: hook.address,
+                    });
+
+                    // Make the post update hook fail
+                    await hook.stubSetRevertPostUpdate(true);
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    const expectedInnerError = new ethers.utils.Interface([
+                        "error PostUpdateHookFailed(address token)",
+                    ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+                });
+
+                it("Reverts when the pre update hook runs out of gas (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x");
+                });
+
+                it("Reverts when the post update hook runs out of gas (allowHookFailure = false)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: false,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    await expect(controller.update(updateData))
+                        .to.be.revertedWith("HookFailedError")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x");
+                });
+
+                it("Emits a failure event when the pre update hook runs out of gas (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x", timestamp);
+                });
+
+                it("Emits a failure event when the post update hook runs out of gas (allowHookFailure = true)", async function () {
+                    await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                        allowHookFailure: true,
+                        hookGasLimit: 1,
+                        hookAddress: hook.address,
+                    });
+
+                    const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                    const updateTx = await controller.update(updateData);
+
+                    const timestamp = await currentBlockTimestamp();
+
+                    await expect(updateTx)
+                        .to.emit(controller, "HookFailed")
+                        .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x", timestamp);
+                });
+            });
+
+            it("Updating is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Updating is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [GRT]);
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.update(updateData))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
 
             if (describeAdditionalTests) {
                 describeAdditionalTests(deployFunc, () => controller);
@@ -4301,6 +4916,331 @@ function createDescribeCanUpdateTests(isPidController) {
     };
 }
 
+function createDecreaseChangeThresholdTests(isPidController, supportsChangeThresholds) {
+    return function describeStandardControllerSetChangeThresholdsTests(contractName, deployFunc) {
+        describe(contractName + "#setChangeThreshold", function () {
+            var controller;
+            var adminAddress;
+
+            async function deploy(updaterMustBeEoa) {
+                const deployment = await deployFunc({
+                    updaterMustBeEoa: updaterMustBeEoa,
+                });
+                controller = deployment.controller;
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                adminAddress = await signer.getAddress();
+
+                // Grant all roles to the signer
+                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+                // Set config for GRT
+                await controller.setConfig(USDC, DEFAULT_CONFIG);
+
+                if (isPidController) {
+                    // Set PID config for GRT
+                    await controller.setPidConfig(USDC, DEFAULT_PID_CONFIG);
+                }
+            }
+
+            beforeEach(async () => {
+                await deploy(false);
+            });
+
+            if (supportsChangeThresholds) {
+                it("Should work if the caller has all roles", async function () {
+                    const tx = await controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+
+                    const timestamp = await blockTimestamp(tx.blockNumber);
+
+                    await expect(tx)
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+                });
+
+                it("Should work if the caller has the admin role", async function () {
+                    const [, other] = await ethers.getSigners();
+
+                    await controller.grantRole(ADMIN_ROLE, other.address);
+
+                    const tx = await controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+
+                    const timestamp = await blockTimestamp(tx.blockNumber);
+
+                    await expect(tx)
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(await other.getAddress(), USDC, 0, TWO_PERCENT_CHANGE, timestamp);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+                });
+
+                it("Should revert if the caller doesn't have any role", async function () {
+                    const [, other] = await ethers.getSigners();
+
+                    await expect(
+                        controller.connect(other).setChangeThreshold(USDC, TWO_PERCENT_CHANGE)
+                    ).to.be.revertedWith(/AccessControl: .*/);
+                });
+
+                it("Should work when the threshold changes to above zero then to zero", async function () {
+                    const tx1 = await controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE);
+                    const timestamp1 = await blockTimestamp(tx1.blockNumber);
+
+                    await expect(tx1)
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(adminAddress, USDC, 0, TWO_PERCENT_CHANGE, timestamp1);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(TWO_PERCENT_CHANGE);
+
+                    const tx2 = await controller.setChangeThreshold(USDC, 0);
+                    const timestamp2 = await blockTimestamp(tx2.blockNumber);
+
+                    await expect(tx2)
+                        .to.emit(controller, "ChangeThresholdUpdated")
+                        .withArgs(adminAddress, USDC, TWO_PERCENT_CHANGE, 0, timestamp2);
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(0);
+                });
+
+                it("Should not emit an event if the threshold doesn't change", async function () {
+                    await expect(controller.setChangeThreshold(USDC, 0)).to.not.emit(
+                        controller,
+                        "ChangeThresholdUpdated"
+                    );
+
+                    expect(await controller.getChangeThreshold(USDC)).to.equal(0);
+                });
+            } else {
+                it("Reverts even if the caller has all roles", async function () {
+                    await expect(controller.setChangeThreshold(USDC, TWO_PERCENT_CHANGE)).to.be.revertedWith(
+                        "Not supported"
+                    );
+                });
+            }
+        });
+    };
+}
+
+function createStandardWillAnythingChangeTests() {
+    return function describeStandardControllerWillAnythingChangeTests(contractName, deployFunc) {
+        describe(contractName + "#willAnythingChange", function () {
+            var controller;
+
+            const updateData = ethers.utils.defaultAbiCoder.encode(["address"], [USDC]);
+
+            beforeEach(async () => {
+                const deployment = await deployFunc();
+                controller = deployment.controller;
+
+                // Get our signer address
+                const [signer] = await ethers.getSigners();
+
+                // Grant all roles to the signer
+                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+                await controller.setConfig(USDC, DEFAULT_CONFIG);
+            });
+
+            const tests = [
+                {
+                    lastRate: 0,
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 0,
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 101,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 101,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: false,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 102,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 102,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 100,
+                    newRate: 103,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 103,
+                    newRate: 100,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    lastRate: 0,
+                    newRate: 0,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    lastRate: 1,
+                    newRate: 1,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+            ];
+
+            for (const test of tests) {
+                it(
+                    "Returns " +
+                        test.expected +
+                        " when lastRate is " +
+                        test.lastRate +
+                        ", newRate is " +
+                        test.newRate +
+                        ", and changeThreshold is " +
+                        ethers.utils.formatUnits(test.changeThreshold, 6) +
+                        "%",
+                    async function () {
+                        await controller.setChangeThreshold(USDC, test.changeThreshold);
+
+                        await controller.stubPush(USDC, test.lastRate, test.lastRate, 1);
+
+                        const newConfig = {
+                            ...DEFAULT_CONFIG,
+                            base: test.newRate,
+                        };
+
+                        await controller.setConfig(USDC, newConfig);
+
+                        const tx = await controller.stubWillAnythingChange(updateData);
+
+                        expect(tx).to.equal(test.expected);
+                    }
+                );
+            }
+
+            const initialTests = [
+                {
+                    newRate: 0,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: 1,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: MAX_UINT_64,
+                    changeThreshold: TWO_PERCENT_CHANGE,
+                    expected: true,
+                },
+                {
+                    newRate: 0,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    newRate: 1,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+                {
+                    newRate: MAX_UINT_64,
+                    changeThreshold: 0,
+                    expected: true,
+                },
+            ];
+
+            for (const test of initialTests) {
+                it(
+                    "Returns " +
+                        test.expected +
+                        " when the first rate (initial) is " +
+                        test.newRate +
+                        " and changeThreshold is " +
+                        ethers.utils.formatUnits(test.changeThreshold, 6) +
+                        "%",
+                    async function () {
+                        await controller.setChangeThreshold(USDC, test.changeThreshold);
+
+                        const newConfig = {
+                            ...DEFAULT_CONFIG,
+                            base: test.newRate,
+                        };
+
+                        await controller.setConfig(USDC, newConfig);
+
+                        const tx = await controller.stubWillAnythingChange(updateData);
+
+                        expect(tx).to.equal(test.expected);
+                    }
+                );
+            }
+        });
+    };
+}
+
+function createStandardCalculateChangeTests() {
+    return function describeStandardControllerCalculateChangeTests(contractName, deployFunc) {
+        describe(contractName + "#calculateChange", function () {
+            var controller;
+
+            beforeEach(async () => {
+                const deployment = await deployFunc();
+                controller = deployment.controller;
+            });
+
+            it("Returns isInfinite=true if the change overflows", async function () {
+                const [change, isInfinite] = await controller.stubCalculateChange(
+                    BigNumber.from(1),
+                    BigNumber.from(2).pow(256).sub(1) // MAX_UINT_256 - 1
+                );
+
+                expect(change).to.equal(0);
+                expect(isInfinite).to.be.true;
+            });
+        });
+    };
+}
+
 function describeTests(
     contractName,
     deployFunc,
@@ -4308,7 +5248,10 @@ function describeTests(
     describeComputeRateTests,
     describeNeedsUpdateTests,
     describeUpdateTests,
-    describeCanUpdateTests
+    describeCanUpdateTests,
+    describeSetChangeThresholdTests,
+    describeWillAnythingChangeTests,
+    describeCalculateChangeTests
 ) {
     describe(contractName + "#constructor", function () {
         const tests = [
@@ -4384,9 +5327,14 @@ function describeTests(
     describe(contractName + "#push", function () {
         var controller;
 
+        let adminAddress;
+
         beforeEach(async () => {
             const deployment = await deployFunc();
             controller = deployment.controller;
+
+            const [signer] = await ethers.getSigners();
+            adminAddress = await signer.getAddress();
         });
 
         it("Should initialize the buffer if it hasn't been initialized", async function () {
@@ -4395,12 +5343,14 @@ function describeTests(
             // Check that the buffer initialized event was emitted
             await expect(pushTx)
                 .to.emit(controller, "RatesCapacityInitialized")
-                .withArgs(USDC, INITIAL_BUFFER_CARDINALITY);
+                .withArgs(adminAddress, USDC, INITIAL_BUFFER_CARDINALITY);
         });
     });
 
     describe(contractName + "#setUpdatesPaused", function () {
         var controller;
+
+        let adminAddress;
 
         beforeEach(async () => {
             const deployment = await deployFunc();
@@ -4408,6 +5358,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -4442,9 +5394,10 @@ function describeTests(
         });
 
         it("Should not revert if the token is missing a config", async function () {
-            await expect(controller.setUpdatesPaused(USDC, true))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(USDC, true);
+            const tx = await controller.setUpdatesPaused(USDC, true);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, USDC, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(USDC)).to.equal(true);
@@ -4454,9 +5407,10 @@ function describeTests(
         });
 
         it("Should emit an event when the updates are paused", async function () {
-            await expect(controller.setUpdatesPaused(GRT, true))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(GRT, true);
+            const tx = await controller.setUpdatesPaused(GRT, true);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, GRT, true, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(true);
@@ -4465,9 +5419,10 @@ function describeTests(
         it("Should emit an event when the updates are unpaused", async function () {
             await controller.setUpdatesPaused(GRT, true);
 
-            await expect(controller.setUpdatesPaused(GRT, false))
-                .to.emit(controller, "PauseStatusChanged")
-                .withArgs(GRT, false);
+            const tx = await controller.setUpdatesPaused(GRT, false);
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
+            await expect(tx).to.emit(controller, "PauseStatusChanged").withArgs(adminAddress, GRT, false, timestamp);
 
             // Sanity check that the changes were made
             expect(await controller.areUpdatesPaused(GRT)).to.equal(false);
@@ -4553,6 +5508,8 @@ function describeTests(
         var controller;
         var computer;
 
+        var adminAddress;
+
         before(async function () {
             computerFactory = await ethers.getContractFactory("RateComputerStub");
         });
@@ -4567,6 +5524,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -4763,14 +5722,18 @@ function describeTests(
                 components: [],
             });
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -4793,14 +5756,18 @@ function describeTests(
 
             const tx = await controller.setConfig(GRT, config);
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(config));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -4816,12 +5783,16 @@ function describeTests(
 
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -4835,25 +5806,33 @@ function describeTests(
         it("Should emit a RateConfigUpdated event if the config is valid and we call the function multiple times", async function () {
             const tx1 = await controller.setConfig(GRT, DEFAULT_CONFIG);
 
+            const timestamp1 = await blockTimestamp(tx1.blockNumber);
+
             await expect(tx1).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
             const receipt1 = await tx1.wait();
             const event1 = receipt1.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event1?.args?.caller).to.equal(adminAddress);
             expect(event1?.args?.token).to.equal(GRT);
             expect(event1?.args?.oldConfig).to.deep.equal(Object.values(ZERO_CONFIG));
             expect(event1?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event1?.args?.timestamp).to.equal(timestamp1);
 
             const tx2 = await controller.setConfig(GRT, DEFAULT_CONFIG);
+
+            const timestamp2 = await blockTimestamp(tx2.blockNumber);
 
             await expect(tx2).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
             const receipt2 = await tx2.wait();
             const event2 = receipt2.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event2?.args?.caller).to.equal(adminAddress);
             expect(event2?.args?.token).to.equal(GRT);
             expect(event2?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event2?.args?.newConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
+            expect(event2?.args?.timestamp).to.equal(timestamp2);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -4867,7 +5846,7 @@ function describeTests(
         it("Should initialize the buffers if the config is valid and it's the first time the config is being set", async function () {
             await expect(controller.setConfig(GRT, DEFAULT_CONFIG))
                 .to.emit(controller, "RatesCapacityInitialized")
-                .withArgs(GRT, INITIAL_BUFFER_CARDINALITY);
+                .withArgs(adminAddress, GRT, INITIAL_BUFFER_CARDINALITY);
 
             // Sanity check that the new config is set
             const newConfig = await controller.getConfig(GRT);
@@ -4919,14 +5898,18 @@ function describeTests(
 
             const tx = await controller.setConfig(GRT, secondConfig);
 
+            const timestamp = await blockTimestamp(tx.blockNumber);
+
             await expect(tx).to.emit(controller, "RateConfigUpdated");
 
             // Check the event args
             const receipt = await tx.wait();
             const event = receipt.events?.find((e) => e.event === "RateConfigUpdated");
+            expect(event?.args?.caller).to.equal(adminAddress);
             expect(event?.args?.token).to.equal(GRT);
             expect(event?.args?.oldConfig).to.deep.equal(Object.values(DEFAULT_CONFIG));
             expect(event?.args?.newConfig).to.deep.equal(Object.values(secondConfig));
+            expect(event?.args?.timestamp).to.equal(timestamp);
 
             // Sanity check that the new config is set
             const newConfig2 = await controller.getConfig(GRT);
@@ -4972,6 +5955,545 @@ function describeTests(
 
         it("Should revert if the config is not set for the specified asset", async function () {
             await expect(controller.getConfig(USDC)).to.be.revertedWith("MissingConfig");
+        });
+    });
+
+    describe(contractName + "#setHookConfig", function () {
+        var controller;
+
+        var hook;
+
+        beforeEach(async () => {
+            const deployment = await deployFunc();
+            controller = deployment.controller;
+            // Get our signer address
+            const [signer] = await ethers.getSigners();
+
+            // Deploy a hook
+            const hookFactory = await ethers.getContractFactory("HookStub");
+            hook = await hookFactory.deploy();
+            await hook.deployed();
+
+            // Grant all roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+        });
+
+        it("Reverts if the hook doesn't implement ERC165", async function () {
+            const hookFactory = await ethers.getContractFactory("HookNoErc165");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
+        it("Reverts if the hook is a pre update hook, but we try to set it as a post update hook", async function () {
+            const hookFactory = await ethers.getContractFactory("ControllerPreUpdateHookStub");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPostUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_POST_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
+        it("Reverts if the hook is a post update hook, but we try to set it as a pre update hook", async function () {
+            const hookFactory = await ethers.getContractFactory("ControllerPostUpdateHookStub");
+            const badHook = await hookFactory.deploy();
+            await badHook.deployed();
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            const interfaceIds = await interfaceIdsFactory.deploy();
+
+            const expectedInterfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            await expect(
+                controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: badHook.address,
+                })
+            )
+                .to.be.revertedWith("HookDoesntSupportInterface")
+                .withArgs(HOOK_TYPE_PRE_UPDATE, badHook.address, expectedInterfaceId);
+        });
+
+        it("Reverts if the caller does not have the ADMIN role", async function () {
+            // Get the second signer
+            const [, signer] = await ethers.getSigners();
+
+            // Format the signer's address to be lowercase
+            const signerAddress = signer.address.toLowerCase();
+
+            // Grant all other roles to the signer
+            await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
+            await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
+            await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
+            await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+
+            await expect(
+                controller.connect(signer).setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                })
+            ).to.be.revertedWith("AccessControl: account " + signerAddress + " is missing role " + ADMIN_ROLE);
+        });
+
+        it("Reverts if we try to disable the hook when it's already disabled", async function () {
+            // Try with the pre update hook
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try with the post update hook
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if we try to set the hook config to the same value", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            };
+
+            // Set the pre update hook config
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Try to set the same config again
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig))
+                .to.be.revertedWith("HookConfigUnchanged")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+        });
+
+        it("Reverts if we try setting the hook address to the zero address, but the other values are non-zero, without active hooks", async function () {
+            const hookConfig1 = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig2 = {
+                allowHookFailure: true,
+                hookGasLimit: 0,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig3 = {
+                allowHookFailure: true,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            // Try to set the pre update hook config
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try to set the post update hook config
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if we try setting the hook address to the zero address, but the other values are non-zero, with active hooks", async function () {
+            const hookConfig1 = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig2 = {
+                allowHookFailure: true,
+                hookGasLimit: 0,
+                hookAddress: AddressZero,
+            };
+
+            const hookConfig3 = {
+                allowHookFailure: true,
+                hookGasLimit: 1_000_000,
+                hookAddress: AddressZero,
+            };
+
+            // Set the pre update hook config
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            });
+
+            // Try to set the pre update hook config with the zero address
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Set the post update hook config
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            });
+
+            // Try to set the post update hook config with the zero address
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig1))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig2))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig3))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if the hook gas limit is zero", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 0, // Zero gas limit
+                hookAddress: hook.address,
+            };
+
+            // Try to set the pre update hook config with zero gas limit
+            await expect(controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_PRE_UPDATE);
+
+            // Try to set the post update hook config with zero gas limit
+            await expect(controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig))
+                .to.be.revertedWith("InvalidHookConfig")
+                .withArgs(HOOK_TYPE_POST_UPDATE);
+        });
+
+        it("Reverts if the hook type is not valid", async function () {
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: 1_000_000,
+                hookAddress: hook.address,
+            };
+
+            const hookType = HOOK_TYPE_POST_UPDATE + 1; // Invalid hook type
+
+            // Try to set the hook config with an invalid hook type
+            await expect(controller.setHookConfig(hookType, hookConfig))
+                .to.be.revertedWith("InvalidHookType")
+                .withArgs(BigNumber.from(hookType));
+        });
+
+        it("Sets the pre update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_PRE_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(hookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(hookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(hookConfig.hookAddress);
+        });
+
+        it("Sets the post update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG, hookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(hookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(hookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(hookConfig.hookAddress);
+        });
+
+        it("Changes the pre update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the pre update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Change the pre update hook config
+            const newHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, newHookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, hookConfig, newHookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_PRE_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(newHookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(newHookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(newHookConfig.hookAddress);
+        });
+
+        it("Changes the post update hook config", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the post update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            // Change the post update hook config
+            const newHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, newHookConfig);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, hookConfig, newHookConfig, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(newHookConfig.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(newHookConfig.hookGasLimit);
+            expect(config.hookAddress).to.equal(newHookConfig.hookAddress);
+        });
+
+        it("Disables the pre update hook", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the pre update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, hookConfig);
+
+            // Disable the pre update hook
+            const tx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, DISABLED_HOOK_CONFIG);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_PRE_UPDATE, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(0);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(config.allowHookFailure).to.equal(DISABLED_HOOK_CONFIG.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(DISABLED_HOOK_CONFIG.hookGasLimit);
+            expect(config.hookAddress).to.equal(DISABLED_HOOK_CONFIG.hookAddress);
+        });
+
+        it("Disables the post update hook", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            // Set the post update hook config
+            const hookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook.address,
+            };
+            await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, hookConfig);
+
+            // Disable the post update hook
+            const tx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, DISABLED_HOOK_CONFIG);
+
+            const txTimestamp = blockTimestamp(tx.blockNumber);
+
+            await expect(tx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(signerAddress, HOOK_TYPE_POST_UPDATE, hookConfig, DISABLED_HOOK_CONFIG, txTimestamp);
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(0);
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the config was set
+            const config = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(config.allowHookFailure).to.equal(DISABLED_HOOK_CONFIG.allowHookFailure);
+            expect(config.hookGasLimit).to.equal(DISABLED_HOOK_CONFIG.hookGasLimit);
+            expect(config.hookAddress).to.equal(DISABLED_HOOK_CONFIG.hookAddress);
+        });
+
+        it("Sets both pre and post update hooks", async function () {
+            const [signer] = await ethers.getSigners();
+            const signerAddress = await signer.getAddress();
+
+            const hookFactory = await ethers.getContractFactory("HookStub");
+            const hook2 = await hookFactory.deploy();
+            await hook2.deployed();
+
+            // Set the pre update hook config
+            const preUpdateHookConfig = {
+                allowHookFailure: false,
+                hookGasLimit: BigNumber.from(2_000_000),
+                hookAddress: hook.address,
+            };
+            const preUpdateTx = await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, preUpdateHookConfig);
+
+            const preUpdateTxTimestamp = blockTimestamp(preUpdateTx.blockNumber);
+
+            await expect(preUpdateTx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(
+                    signerAddress,
+                    HOOK_TYPE_PRE_UPDATE,
+                    DISABLED_HOOK_CONFIG,
+                    preUpdateHookConfig,
+                    preUpdateTxTimestamp
+                );
+
+            // Set the post update hook config
+            const postUpdateHookConfig = {
+                allowHookFailure: true,
+                hookGasLimit: BigNumber.from(1_000_000),
+                hookAddress: hook2.address,
+            };
+            const postUpdateTx = await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, postUpdateHookConfig);
+            const postUpdateTxTimestamp = blockTimestamp(postUpdateTx.blockNumber);
+            await expect(postUpdateTx)
+                .to.emit(controller, "HookConfigUpdated")
+                .withArgs(
+                    signerAddress,
+                    HOOK_TYPE_POST_UPDATE,
+                    DISABLED_HOOK_CONFIG,
+                    postUpdateHookConfig,
+                    postUpdateTxTimestamp
+                );
+
+            const activeHookTypes = await controller.stubActiveHookTypes();
+
+            const expectedActiveHookTypes = BigNumber.from(1)
+                .shl(HOOK_TYPE_PRE_UPDATE)
+                .or(BigNumber.from(1).shl(HOOK_TYPE_POST_UPDATE));
+            expect(activeHookTypes).to.equal(expectedActiveHookTypes);
+
+            // Sanity check that the configs were set
+            const preUpdateConfig = await controller.getHookConfig(HOOK_TYPE_PRE_UPDATE);
+            expect(preUpdateConfig.allowHookFailure).to.equal(preUpdateHookConfig.allowHookFailure);
+            expect(preUpdateConfig.hookGasLimit).to.equal(preUpdateHookConfig.hookGasLimit);
+            expect(preUpdateConfig.hookAddress).to.equal(preUpdateHookConfig.hookAddress);
+
+            const postUpdateConfig = await controller.getHookConfig(HOOK_TYPE_POST_UPDATE);
+            expect(postUpdateConfig.allowHookFailure).to.equal(postUpdateHookConfig.allowHookFailure);
+            expect(postUpdateConfig.hookGasLimit).to.equal(postUpdateHookConfig.hookGasLimit);
+            expect(postUpdateConfig.hookAddress).to.equal(postUpdateHookConfig.hookAddress);
         });
     });
 
@@ -5075,8 +6597,16 @@ function describeTests(
 
     describeUpdateTests(contractName, deployFunc);
 
+    describeSetChangeThresholdTests?.(contractName, deployFunc);
+
+    describeWillAnythingChangeTests?.(contractName, deployFunc);
+
+    describeCalculateChangeTests?.(contractName, deployFunc);
+
     describe(contractName + " - IHistoricalRates implementation", function () {
         var controller;
+
+        let adminAddress;
 
         beforeEach(async () => {
             const deployment = await deployFunc();
@@ -5084,6 +6614,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -5107,27 +6639,26 @@ function describeTests(
             it("Emits the correct event", async function () {
                 await expect(controller.stubInitializeBuffers(USDC))
                     .to.emit(controller, "RatesCapacityInitialized")
-                    .withArgs(USDC, INITIAL_BUFFER_CARDINALITY);
+                    .withArgs(adminAddress, USDC, INITIAL_BUFFER_CARDINALITY);
             });
         });
 
         describe(contractName + "#setRatesCapacity", function () {
-            it("Should revert if the caller does not have the ADMIN role", async function () {
-                // Get the second signer
-                const [, signer] = await ethers.getSigners();
+            it("Should work when the caller has no roles", async function () {
+                const [, nonRoleCaller] = await ethers.getSigners();
 
-                // Assign the signer all of the other roles
-                await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
-                await controller.grantRole(ORACLE_UPDATER_ROLE, signer.address);
-                await controller.grantRole(RATE_ADMIN_ROLE, signer.address);
-                await controller.grantRole(UPDATE_PAUSE_ADMIN_ROLE, signer.address);
+                const nonRoleCallerAddress = await nonRoleCaller.getAddress();
 
-                // Format the signer's address to be lowercase
-                const signerAddress = signer.address.toLowerCase();
+                const amount = 20;
 
-                await expect(controller.connect(signer).setRatesCapacity(GRT, 2)).to.be.revertedWith(
-                    "AccessControl: account " + signerAddress + " is missing role " + ADMIN_ROLE
-                );
+                const initialAmount = await controller.getRatesCapacity(GRT);
+
+                // Sanity check that the new amount is greater than the initial amount
+                expect(amount).to.be.greaterThan(initialAmount.toNumber());
+
+                await expect(controller.connect(nonRoleCaller).setRatesCapacity(GRT, amount))
+                    .to.emit(controller, "RatesCapacityIncreased")
+                    .withArgs(nonRoleCallerAddress, GRT, initialAmount, amount);
             });
 
             it("Should revert if the token is missing a config", async function () {
@@ -5158,7 +6689,7 @@ function describeTests(
 
                 await expect(controller.setRatesCapacity(GRT, amount))
                     .to.emit(controller, "RatesCapacityIncreased")
-                    .withArgs(GRT, initialAmount, amount);
+                    .withArgs(adminAddress, GRT, initialAmount, amount);
             });
 
             it("Should not emit an event when the capacity is not changed (with default capacity)", async function () {
@@ -5837,8 +7368,43 @@ function describeTests(
         });
     });
 
+    describe(contractName + "#_getHookInterfaceId", function () {
+        let controller;
+        let interfaceIds;
+
+        beforeEach(async function () {
+            const deployment = await deployFunc();
+            controller = deployment.controller;
+
+            const interfaceIdsFactory = await ethers.getContractFactory("InterfaceIds");
+            interfaceIds = await interfaceIdsFactory.deploy();
+        });
+
+        it("Should return the correct interface ID for the pre update hook", async function () {
+            const interfaceId = await interfaceIds.iControllerPreUpdateHook();
+
+            expect(await controller.stubGetHookInterfaceId(HOOK_TYPE_PRE_UPDATE)).to.equal(interfaceId);
+        });
+
+        it("Should return the correct interface ID for the post update hook", async function () {
+            const interfaceId = await interfaceIds.iControllerPostUpdateHook();
+
+            expect(await controller.stubGetHookInterfaceId(HOOK_TYPE_POST_UPDATE)).to.equal(interfaceId);
+        });
+
+        it("Should revert if the hook type is not recognized", async function () {
+            const hookType = 255; // Invalid hook type
+
+            await expect(controller.stubGetHookInterfaceId(hookType))
+                .to.be.revertedWith("InvalidHookType")
+                .withArgs(hookType);
+        });
+    });
+
     describe(contractName + "#manuallyPushRate", function () {
         var controller;
+
+        let adminAddress;
 
         beforeEach(async function () {
             const deployment = await deployFunc();
@@ -5846,6 +7412,8 @@ function describeTests(
 
             // Get our signer address
             const [signer] = await ethers.getSigners();
+
+            adminAddress = await signer.getAddress();
 
             // Grant all roles to the signer
             await controller.grantRole(ORACLE_UPDATER_MANAGER_ROLE, signer.address);
@@ -5923,8 +7491,10 @@ function describeTests(
             const receipt = await tx.wait();
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
-            expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+            expect(receipt).to.emit(controller, "RateUpdated").withArgs(adminAddress, GRT, rate, rate, timestamp);
+            expect(receipt)
+                .to.emit(controller, "RatePushedManually")
+                .withArgs(adminAddress, GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
@@ -5945,11 +7515,296 @@ function describeTests(
             const receipt = await tx.wait();
             const timestamp = await blockTimestamp(receipt.blockNumber);
 
-            expect(receipt).to.emit(controller, "RateUpdated").withArgs(GRT, rate, rate, timestamp);
-            expect(receipt).to.emit(controller, "RatePushedManually").withArgs(GRT, rate, rate, timestamp, amount);
+            expect(receipt).to.emit(controller, "RateUpdated").withArgs(adminAddress, GRT, rate, rate, timestamp);
+            expect(receipt)
+                .to.emit(controller, "RatePushedManually")
+                .withArgs(adminAddress, GRT, rate, rate, amount, timestamp);
             expect(await controller.getRatesCount(GRT)).to.equal(Math.min(initialRateCount + amount, capacity));
             // Ensure RateUpdated was emitted `amount` times
             expect(receipt.events.filter((e) => e.event === "RateUpdated").length).to.equal(amount);
+        });
+
+        describe("Update hooks", function () {
+            let hookFactory;
+
+            let hook;
+
+            before(async function () {
+                hookFactory = await ethers.getContractFactory("HookStub");
+            });
+
+            beforeEach(async function () {
+                hook = await hookFactory.deploy();
+                await hook.deployed();
+            });
+
+            it("Calls only the pre update hook", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                const updateTxPromise = controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                expect(await hook.preUpdateCallCount()).to.equal(1);
+                expect(await hook.postUpdateCallCount()).to.equal(0);
+            });
+
+            it("Calls only the post update hook", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                const updateTxPromise = controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                await expect(updateTxPromise).to.emit(controller, "RateUpdated");
+
+                expect(await hook.preUpdateCallCount()).to.equal(0);
+                expect(await hook.postUpdateCallCount()).to.equal(1);
+            });
+
+            it("Reverts when the pre update hook fails (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the pre update hook fail
+                await hook.stubSetRevertPreUpdate(true);
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PreUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError);
+            });
+
+            it("Reverts when the post update hook fails (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the post update hook fail
+                await hook.stubSetRevertPostUpdate(true);
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PostUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError);
+            });
+
+            it("Emits a failure event when the pre update hook fails (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the pre update hook fail
+                await hook.stubSetRevertPreUpdate(true);
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PreUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PreUpdateHookFailed", [GRT]);
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+            });
+
+            it("Emits a failure event when the post update hook fails (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: hook.address,
+                });
+
+                // Make the post update hook fail
+                await hook.stubSetRevertPostUpdate(true);
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                const expectedInnerError = new ethers.utils.Interface([
+                    "error PostUpdateHookFailed(address token)",
+                ]).encodeErrorResult("PostUpdateHookFailed", [GRT]);
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, expectedInnerError, timestamp);
+            });
+
+            it("Reverts when the pre update hook runs out of gas (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x");
+            });
+
+            it("Reverts when the post update hook runs out of gas (allowHookFailure = false)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x");
+            });
+
+            it("Emits a failure event when the pre update hook runs out of gas (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, hook.address, GRT, "0x", timestamp);
+            });
+
+            it("Emits a failure event when the post update hook runs out of gas (allowHookFailure = true)", async function () {
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: true,
+                    hookGasLimit: 1,
+                    hookAddress: hook.address,
+                });
+
+                const updateTx = await controller.manuallyPushRate(GRT, 1, 1, 1);
+
+                const timestamp = await currentBlockTimestamp();
+
+                await expect(updateTx)
+                    .to.emit(controller, "HookFailed")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, hook.address, GRT, "0x", timestamp);
+            });
+
+            it("Updating is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Updating is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ true);
+                await reentrantHook.deployed();
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with pre update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_PRE_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_PRE_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
+
+            it("Manually pushing a rate is non-reentrant (with post update hook)", async function () {
+                const hookFactory = await ethers.getContractFactory("ReentrantHook");
+
+                const reentrantHook = await hookFactory.deploy(/* callUpdate */ false);
+                await reentrantHook.deployed();
+
+                // Grant the hook the ADMIN role so that it can call manuallyPushRate
+                await controller.grantRole(ADMIN_ROLE, reentrantHook.address);
+
+                await controller.setHookConfig(HOOK_TYPE_POST_UPDATE, {
+                    allowHookFailure: false,
+                    hookGasLimit: 1_000_000,
+                    hookAddress: reentrantHook.address,
+                });
+
+                // The selector for Error(string) is the first 4 bytes of the hash of "Error(string)"
+                const selector = keccak256(toUtf8Bytes("Error(string)")).slice(0, 10); // 0x08c379a0
+                const encodedReason = defaultAbiCoder.encode(["string"], ["ReentrancyGuard: reentrant call"]);
+                // Full revert data = selector + encoded string (without 0x prefix)
+                const expectedInnerError = selector + encodedReason.slice(2);
+
+                await expect(controller.manuallyPushRate(GRT, 1, 1, 1))
+                    .to.be.revertedWith("HookFailedError")
+                    .withArgs(HOOK_TYPE_POST_UPDATE, reentrantHook.address, GRT, expectedInnerError);
+            });
         });
     });
 
@@ -6020,9 +7875,12 @@ describeTests(
     deployStandardController,
     setDefaultStandardConfig,
     describeStandardControllerComputeRateTests,
-    createDescribeStandardControllerNeedsUpdateTests(false, undefined, undefined),
-    createDescribeStandardControllerUpdateTests(undefined, true, undefined),
-    createDescribeCanUpdateTests(false)
+    createDescribeStandardControllerNeedsUpdateTests(/* supportsChangeThresholds */ true, undefined, undefined),
+    createDescribeStandardControllerUpdateTests(undefined, true, undefined, true),
+    createDescribeCanUpdateTests(false),
+    createDecreaseChangeThresholdTests(false, true),
+    createStandardWillAnythingChangeTests(),
+    createStandardCalculateChangeTests()
 );
 describeTests(
     "PidController",
@@ -6030,10 +7888,18 @@ describeTests(
     setDefaultPidConfig,
     describePidControllerComputeRateTests,
     createDescribeStandardControllerNeedsUpdateTests(
-        true,
+        /* supportsChangeThresholds */ false,
         initializePidController,
         describePidControllerNeedsUpdateTests
     ),
-    createDescribeStandardControllerUpdateTests(initializePidController, false, describePidControllerUpdateTests),
-    createDescribeCanUpdateTests(true)
+    createDescribeStandardControllerUpdateTests(
+        initializePidController,
+        false,
+        describePidControllerUpdateTests,
+        false
+    ),
+    createDescribeCanUpdateTests(true),
+    createDecreaseChangeThresholdTests(true, false),
+    undefined,
+    createStandardCalculateChangeTests()
 );

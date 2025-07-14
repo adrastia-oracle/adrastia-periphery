@@ -64,8 +64,12 @@ describe("ManualRateComputer#computeRate", function () {
 describe("ManagedManualRateComputer#setRate", function () {
     var computer;
 
+    let adminAddress;
+
     beforeEach(async function () {
         const [deployer] = await ethers.getSigners();
+
+        adminAddress = await deployer.getAddress();
 
         const computerFactory = await ethers.getContractFactory("ManagedManualRateComputer");
         computer = await computerFactory.deploy();
@@ -116,9 +120,11 @@ describe("ManagedManualRateComputer#setRate", function () {
         // Sanity check that other doesn't have the ADMIN role
         expect(await computer.hasRole(ADMIN_ROLE, other.address)).to.be.false;
 
-        expect(await computer.setRate(GRT, A_GOOD_RATE))
-            .to.emit(computer, "RateUpdated")
-            .withArgs(GRT, A_GOOD_RATE);
+        const tx = await computer.connect(other).setRate(GRT, A_GOOD_RATE);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        expect(tx).to.emit(computer, "RateUpdated").withArgs(adminAddress, GRT, A_GOOD_RATE, timestamp);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);
@@ -131,9 +137,11 @@ describe("ManagedManualRateComputer#setRate", function () {
         expect(await computer.hasRole(RATE_ADMIN_ROLE, deployer.address)).to.be.true;
         expect(await computer.hasRole(ADMIN_ROLE, deployer.address)).to.be.true;
 
-        expect(await computer.setRate(GRT, A_GOOD_RATE))
-            .to.emit(computer, "RateUpdated")
-            .withArgs(GRT, A_GOOD_RATE);
+        const tx = await computer.setRate(GRT, A_GOOD_RATE);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        expect(tx).to.emit(computer, "RateUpdated").withArgs(deployer.address, GRT, A_GOOD_RATE, timestamp);
 
         // Sanity check that the rate was set
         expect(await computer.computeRate(GRT)).to.equal(A_GOOD_RATE);

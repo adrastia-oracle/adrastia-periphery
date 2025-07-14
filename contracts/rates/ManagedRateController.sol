@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@openzeppelin-v4/contracts/access/AccessControlEnumerable.sol";
 
@@ -70,14 +70,20 @@ contract ManagedRateController is RateController, AccessControlEnumerable {
     /// @notice Requires the sender to have the RATE_ADMIN role to call setConfig.
     function checkSetConfig() internal view virtual override onlyRole(Roles.RATE_ADMIN) {}
 
+    /// @notice Requires the sender to have the ADMIN role to call setHookConfig.
+    function checkSetHookConfig() internal view virtual override onlyRole(Roles.ADMIN) {}
+
     /// @notice Requires the sender to have the RATE_ADMIN role to call manuallyPushRate.
     function checkManuallyPushRate() internal view virtual override onlyRole(Roles.ADMIN) {}
 
     /// @notice Requires the sender to have the UPDATE_PAUSE_ADMIN role to call setUpdatesPaused.
     function checkSetUpdatesPaused() internal view virtual override onlyRole(Roles.UPDATE_PAUSE_ADMIN) {}
 
-    /// @notice Requires the sender to have the ADMIN role to call setRatesCapacity.
-    function checkSetRatesCapacity() internal view virtual override onlyRole(Roles.ADMIN) {}
+    /// @notice Requires the sender to have the ADMIN role to call setChangeThreshold.
+    function checkSetChangeThreshold() internal view virtual override onlyRole(Roles.ADMIN) {}
+
+    /// @notice Anyone can increase the rates capacity.
+    function checkSetRatesCapacity() internal view virtual override {}
 
     /// @notice Requires the sender to have the ORACLE_UPDATER role to call update.
     function checkUpdate() internal view virtual override onlyRoleOrOpenRole(Roles.ORACLE_UPDATER) {}

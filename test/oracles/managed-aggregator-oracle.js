@@ -16,6 +16,7 @@ const {
     bytecode: DEFAULT_VALIDATION_STRATEGY_BYTECODE,
 } = require("@adrastia-oracle/adrastia-core/artifacts/contracts/strategies/validation/DefaultValidation.sol/DefaultValidation.json");
 const { BigNumber } = require("ethers");
+const { AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK } = require("../../src/constants/aggregation-timestamp-strategies");
 
 const UPDATER_ADMIN_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("UPDATER_ADMIN_ROLE"));
 const ORACLE_UPDATER_ROLE = ethers.utils.keccak256(ethers.utils.toUtf8Bytes("ORACLE_UPDATER_ROLE"));
@@ -71,7 +72,10 @@ async function deployDefaultPeriodicAggregator(constructorOverrides = {}) {
         DEFAULT_AGGREGATION_STRATEGY_ABI,
         DEFAULT_AGGREGATION_STRATEGY_BYTECODE
     );
-    const aggregationStrategy = await aggregationStrategyFactory.deploy(averagingStrategy.address);
+    const aggregationStrategy = await aggregationStrategyFactory.deploy(
+        averagingStrategy.address,
+        AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK
+    );
     await aggregationStrategy.deployed();
 
     const oracleStubFactory = await ethers.getContractFactory("MockOracle");
@@ -118,7 +122,10 @@ async function deployDefaultCurrentAggregator(constructorOverrides = {}) {
         DEFAULT_AGGREGATION_STRATEGY_ABI,
         DEFAULT_AGGREGATION_STRATEGY_BYTECODE
     );
-    const aggregationStrategy = await aggregationStrategyFactory.deploy(averagingStrategy.address);
+    const aggregationStrategy = await aggregationStrategyFactory.deploy(
+        averagingStrategy.address,
+        AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK
+    );
     await aggregationStrategy.deployed();
 
     const oracleStubFactory = await ethers.getContractFactory("MockOracle");
@@ -551,8 +558,14 @@ function describeManagedAggregatorOracleTests(contractName, deployFunction) {
                 DEFAULT_AGGREGATION_STRATEGY_ABI,
                 DEFAULT_AGGREGATION_STRATEGY_BYTECODE
             );
-            newAggregationStrategy = await aggregationStrategyFactory.deploy(newAveragingStrategy.address);
-            newAggregationStrategy2 = await aggregationStrategyFactory.deploy(newAveragingStrategy.address);
+            newAggregationStrategy = await aggregationStrategyFactory.deploy(
+                newAveragingStrategy.address,
+                AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK
+            );
+            newAggregationStrategy2 = await aggregationStrategyFactory.deploy(
+                newAveragingStrategy.address,
+                AGGREGATION_TIMESTAMP_STRATEGY_THISBLOCK
+            );
             await newAggregationStrategy.deployed();
             await newAggregationStrategy2.deployed();
 

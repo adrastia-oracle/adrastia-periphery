@@ -7,12 +7,24 @@ require("@atixlabs/hardhat-time-n-mine");
 require("@nomiclabs/hardhat-etherscan");
 require("hardhat-contract-sizer");
 
+const forkingConfig = require("./forking").default;
+
 const SOLC_8 = {
     version: "0.8.13",
     settings: {
         optimizer: {
             enabled: true,
-            runs: 2000,
+            runs: 200,
+        },
+    },
+};
+
+const SOLC_8_30 = {
+    version: "0.8.30",
+    settings: {
+        optimizer: {
+            enabled: true,
+            runs: 200,
         },
     },
 };
@@ -22,13 +34,13 @@ const SOLC_8 = {
  */
 module.exports = {
     solidity: {
-        compilers: [SOLC_8],
+        compilers: [SOLC_8, SOLC_8_30],
     },
     networks: {
         hardhat: {
-            forking: {
-                url: process.env.ETHEREUM_URL || "",
-            },
+            hardfork: process.env.HARDHAT_HARDFORK || "cancun",
+            initialBaseFeePerGas: 0, // disables EIP-1559 base fee entirely
+            forking: forkingConfig,
             mining: {
                 auto: true,
                 mempool: {
@@ -110,5 +122,12 @@ module.exports = {
     contractSizer: {
         runOnCompile: true,
         except: ["test"],
+    },
+    mocha: {
+        timeout: 60000, // 60 seconds
+    },
+    gasReporter: {
+        enabled: true,
+        trackGasDeltas: true,
     },
 };

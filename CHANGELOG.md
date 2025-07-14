@@ -1,5 +1,30 @@
 # Changelog
 
+## v4.12.0 (14-JUL-2025)
+### Dependencies
+- Upgrade adrastia-core to v4.10.2.
+
+### Accumulators
+- Rename ManagedVenusIsolatedSBAccumulator to ManagedVenusSBAccumulator.
+
+### Prudentia
+- Increase Solidity version to 0.8.30.
+#### Computers
+- Add minimum freshness parameter to oracle mutation computers.
+- Add `caller` and `timetamp` parameters to various events.
+#### Controllers
+- Add an update hook system: Allows for custom logic to be executed before or after a rate update.
+- Use reentrancy guards with updates and manual pushes.
+- Add update threshold support to RateController.
+- Change the default update behavior to not check for changes to the buffer, but to instead check the update threshold (if any). If no update threshold is specified, updates will continue being required as per the period requirement.
+- Anyone can now increase the rate buffer capacity.
+- Add `caller` and `timetamp` parameters to various events.
+- Delete protocol specific controllers.
+- Delete CapController: The standard RateController is now optimal for this use case.
+- Improve the efficiency of RateController: before, the controller would often compute the rate twice; once to check if it was different and then again to update the rate. Now, it only computes the rate once and uses the result for both checks and updates.
+#### Hooks
+- Add VenusAccrueInterestHook: A pre-update hook that accrues interest to vTokens before updating the rate controller.
+
 ## v4.11.1
 ### Dependencies
 - Upgrade adrastia-core to v4.9.1.

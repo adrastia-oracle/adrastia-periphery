@@ -13,6 +13,7 @@ const DATA_SLOT_LIQUIDITY_QUOTETOKEN = 3;
 
 const DEFAULT_DECIMALS = 4;
 
+const DEFAULT_MINIMUM_FRESHNESS = 60; // 60 seconds
 const DEFAULT_DATA_SLOT = DATA_SLOT_PRICE;
 const DEFAULT_ONE_X_SCALAR = BigNumber.from(10).pow(6);
 const DEFAULT_DECIMAL_OFFSET = 0;
@@ -36,6 +37,7 @@ describe("ManagedOracleMutationComputer#setConfig", function () {
         computer = await factory.deploy(
             oracle.address,
             DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             DEFAULT_DECIMAL_OFFSET
         );
@@ -101,6 +103,7 @@ describe("ManagedOracleMutationComputer#supportsInterface", function () {
         computer = await factory.deploy(
             oracle.address,
             DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             DEFAULT_DECIMAL_OFFSET
         );

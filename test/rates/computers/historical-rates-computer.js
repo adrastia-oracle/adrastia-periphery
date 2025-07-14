@@ -2,6 +2,7 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { MAX_CONFIG } = require("../../../src/constants/rate-controller");
 const { RATE_ADMIN_ROLE, ADMIN_ROLE } = require("../../../src/roles");
+const { blockTimestamp } = require("../../../src/time");
 const { AddressZero } = ethers.constants;
 
 const DEFAULT_PERIOD = 100;
@@ -14,11 +15,17 @@ const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 describe("HistoricalRatesComputer#constructor", function () {
     var factory;
 
+    let adminAddress;
+
     before(async function () {
         factory = await ethers.getContractFactory("HistoricalRatesComputerStub");
     });
 
     it("Sets the default config a rate provider is provided", async function () {
+        const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
+
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         const rateController = await rateControllerFactory.deploy(
             DEFAULT_COMPUTE_AHEAD,
@@ -33,15 +40,22 @@ describe("HistoricalRatesComputer#constructor", function () {
 
         const computer = await factory.deploy(rateController.address, index, highAvailability);
 
-        await expect(computer.deployTransaction).to.emit(computer, "ConfigUpdated");
-        await expect(computer.deployTransaction).to.emit(computer, "ConfigInitialized").withArgs(AddressZero, true);
-
         const deployReceipt = await computer.deployTransaction.wait();
+
+        const timestamp = await blockTimestamp(deployReceipt.blockNumber);
+
+        await expect(computer.deployTransaction).to.emit(computer, "ConfigUpdated");
+        await expect(computer.deployTransaction)
+            .to.emit(computer, "ConfigInitialized")
+            .withArgs(adminAddress, AddressZero, true, timestamp);
 
         const event = deployReceipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(AddressZero);
-        expect(event.args[1]).to.deep.equal([rateController.address, index, highAvailability]);
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(AddressZero);
+        expect(event.args[2]).to.deep.equal([AddressZero, 0, false]);
+        expect(event.args[3]).to.deep.equal([rateController.address, index, highAvailability]);
+        expect(event.args[4]).to.equal(timestamp);
 
         const config = await computer.getConfig(AddressZero);
 
@@ -63,15 +77,22 @@ describe("HistoricalRatesComputer#constructor", function () {
 
         const computer = await factory.deploy(rateController.address, index, highAvailability);
 
-        await expect(computer.deployTransaction).to.emit(computer, "ConfigUpdated");
-        await expect(computer.deployTransaction).to.emit(computer, "ConfigInitialized").withArgs(AddressZero, true);
-
         const deployReceipt = await computer.deployTransaction.wait();
+
+        const timestamp = await blockTimestamp(deployReceipt.blockNumber);
+
+        await expect(computer.deployTransaction).to.emit(computer, "ConfigUpdated");
+        await expect(computer.deployTransaction)
+            .to.emit(computer, "ConfigInitialized")
+            .withArgs(adminAddress, AddressZero, true, timestamp);
 
         const event = deployReceipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(AddressZero);
-        expect(event.args[1]).to.deep.equal([rateController.address, index, highAvailability]);
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(AddressZero);
+        expect(event.args[2]).to.deep.equal([AddressZero, 0, false]);
+        expect(event.args[3]).to.deep.equal([rateController.address, index, highAvailability]);
+        expect(event.args[4]).to.equal(timestamp);
 
         const config = await computer.getConfig(AddressZero);
 
@@ -257,6 +278,8 @@ describe("HistoricalRatesComputer#setConfig", function () {
     var rateController;
     var secondRateController;
 
+    let adminAddress;
+
     before(async function () {
         computerFactory = await ethers.getContractFactory("HistoricalRatesComputerStub");
 
@@ -269,6 +292,8 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
     beforeEach(async function () {
         const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
@@ -372,18 +397,23 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
         const tx = await computer.setConfig(AddressZero, defaultConfig);
 
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
         await expect(tx).to.emit(computer, "ConfigUpdated");
-        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(AddressZero, true);
+        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(adminAddress, AddressZero, true, timestamp);
 
         const receipt = await tx.wait();
         const event = receipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(AddressZero);
-        expect(event.args[1]).to.deep.equal([
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(AddressZero);
+        expect(event.args[2]).to.deep.equal([AddressZero, 0, false]);
+        expect(event.args[3]).to.deep.equal([
             defaultConfig.rateProvider,
             defaultConfig.index,
             defaultConfig.highAvailability,
         ]);
+        expect(event.args[4]).to.equal(timestamp);
 
         const config = await computer.getConfig(AddressZero);
 
@@ -407,14 +437,23 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
         const tx = await computer.setConfig(AddressZero, nilConfig);
 
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
         await expect(tx).to.emit(computer, "ConfigUpdated");
-        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(AddressZero, false);
+        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(adminAddress, AddressZero, false, timestamp);
 
         const receipt = await tx.wait();
         const event = receipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(AddressZero);
-        expect(event.args[1]).to.deep.equal([nilConfig.rateProvider, nilConfig.index, nilConfig.highAvailability]);
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(AddressZero);
+        expect(event.args[2]).to.deep.equal([
+            defaultConfig.rateProvider,
+            defaultConfig.index,
+            defaultConfig.highAvailability,
+        ]);
+        expect(event.args[3]).to.deep.equal([nilConfig.rateProvider, nilConfig.index, nilConfig.highAvailability]);
+        expect(event.args[4]).to.equal(timestamp);
 
         await expect(computer.getConfig(AddressZero)).to.be.revertedWith("MissingConfig");
     });
@@ -436,18 +475,27 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
         const tx = await computer.setConfig(AddressZero, newDefaultConfig);
 
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
         await expect(tx).to.emit(computer, "ConfigUpdated");
         await expect(tx).to.not.emit(computer, "ConfigInitialized");
 
         const receipt = await tx.wait();
         const event = receipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(AddressZero);
-        expect(event.args[1]).to.deep.equal([
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(AddressZero);
+        expect(event.args[2]).to.deep.equal([
+            defaultConfig.rateProvider,
+            defaultConfig.index,
+            defaultConfig.highAvailability,
+        ]);
+        expect(event.args[3]).to.deep.equal([
             newDefaultConfig.rateProvider,
             newDefaultConfig.index,
             newDefaultConfig.highAvailability,
         ]);
+        expect(event.args[4]).to.equal(timestamp);
 
         const config = await computer.getConfig(AddressZero);
 
@@ -475,18 +523,27 @@ describe("HistoricalRatesComputer#setConfig", function () {
 
         const tx = await computer.setConfig(token, tokenConfig);
 
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
         await expect(tx).to.emit(computer, "ConfigUpdated");
         await expect(tx).to.not.emit(computer, "ConfigInitialized");
 
         const receipt = await tx.wait();
         const event = receipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(token);
-        expect(event.args[1]).to.deep.equal([
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(token);
+        expect(event.args[2]).to.deep.equal([
+            defaultConfig.rateProvider,
+            defaultConfig.index,
+            defaultConfig.highAvailability,
+        ]);
+        expect(event.args[3]).to.deep.equal([
             tokenConfig.rateProvider,
             tokenConfig.index,
             tokenConfig.highAvailability,
         ]);
+        expect(event.args[4]).to.equal(timestamp);
 
         const config = await computer.getConfig(token);
 
@@ -618,6 +675,8 @@ describe("HistoricalRatesComputer#revertToDefaultConfig", function () {
     var computer;
     var rateController;
 
+    let adminAddress;
+
     before(async function () {
         computerFactory = await ethers.getContractFactory("HistoricalRatesComputerStub");
 
@@ -630,6 +689,8 @@ describe("HistoricalRatesComputer#revertToDefaultConfig", function () {
 
     beforeEach(async function () {
         const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
 
         const rateControllerFactory = await ethers.getContractFactory("RateControllerStub");
         rateController = await rateControllerFactory.deploy(
@@ -676,15 +737,20 @@ describe("HistoricalRatesComputer#revertToDefaultConfig", function () {
 
         const tx = await computer.revertToDefaultConfig(token);
 
-        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(token, false);
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx).to.emit(computer, "ConfigInitialized").withArgs(adminAddress, token, false, timestamp);
         await expect(tx).to.emit(computer, "ConfigUpdated");
 
         const receipt = await tx.wait();
 
         const event = receipt.events.find((log) => log.event === "ConfigUpdated");
 
-        expect(event.args[0]).to.equal(token);
-        expect(event.args[1]).to.deep.equal([AddressZero, 0, false]);
+        expect(event.args[0]).to.equal(adminAddress);
+        expect(event.args[1]).to.equal(token);
+        expect(event.args[2]).to.deep.equal([config.rateProvider, config.index, config.highAvailability]);
+        expect(event.args[3]).to.deep.equal([AddressZero, 0, false]);
+        expect(event.args[4]).to.equal(timestamp);
 
         expect(await computer.isUsingDefaultConfig(token)).to.be.true;
     });

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
@@ -7,15 +7,19 @@ import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin-v4/contracts/utils/introspection/ERC165Checker.sol";
 import "@openzeppelin-v4/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin-v4/contracts/security/ReentrancyGuard.sol";
 
 import "./HistoricalRates.sol";
 import "./IRateComputer.sol";
+import "./controllers/hooks/IControllerPreUpdateHook.sol";
+import "./controllers/hooks/IControllerPostUpdateHook.sol";
 
 /// @title RateController
 /// @notice A contract that periodically computes and stores rates for tokens.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, and checkUpdate to add restrictions.
-abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic {
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetHookConfig, checkSetChangeThreshold,
+/// and checkUpdate to add restrictions.
+abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpdateable, IPeriodic, ReentrancyGuard {
     using SafeCast for uint256;
 
     struct RateConfig {
@@ -29,6 +33,33 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         uint16[] componentWeights; // 10000 = 100%
         IRateComputer[] components;
     }
+
+    struct Hook {
+        /**
+         * @notice A flag indicating whether the hook is allowed to fail. If true, the hook can fail without reverting
+         * the transaction.
+         */
+        bool allowHookFailure;
+        /**
+         * @notice The gas limit for the hook. This is used to ensure that the hook does not consume too much gas and
+         * cause the transaction unintentially to fail.
+         *
+         * @dev This is a uint64 to save on storage costs, as the gas limit is typically a small number.
+         */
+        uint64 hookGasLimit;
+        /**
+         * @notice The address of the hook. The zero address indicates that no post-update hook is set.
+         */
+        address hookAddress;
+    }
+
+    enum HookType {
+        PreUpdate, // preControllerUpdate is called immediately before pushing a new rate to the buffer
+        PostUpdate // postControllerUpdate is called immediately after pushing a new rate to the buffer
+    }
+
+    /// @notice The precision used for change calculations. This is used to represent percentages as integers.
+    uint256 public constant CHANGE_PRECISION = 10 ** 8;
 
     /// @notice The flag that indicates whether rate updates are paused.
     uint16 internal constant PAUSE_FLAG_MASK = 0x0000000000000001;
@@ -44,25 +75,115 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// returned rates should be the same as the last pushed rates (from the buffer).
     bool public immutable computeAhead;
 
+    /**
+     * @notice Maps a hook type to its hook configuration.
+     */
+    mapping(uint256 => Hook) internal hooks;
+
+    /**
+     * @notice A bitfield of active hook types.
+     */
+    uint256 internal activeHookTypes;
+
     /// @notice Maps a token to its rate configuration.
     mapping(address => RateConfig) internal rateConfigs;
 
     /// @notice Event emitted when a new rate is manually pushed to the rate buffer.
+    /// @param caller The address of the account that pushed the rate.
     /// @param token The token for which the rate was pushed.
     /// @param target The target rate.
     /// @param current The effective rate.
-    /// @param timestamp The timestamp at which the rate was pushed.
     /// @param amount The amount of times the rate was pushed.
-    event RatePushedManually(address indexed token, uint256 target, uint256 current, uint256 timestamp, uint256 amount);
+    /// @param timestamp The timestamp at which the rate was pushed.
+    event RatePushedManually(
+        address indexed caller,
+        address indexed token,
+        uint256 target,
+        uint256 current,
+        uint256 amount,
+        uint256 timestamp
+    );
 
     /// @notice Event emitted when the pause status of rate updates for a token is changed.
+    /// @param caller The address of the account that changed the pause status.
     /// @param token The token for which the pause status of rate updates was changed.
     /// @param areUpdatesPaused Whether rate updates are paused for the token.
-    event PauseStatusChanged(address indexed token, bool areUpdatesPaused);
+    /// @param timestamp The timestamp at which the pause status was changed, in seconds since the Unix epoch.
+    event PauseStatusChanged(address indexed caller, address indexed token, bool areUpdatesPaused, uint256 timestamp);
 
     /// @notice Event emitted when the rate configuration for a token is updated.
+    /// @param caller The address of the account that updated the rate configuration.
     /// @param token The token for which the rate configuration was updated.
-    event RateConfigUpdated(address indexed token, RateConfig oldConfig, RateConfig newConfig);
+    /// @param oldConfig The old rate configuration.
+    /// @param newConfig The new rate configuration.
+    /// @param timestamp The block timestamp at which the rate configuration was updated, in seconds since the Unix epoch.
+    event RateConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        RateConfig oldConfig,
+        RateConfig newConfig,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice An event emitted when a hook reverts, but the failure is allowed.
+     *
+     * @param hookType The type of the hook that failed.
+     * @param hook The address of the hook that failed.
+     * @param token The address of the token for which the hook failed.
+     * @param reason The reason for the failure, encoded as bytes.
+     * @param timestamp The block timestamp at which the hook failed, in seconds since the Unix epoch.
+     */
+    event HookFailed(
+        uint256 indexed hookType,
+        address indexed hook,
+        address indexed token,
+        bytes reason,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice An event emitted when a hook is changed.
+     *
+     * @param caller The address of the account that changed the hook.
+     * @param hookType The type of the hook that was changed.
+     * @param oldHook The old hook config.
+     * @param newHook The new hook config.
+     * @param timestamp The block timestamp at which the hook was changed, in seconds since the Unix epoch.
+     */
+    event HookConfigUpdated(
+        address indexed caller,
+        uint256 indexed hookType,
+        Hook oldHook,
+        Hook newHook,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice An event emitted when the change threshold for a token is updated.
+     * @param caller The address of the account that updated the change threshold.
+     * @param token The token whose change threshold was updated.
+     * @param oldChangeThreshold The old change threshold.
+     * @param newChangeThreshold The new change threshold.
+     * @param timestamp The block timestamp at which the change threshold was updated, in seconds since the Unix epoch.
+     */
+    event ChangeThresholdUpdated(
+        address indexed caller,
+        address indexed token,
+        uint256 oldChangeThreshold,
+        uint256 newChangeThreshold,
+        uint256 timestamp
+    );
+
+    /**
+     * @notice An error thrown when a hook fails to execute.
+     *
+     * @param hookType The type of the hook that failed.
+     * @param hookAddress The address of the hook that failed.
+     * @param token The address of the token for which the hook failed.
+     * @param reason The reason for the failure, encoded as bytes.
+     */
+    error HookFailedError(uint256 hookType, address hookAddress, address token, bytes reason);
 
     /// @notice An error that is thrown if we try to set a rate configuration with invalid parameters.
     /// @param token The token for which we tried to set the rate configuration.
@@ -84,6 +205,32 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param token The token for which we tried to change the pause state.
     /// @param paused The pause state we tried to set.
     error PauseStatusUnchanged(address token, bool paused);
+
+    /**
+     * @notice An error thrown when attempting to set a hook, but the hook did not change.
+     *
+     * @param hookType The type of the hook that was not changed.
+     */
+    error HookConfigUnchanged(uint256 hookType);
+
+    /**
+     * @notice An error thrown when the hook configuration is invalid.
+     */
+    error InvalidHookConfig(uint256 hookType);
+
+    /**
+     * @notice An error thrown when a hook does not support the expected interface.
+     *
+     * @param hookType The type of the hook that does not support the interface.
+     * @param hookAddress The address of the hook that does not support the interface.
+     * @param interfaceId The interface ID that the hook is expected to support.
+     */
+    error HookDoesntSupportInterface(uint256 hookType, address hookAddress, bytes4 interfaceId);
+
+    /**
+     * @notice An error thrown when an invalid hook type is provided.
+     */
+    error InvalidHookType(uint256 hookType);
 
     /// @notice Creates a new rate controller.
     /// @param computeAhead_ True if the rates returned by computeRate should be computed on-the-fly with clamping;
@@ -162,13 +309,87 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
         rateConfigs[token] = config;
 
-        emit RateConfigUpdated(token, oldConfig, config);
+        emit RateConfigUpdated(msg.sender, token, oldConfig, config, block.timestamp);
 
         BufferMetadata memory meta = rateBufferMetadata[token];
         if (meta.maxSize == 0) {
             // We require that the buffer is initialized before allowing rate updates to occur
             initializeBuffers(token);
         }
+    }
+
+    /**
+     * @notice Gets the hook configuration for a specific hook type.
+     *
+     * @param hookType The type of the hook to retrieve the configuration for.
+     *
+     * @return The configuration of the hook, including whether it allows failure, the gas limit for the hook, and the
+     * address of the hook.
+     */
+    function getHookConfig(uint8 hookType) external view virtual returns (Hook memory) {
+        return hooks[hookType];
+    }
+
+    /**
+     * @notice Sets the hook configuration for a specific hook type.
+     *
+     * @dev To uninstall a hook, all fields of the hook config must be set to zero/false.
+     *
+     * @param hookType The type of the hook to set the configuration for.
+     * @param hookConfig The configuration of the hook to set, including whether it allows failure, the gas limit for
+     * the hook, and the address of the hook.
+     */
+    function setHookConfig(uint8 hookType, Hook calldata hookConfig) external virtual {
+        checkSetHookConfig();
+
+        if (!_isHookTypeValid(hookType)) {
+            // The hook type is invalid. Revert to help the user be aware of this.
+            revert InvalidHookType(hookType);
+        }
+
+        if (address(hookConfig.hookAddress) == address(0)) {
+            // hookGasLimit must be 0 and allowHookFailure must be false if the hookAddress is zero
+            // This is to prevent accidental misconfiguration
+            if (hookConfig.hookGasLimit != 0 || hookConfig.allowHookFailure) {
+                revert InvalidHookConfig(hookType);
+            }
+        } else {
+            // We have an update hook. Ensure that hookGasLimit is not zero. If so, it's likely a misconfiguration.
+            if (hookConfig.hookGasLimit == 0) {
+                revert InvalidHookConfig(hookType);
+            }
+        }
+
+        Hook memory oldHook = _getHook(hookType);
+
+        if (
+            oldHook.allowHookFailure == hookConfig.allowHookFailure &&
+            oldHook.hookGasLimit == hookConfig.hookGasLimit &&
+            oldHook.hookAddress == hookConfig.hookAddress
+        ) {
+            // The hook did not change. Revert to help the user be aware of this.
+            revert HookConfigUnchanged(hookType);
+        }
+
+        if (address(hookConfig.hookAddress) != address(0)) {
+            // Ensure that the hook supports the expected interface
+            bytes4 expectedInterfaceId = _getHookInterfaceId(hookType);
+            if (!ERC165Checker.supportsInterface(hookConfig.hookAddress, expectedInterfaceId)) {
+                revert HookDoesntSupportInterface(hookType, hookConfig.hookAddress, expectedInterfaceId);
+            }
+        }
+
+        if (address(hookConfig.hookAddress) != address(0)) {
+            // We are setting a new hook, so we need to add it to the active hook types
+            activeHookTypes |= (uint256(1) << hookType);
+        } else {
+            // We are removing a hook, so we need to remove it from the active hook types
+            activeHookTypes &= ~(uint256(1) << hookType);
+        }
+
+        hooks[hookType] = hookConfig;
+
+        emit HookConfigUpdated(msg.sender, hookType, oldHook, hookConfig, block.timestamp);
     }
 
     /// @notice Manually pushes new rates for a token, bypassing the update logic, clamp logic, pause logic, and
@@ -180,7 +401,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @param target The target rate to push.
     /// @param current The current rate to push.
     /// @param amount The number of times to push the rate.
-    function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external {
+    function manuallyPushRate(address token, uint64 target, uint64 current, uint256 amount) external nonReentrant {
         checkManuallyPushRate();
 
         _manuallyPushRate(token, target, current, amount);
@@ -213,12 +434,45 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
 
             meta.flags = flags;
 
-            emit PauseStatusChanged(token, paused);
+            emit PauseStatusChanged(msg.sender, token, paused, block.timestamp);
 
             onPaused(token, paused);
         } else {
             revert PauseStatusUnchanged(token, paused);
         }
+    }
+
+    /**
+     * @notice Sets the change threshold for the specified token. When the rate changes by more than the threshold, an
+     *   update is triggered, assuming the period has been surpassed.
+     * @param token The token to set the change threshold for.
+     * @param changeThreshold Percent change that allows an update to make place, respresented as the numerator of a
+     *   fraction with a denominator of `CHANGE_PRECISION`. Ex: With `CHANGE_PRECISION` of 1e8, a change threshold of
+     *   2% would be represented as 2e6 (2000000).
+     */
+    function setChangeThreshold(address token, uint32 changeThreshold) external virtual {
+        checkSetChangeThreshold();
+
+        BufferMetadata storage metadata = rateBufferMetadata[token];
+
+        uint256 oldChangeThreshold = metadata.changeThreshold;
+
+        if (oldChangeThreshold != changeThreshold) {
+            metadata.changeThreshold = changeThreshold;
+
+            emit ChangeThresholdUpdated(msg.sender, token, oldChangeThreshold, changeThreshold, block.timestamp);
+        }
+    }
+
+    /**
+     * @notice Gets the change threshold for the specified token.
+     * @param token The token to get the change threshold for.
+     * @return uint32 Percent change that allows an update to make place, respresented as the numerator of a
+     *   fraction with a denominator of `CHANGE_PRECISION`. Ex: With `CHANGE_PRECISION` of 1e8, a change threshold of
+     *   2% would be represented as 2e6 (2000000).
+     */
+    function getChangeThreshold(address token) external view virtual returns (uint32) {
+        return rateBufferMetadata[token].changeThreshold;
     }
 
     /// @notice Computes the rate for a token. If computeAhead is true, the rate is computed on-the-fly with clamping;
@@ -247,16 +501,25 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     }
 
     /// @inheritdoc IUpdateable
-    function update(bytes memory data) public virtual override returns (bool b) {
+    function update(bytes memory data) public virtual override nonReentrant returns (bool b) {
         checkUpdate();
 
-        if (needsUpdate(data)) return performUpdate(data);
+        (bool needsUpdate_, bool nextRateComputed, uint64 targetRate, uint64 nextRate) = _needsUpdate(data);
+        if (needsUpdate_) {
+            return performUpdate(data, nextRateComputed, targetRate, nextRate);
+        }
 
         return false;
     }
 
     /// @inheritdoc IUpdateable
     function needsUpdate(bytes memory data) public view virtual override returns (bool b) {
+        (b, , , ) = _needsUpdate(data);
+    }
+
+    function _needsUpdate(
+        bytes memory data
+    ) internal view virtual returns (bool b, bool nextRateComputed, uint64 targetRate, uint64 nextRate) {
         address token = abi.decode(data, (address));
 
         BufferMetadata memory meta = rateBufferMetadata[token];
@@ -266,11 +529,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         //   1. The buffer is initialized. We do this to prevent zero values from being pushed to the buffer.
         //   2. Updates are not paused.
         //   3. Something will change. Otherwise, updating is a waste of gas.
-        return
-            timeSinceLastUpdate(data) >= period &&
-            meta.maxSize > 0 &&
-            !_areUpdatesPaused(token) &&
-            willAnythingChange(data);
+
+        if (!(timeSinceLastUpdate(data) >= period) || !(meta.maxSize > 0) || _areUpdatesPaused(token)) {
+            // If the update period has not elapsed, the buffer is not initialized, or updates are paused, we cannot
+            // update.
+            return (false, false, 0, 0);
+        }
+
+        // Now we check if anything will change
+        (b, nextRateComputed, targetRate, nextRate) = willAnythingChange(data);
     }
 
     /**
@@ -359,27 +626,33 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return (rateBufferMetadata[token].flags & PAUSE_FLAG_MASK) != 0;
     }
 
-    /// @notice Determines if any changes will occur in the rate buffer after a new rate is added.
-    /// @dev This function is used to reduce the amount of gas used by updaters when the rate is not changing.
+    /// @notice Determines if there's enough of a change in the rate to trigger an update.
     /// @param data A bytes array containing the token address to be decoded.
-    /// @return bool A boolean value indicating whether any changes will occur in the rate buffer.
-    function willAnythingChange(bytes memory data) internal view virtual returns (bool) {
+    /// @return willChange A boolean value indicating whether there's enough of a change in the rate to trigger an update.
+    /// @return nextRateComputed A boolean value indicating whether the next rate was computed.
+    /// @return targetRate The target rate for the token, if it was computed.
+    /// @return nextRate The next rate for the token, if it was computed.
+    function willAnythingChange(
+        bytes memory data
+    ) internal view virtual returns (bool willChange, bool nextRateComputed, uint64 targetRate, uint64 nextRate) {
         address token = abi.decode(data, (address));
 
         BufferMetadata memory meta = rateBufferMetadata[token];
 
-        // If the buffer has empty slots, they can be filled
-        if (meta.size != meta.maxSize) return true;
+        // No rates in the buffer, so the rate will change.
+        if (meta.size == 0) return (true, false, 0, 0);
 
-        // All current rates in the buffer should match the next rate. Otherwise, the rate will change.
-        // We don't check target rates because if the rate is capped, the current rate may never reach the target rate.
-        (, uint64 nextRate) = computeRateAndClamp(token);
-        RateLibrary.Rate[] memory rates = _getRates(token, meta.size, 0, 1);
-        for (uint256 i = 0; i < rates.length; ++i) {
-            if (rates[i].current != nextRate) return true;
+        if (meta.changeThreshold == 0) {
+            // If the change threshold is zero, we always signal something will change.
+            return (true, false, 0, 0);
         }
 
-        return false;
+        uint256 lastRate = _getRates(token, 1, 0, 1)[0].current;
+        (targetRate, nextRate) = computeRateAndClamp(token);
+
+        nextRateComputed = true;
+
+        willChange = changeThresholdSurpassed(lastRate, nextRate, meta.changeThreshold);
     }
 
     /// @notice Gets the latest rate for a token. If the buffer is empty, returns a zero rate.
@@ -532,9 +805,20 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
     }
 
-    function updateAndCompute(address token) internal virtual returns (uint64 target, uint64 newRate) {
-        // Compute the new rate and clamp it
-        (target, newRate) = computeRateAndClamp(token);
+    function updateAndCompute(
+        address token,
+        bool nextRateComputed,
+        uint64 targetRate,
+        uint64 nextRate
+    ) internal virtual returns (uint64 target, uint64 newRate) {
+        if (nextRateComputed) {
+            // The target and new rate was already computed, so we can just return it
+            target = targetRate;
+            newRate = nextRate;
+        } else {
+            // Compute the new rate and clamp it
+            (target, newRate) = computeRateAndClamp(token);
+        }
     }
 
     /// @notice Performs an update of the token's rate based on the provided data.
@@ -542,8 +826,15 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// if `updatersMustBeEoa` is set to true. It decodes the token address from the input data, computes
     /// the new clamped rate using `computeRateAndClamp`, and then pushes the new rate to the rate buffer.
     /// @param data The input data, containing the token address to be updated.
+    /// @param nextRateComputed A boolean indicating whether the next rate was computed.
+    /// @param nextRate The next rate that was computed for the token.
     /// @return bool Returns true if the update is successful.
-    function performUpdate(bytes memory data) internal virtual returns (bool) {
+    function performUpdate(
+        bytes memory data,
+        bool nextRateComputed,
+        uint64 targetRate,
+        uint64 nextRate
+    ) internal virtual returns (bool) {
         if (updatersMustBeEoa && msg.sender != tx.origin) {
             // Only EOA can update
             revert UpdaterMustBeEoa(tx.origin, msg.sender);
@@ -552,7 +843,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         address token = abi.decode(data, (address));
 
         // Compute the new rates and do any other necessary work
-        (uint64 target, uint64 newRate) = updateAndCompute(token);
+        (uint64 target, uint64 newRate) = updateAndCompute(token, nextRateComputed, targetRate, nextRate);
 
         // Push the new rate
         push(token, RateLibrary.Rate({target: target, current: newRate, timestamp: uint32(block.timestamp)}));
@@ -581,8 +872,132 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         }
 
         if (amount > 0) {
-            emit RatePushedManually(token, target, current, block.timestamp, amount);
+            emit RatePushedManually(msg.sender, token, target, current, amount, block.timestamp);
         }
+    }
+
+    function _isHookTypeValid(uint256 hookType) internal pure virtual returns (bool) {
+        return hookType == uint256(HookType.PreUpdate) || hookType == uint256(HookType.PostUpdate);
+    }
+
+    function _getHookInterfaceId(uint256 hookType) internal pure virtual returns (bytes4) {
+        if (hookType == uint256(HookType.PreUpdate)) {
+            return type(IControllerPreUpdateHook).interfaceId;
+        } else if (hookType == uint256(HookType.PostUpdate)) {
+            return type(IControllerPostUpdateHook).interfaceId;
+        } else {
+            revert InvalidHookType(hookType);
+        }
+    }
+
+    function _isHookSet(uint256 activeHooks, uint256 hookType) internal view virtual returns (bool) {
+        return (activeHooks & (uint256(1) << hookType)) != 0;
+    }
+
+    function _getHook(uint256 hookType) internal view virtual returns (Hook memory) {
+        return hooks[hookType];
+    }
+
+    function push(address token, RateLibrary.Rate memory rate) internal virtual override {
+        uint256 activeHooks = activeHookTypes;
+
+        if (_isHookSet(activeHooks, uint256(HookType.PreUpdate))) {
+            Hook memory preUpdateHook = _getHook(uint256(HookType.PreUpdate));
+
+            (bool success, bytes memory returnData) = preUpdateHook.hookAddress.call{gas: preUpdateHook.hookGasLimit}(
+                abi.encodeWithSelector(IControllerPreUpdateHook.onPreControllerUpdate.selector, token, rate)
+            );
+
+            if (!success) {
+                if (preUpdateHook.allowHookFailure) {
+                    // The hook failed, but we allow it to fail
+                    emit HookFailed(
+                        uint256(HookType.PreUpdate),
+                        preUpdateHook.hookAddress,
+                        token,
+                        returnData,
+                        block.timestamp
+                    );
+                } else {
+                    // The hook failed, and we do not allow it to fail
+                    revert HookFailedError(uint256(HookType.PreUpdate), preUpdateHook.hookAddress, token, returnData);
+                }
+            }
+        }
+
+        super.push(token, rate);
+
+        if (_isHookSet(activeHooks, uint256(HookType.PostUpdate))) {
+            Hook memory postUpdateHook = _getHook(uint256(HookType.PostUpdate));
+
+            (bool success, bytes memory returnData) = postUpdateHook.hookAddress.call{gas: postUpdateHook.hookGasLimit}(
+                abi.encodeWithSelector(IControllerPostUpdateHook.onPostControllerUpdate.selector, token, rate)
+            );
+
+            if (!success) {
+                if (postUpdateHook.allowHookFailure) {
+                    // The hook failed, but we allow it to fail
+                    emit HookFailed(
+                        uint256(HookType.PostUpdate),
+                        postUpdateHook.hookAddress,
+                        token,
+                        returnData,
+                        block.timestamp
+                    );
+                } else {
+                    // The hook failed, and we do not allow it to fail
+                    revert HookFailedError(uint256(HookType.PostUpdate), postUpdateHook.hookAddress, token, returnData);
+                }
+            }
+        }
+    }
+
+    /// @dev Taken from adrastia-core/contracts/accumulators/AbstractAccumulator.
+    /// @custom:todo Add this to a library upstream.
+    function calculateChange(uint256 a, uint256 b) internal view virtual returns (uint256 change, bool isInfinite) {
+        // Ensure a is never smaller than b
+        if (a < b) {
+            uint256 temp = a;
+            a = b;
+            b = temp;
+        }
+
+        // a >= b
+
+        if (a == 0) {
+            // a == b == 0 (since a >= b), therefore no change
+            return (0, false);
+        } else if (b == 0) {
+            // (a > 0 && b == 0) => change threshold passed
+            // Zero to non-zero always returns true
+            return (0, true);
+        }
+
+        unchecked {
+            uint256 delta = a - b; // a >= b, therefore no underflow
+            uint256 preciseDelta = delta * CHANGE_PRECISION;
+
+            // If the delta is so large that multiplying by CHANGE_PRECISION overflows, we assume that
+            // the change threshold has been surpassed.
+            // If our assumption is incorrect, the accumulator will be extra-up-to-date, which won't
+            // really break anything, but will cost more gas in keeping this accumulator updated.
+            if (preciseDelta < delta) return (0, true);
+
+            change = preciseDelta / b;
+            isInfinite = false;
+        }
+    }
+
+    /// @dev Taken from adrastia-core/contracts/accumulators/AbstractAccumulator.
+    /// @custom:todo Add this to a library upstream.
+    function changeThresholdSurpassed(
+        uint256 a,
+        uint256 b,
+        uint256 changeThreshold
+    ) internal view virtual returns (bool) {
+        (uint256 change, bool isInfinite) = calculateChange(a, b);
+
+        return isInfinite || change >= changeThreshold;
     }
 
     /// @notice Called after the pause state is changed.
@@ -594,6 +1009,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @dev This function should contain the access control logic for the setConfig function.
     function checkSetConfig() internal view virtual;
 
+    /// @notice Checks if the caller is authorized to set the hook configuration.
+    /// @dev This function should contain the access control logic for the setHookConfig function.
+    function checkSetHookConfig() internal view virtual;
+
     /// @notice Checks if the caller is authorized to manually push rates.
     /// @dev This function should contain the access control logic for the manuallyPushRate function.
     /// WARNING: The manuallyPushRate function is very dangerous and should only be used in emergencies. Ensure that
@@ -603,6 +1022,10 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @notice Checks if the caller is authorized to pause or resume updates.
     /// @dev This function should contain the access control logic for the setUpdatesPaused function.
     function checkSetUpdatesPaused() internal view virtual;
+
+    /// @notice Checks if the sender has the required role to set the change threshold.
+    /// @dev This function should contain the access control logic for the setChangeThreshold function.
+    function checkSetChangeThreshold() internal view virtual;
 
     /// @notice Checks if the caller is authorized to set the rates capacity.
     /// @dev This function should contain the access control logic for the setRatesCapacity function.

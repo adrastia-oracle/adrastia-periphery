@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IOracle.sol";
 
@@ -26,6 +26,13 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
     /// @notice The data slot to use when consulting the oracle.
     uint256 public immutable dataSlot;
 
+    /**
+     * @notice The minimum freshness (maximum observation age), in seconds, of the oracle data. A value of 0 means
+     * instant consultations should be used.
+     * @dev WARNING: A value of 0 may not always be secure -- use with caution.
+     */
+    uint256 public immutable minimumFreshness;
+
     uint8 internal immutable liquidityDecimals;
     uint8 internal immutable priceDecimals;
 
@@ -39,6 +46,9 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
      * @notice Constructs a new OracleMutationComputer instance.
      * @param oracle_ The address of the oracle contract.
      * @param dataSlot_  The data slot to use when consulting the oracle. See the DATA_SLOT_* constants.
+     * @param minimumFreshness_ The minimum freshness (maximum observation age), in seconds, of the oracle data. A value
+     * of 0 means instant consultations should be used. WARNING: A value of 0 may not always be secure -- use with
+     * caution.
      * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
      * @param decimalsOffset_ The decimal offset to apply when scaling the value from the token. Positive values scale
      *   up, negative values scale down. Measured in numbers of decimals places (powers of 10).
@@ -46,6 +56,7 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
     constructor(
         IOracle oracle_,
         uint256 dataSlot_,
+        uint256 minimumFreshness_,
         uint32 defaultOneXScalar_,
         int8 decimalsOffset_
     ) Erc20MutationComputer(defaultOneXScalar_, 0, decimalsOffset_) {
@@ -59,6 +70,7 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
 
         oracle = oracle_;
         dataSlot = dataSlot_;
+        minimumFreshness = minimumFreshness_;
 
         liquidityDecimals = dataSlot_ == DATA_SLOT_PRICE ? 0 : oracle_.liquidityDecimals();
         priceDecimals = dataSlot_ == DATA_SLOT_PRICE ? oracle_.quoteTokenDecimals() : 0;
@@ -79,14 +91,14 @@ abstract contract OracleMutationComputer is Erc20MutationComputer {
     function extractValueFromToken(address token) internal view virtual override returns (uint256 result) {
         if (dataSlot == DATA_SLOT_PRICE) {
             // Fetch price
-            (result) = oracle.consultPrice(token);
+            (result) = oracle.consultPrice(token, minimumFreshness);
         } else if (dataSlot == DATA_SLOT_LIQUIDITY_TOKEN) {
             // Fetch tokenLiquidity
-            (result, ) = oracle.consultLiquidity(token);
+            (result, ) = oracle.consultLiquidity(token, minimumFreshness);
         } else {
             // Assume this case is for DATA_SLOT_LIQUIDITY_QUOTETOKEN b/c the constructor enforces this
             // Fetch quoteTokenLiquidity
-            (, result) = oracle.consultLiquidity(token);
+            (, result) = oracle.consultLiquidity(token, minimumFreshness);
         }
     }
 }

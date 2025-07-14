@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "../../rates/ManagedRateController.sol";
 
@@ -39,6 +39,26 @@ contract RateControllerStub is ManagedRateController {
         push(token, rate);
     }
 
+    function stubGetHookInterfaceId(uint256 hookType) public pure returns (bytes4) {
+        return _getHookInterfaceId(hookType);
+    }
+
+    function stubCalculateChange(uint256 a, uint256 b) public view returns (uint256, bool) {
+        return calculateChange(a, b);
+    }
+
+    function stubWillAnythingChange(bytes memory data) public view returns (bool b) {
+        (b, , , ) = willAnythingChange(data);
+    }
+
+    function stubChangeThresholdSurpassed(uint256 a, uint256 b, uint256 threshold) public view returns (bool) {
+        return changeThresholdSurpassed(a, b, threshold);
+    }
+
+    function stubActiveHookTypes() public view returns (uint256) {
+        return activeHookTypes;
+    }
+
     function stubInitializeBuffers(address token) public {
         initializeBuffers(token);
     }
@@ -67,9 +87,11 @@ contract RateControllerStub is ManagedRateController {
         else return super.canUpdate(data);
     }
 
-    function needsUpdate(bytes memory data) public view virtual override returns (bool) {
-        if (config.needsUpdateOverridden) return config.needsUpdate;
-        else return super.needsUpdate(data);
+    function _needsUpdate(
+        bytes memory data
+    ) internal view virtual override returns (bool b, bool nextRateComputed, uint64 targetRate, uint64 nextRate) {
+        if (config.needsUpdateOverridden) return (config.needsUpdate, false, 0, 0);
+        else return super._needsUpdate(data);
     }
 
     function canComputeNextRate(bytes memory data) public view virtual override returns (bool) {
@@ -82,6 +104,8 @@ contract RateControllerStub is ManagedRateController {
 
         call.paused = paused;
         ++call.callCount;
+
+        super.onPaused(token, paused);
     }
 }
 

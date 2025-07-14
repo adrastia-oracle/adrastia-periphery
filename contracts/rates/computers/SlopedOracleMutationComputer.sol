@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "./OracleMutationComputer.sol";
 
@@ -45,11 +45,19 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
 
     /**
      * @notice Emitted when a token's slope configuration is updated.
+     * @param caller The address of the caller that updated the config.
      * @param token The address of the token.
      * @param oldConfig The old configuration.
      * @param newConfig The new configuration.
+     * @param timestamp The timestamp when the config was updated.
      */
-    event SlopeConfigUpdated(address indexed token, SlopeConfig oldConfig, SlopeConfig newConfig);
+    event SlopeConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        SlopeConfig oldConfig,
+        SlopeConfig newConfig,
+        uint256 timestamp
+    );
 
     /**
      * @notice An error thrown when the input value is too large.
@@ -79,6 +87,9 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
      * @notice Constructs a new SlopedOracleMutationComputer instance.
      * @param oracle_ The address of the oracle contract.
      * @param dataSlot_  The data slot to use when consulting the oracle. See the DATA_SLOT_* constants.
+     * @param minimumFreshness_ The minimum freshness (maximum observation age), in seconds, of the oracle data. A value
+     * of 0 means instant consultations should be used. WARNING: A value of 0 may not always be secure -- use with
+     * caution.
      * @param defaultOneXScalar_ The default scalar value to represent 1x. Recommended value: 1,000,000.
      * @param decimalsOffset_ The decimal offset to apply when scaling the value from the token. Positive values scale
      *   up, negative values scale down. Measured in numbers of decimals places (powers of 10).
@@ -86,9 +97,10 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
     constructor(
         IOracle oracle_,
         uint256 dataSlot_,
+        uint256 minimumFreshness_,
         uint32 defaultOneXScalar_,
         int8 decimalsOffset_
-    ) OracleMutationComputer(oracle_, dataSlot_, defaultOneXScalar_, decimalsOffset_) {}
+    ) OracleMutationComputer(oracle_, dataSlot_, minimumFreshness_, defaultOneXScalar_, decimalsOffset_) {}
 
     /**
      * @notice Returns the slope configuration for a token.
@@ -135,7 +147,7 @@ abstract contract SlopedOracleMutationComputer is OracleMutationComputer {
         }
 
         slopeConfigs[token] = SlopeConfig({base: base, baseSlope: baseSlope, kink: kink, kinkSlope: kinkSlope});
-        emit SlopeConfigUpdated(token, oldConfig, slopeConfigs[token]);
+        emit SlopeConfigUpdated(msg.sender, token, oldConfig, slopeConfigs[token], block.timestamp);
     }
 
     /**

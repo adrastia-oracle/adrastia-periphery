@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IPeriodic.sol";
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/IUpdateable.sol";
@@ -31,10 +31,18 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
     mapping(address => Config) internal configs;
 
     /// @notice Emitted when a token's configuration is updated.
+    /// @param caller The address of the caller that updated the config.
     /// @param token The address of the token.
     /// @param oldConfig The old configuration.
     /// @param newConfig The new configuration.
-    event ConfigUpdated(address indexed token, Config oldConfig, Config newConfig);
+    /// @param timestamp The timestamp when the config was updated.
+    event ConfigUpdated(
+        address indexed caller,
+        address indexed token,
+        Config oldConfig,
+        Config newConfig,
+        uint256 timestamp
+    );
 
     /// @notice An error thrown when the specified one x scalar is invalid.
     /// @param oneXScalar The invalid one x scalar.
@@ -88,7 +96,7 @@ abstract contract MutatedValueComputer is IERC165, IRateComputer {
 
         Config memory oldConfig = configs[token];
         configs[token] = Config({max: max, min: min, offset: offset, scalar: scalar});
-        emit ConfigUpdated(token, oldConfig, configs[token]);
+        emit ConfigUpdated(msg.sender, token, oldConfig, configs[token], block.timestamp);
     }
 
     /// @inheritdoc IRateComputer

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "./IHistoricalRates.sol";
 
@@ -27,22 +27,36 @@ abstract contract HistoricalRates is IHistoricalRates {
 
     /// @notice Event emitted when a rate buffer's capacity is increased past the initial capacity.
     /// @dev Buffer initialization does not emit an event.
+    /// @param caller The address of the account that increased the rate buffer's capacity.
     /// @param token The token for which the rate buffer's capacity was increased.
     /// @param oldCapacity The previous capacity of the rate buffer.
     /// @param newCapacity The new capacity of the rate buffer.
-    event RatesCapacityIncreased(address indexed token, uint256 oldCapacity, uint256 newCapacity);
+    event RatesCapacityIncreased(
+        address indexed caller,
+        address indexed token,
+        uint256 oldCapacity,
+        uint256 newCapacity
+    );
 
     /// @notice Event emitted when a rate buffer's capacity is initialized.
+    /// @param caller The address of the account that initialized the rate buffer.
     /// @param token The token for which the rate buffer's capacity was initialized.
     /// @param capacity The capacity of the rate buffer.
-    event RatesCapacityInitialized(address indexed token, uint256 capacity);
+    event RatesCapacityInitialized(address indexed caller, address indexed token, uint256 capacity);
 
     /// @notice Event emitted when a new rate is pushed to the rate buffer.
+    /// @param caller The address of the account that pushed the rate.
     /// @param token The token for which the rate was pushed.
     /// @param target The target rate.
     /// @param current The current rate, which may be different from the target rate if the rate change is capped.
     /// @param timestamp The timestamp at which the rate was pushed.
-    event RateUpdated(address indexed token, uint256 target, uint256 current, uint256 timestamp);
+    event RateUpdated(
+        address indexed caller,
+        address indexed token,
+        uint256 target,
+        uint256 current,
+        uint256 timestamp
+    );
 
     /// @notice An error that is thrown if we try to initialize a rate buffer that has already been initialized.
     /// @param token The token for which we tried to initialize the rate buffer.
@@ -162,7 +176,7 @@ abstract contract HistoricalRates is IHistoricalRates {
         }
 
         if (meta.maxSize != amount) {
-            emit RatesCapacityIncreased(token, meta.maxSize, amount);
+            emit RatesCapacityIncreased(msg.sender, token, meta.maxSize, amount);
 
             // Update the metadata
             meta.maxSize = uint16(amount);
@@ -228,7 +242,7 @@ abstract contract HistoricalRates is IHistoricalRates {
         meta.size = 0;
         meta.maxSize = initialBufferCardinality;
 
-        emit RatesCapacityInitialized(token, meta.maxSize);
+        emit RatesCapacityInitialized(msg.sender, token, meta.maxSize);
     }
 
     /**
@@ -250,7 +264,7 @@ abstract contract HistoricalRates is IHistoricalRates {
 
         rateBuffers[token][meta.end] = rate;
 
-        emit RateUpdated(token, rate.target, rate.current, block.timestamp);
+        emit RateUpdated(msg.sender, token, rate.target, rate.current, block.timestamp);
 
         if (meta.size < meta.maxSize && meta.end == meta.size) {
             // We are at the end of the array and we have not yet filled it

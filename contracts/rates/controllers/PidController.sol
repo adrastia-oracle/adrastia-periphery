@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity =0.8.13;
+pragma solidity =0.8.30;
 
 import "@adrastia-oracle/adrastia-core/contracts/interfaces/ILiquidityOracle.sol";
 
@@ -24,8 +24,8 @@ import "../RateController.sol";
 /// (i.e. considering a positive rate as zero and adjusting the output rates accordingly.)
 /// This same rebasing can be used to handle negative rates.
 /// @dev This contract is abstract because it lacks restrictions on sensitive functions. Please override checkSetConfig,
-/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetDefaultInputAndErrorOracle, and
-/// checkUpdate to add restrictions.
+/// checkManuallyPushRate, checkSetUpdatesPaused, checkSetRatesCapacity, checkSetDefaultInputAndErrorOracle,
+/// checkSetChangeThreshold, checkSetHookConfig, and checkUpdate to add restrictions.
 abstract contract PidController is RateController {
     /// @notice Struct to hold PID configuration.
     struct PidConfig {
@@ -432,7 +432,12 @@ abstract contract PidController is RateController {
     }
 
     /// @inheritdoc RateController
-    function updateAndCompute(address token) internal virtual override returns (uint64 target, uint64 current) {
+    function updateAndCompute(
+        address token,
+        bool,
+        uint64,
+        uint64
+    ) internal virtual override returns (uint64 target, uint64 current) {
         PidState memory newPidState;
         (target, current, newPidState) = computeNextPidRate(token);
 
@@ -443,8 +448,8 @@ abstract contract PidController is RateController {
 
     /// @inheritdoc RateController
     /// @dev Always returns true to ensure continuous updates.
-    function willAnythingChange(bytes memory) internal view virtual override returns (bool) {
-        return true;
+    function willAnythingChange(bytes memory) internal view virtual override returns (bool, bool, uint64, uint64) {
+        return (true, false, 0, 0);
     }
 
     function _inputAndErrorOracle(address token) internal view virtual returns (ILiquidityOracle) {

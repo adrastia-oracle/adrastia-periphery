@@ -13,6 +13,7 @@ const DATA_SLOT_LIQUIDITY_QUOTETOKEN = 3;
 
 const DEFAULT_DECIMALS = 4;
 
+const DEFAULT_MINIMUM_FRESHNESS = 60; // 60 seconds
 const DEFAULT_DATA_SLOT = DATA_SLOT_PRICE;
 const DEFAULT_ONE_X_SCALAR = BigNumber.from(10).pow(6);
 const DEFAULT_DECIMAL_OFFSET = 0;
@@ -45,12 +46,14 @@ describe("OracleMutationComputer#constructor", function () {
         const computer = await factory.deploy(
             oracle.address,
             DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             DEFAULT_DECIMAL_OFFSET
         );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
         expect(await computer.decimalsOffset()).to.equal(DEFAULT_DECIMAL_OFFSET);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(DEFAULT_DECIMALS);
@@ -60,19 +63,26 @@ describe("OracleMutationComputer#constructor", function () {
         const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
         await oracle.deployed();
 
-        await expect(factory.deploy(oracle.address, DEFAULT_DATA_SLOT, 0, DEFAULT_DECIMAL_OFFSET)).to.be.revertedWith(
-            "InvalidOneXScalar"
-        );
+        await expect(
+            factory.deploy(oracle.address, DEFAULT_DATA_SLOT, DEFAULT_MINIMUM_FRESHNESS, 0, DEFAULT_DECIMAL_OFFSET)
+        ).to.be.revertedWith("InvalidOneXScalar");
     });
 
     it("Works with a non-default one x scalar", async function () {
         const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
         await oracle.deployed();
 
-        const computer = await factory.deploy(oracle.address, DEFAULT_DATA_SLOT, 100, DEFAULT_DECIMAL_OFFSET);
+        const computer = await factory.deploy(
+            oracle.address,
+            DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
+            100,
+            DEFAULT_DECIMAL_OFFSET
+        );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(100);
         expect(await computer.decimalsOffset()).to.equal(DEFAULT_DECIMAL_OFFSET);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(DEFAULT_DECIMALS);
@@ -82,10 +92,17 @@ describe("OracleMutationComputer#constructor", function () {
         const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
         await oracle.deployed();
 
-        const computer = await factory.deploy(oracle.address, DEFAULT_DATA_SLOT, DEFAULT_ONE_X_SCALAR, 100);
+        const computer = await factory.deploy(
+            oracle.address,
+            DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
+            DEFAULT_ONE_X_SCALAR,
+            100
+        );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
         expect(await computer.decimalsOffset()).to.equal(100);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(DEFAULT_DECIMALS);
@@ -97,10 +114,17 @@ describe("OracleMutationComputer#constructor", function () {
         const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, decimals, DEFAULT_DECIMALS);
         await oracle.deployed();
 
-        const computer = await factory.deploy(oracle.address, DEFAULT_DATA_SLOT, DEFAULT_ONE_X_SCALAR, 100);
+        const computer = await factory.deploy(
+            oracle.address,
+            DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
+            DEFAULT_ONE_X_SCALAR,
+            100
+        );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
         expect(await computer.decimalsOffset()).to.equal(100);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(decimals);
@@ -112,10 +136,17 @@ describe("OracleMutationComputer#constructor", function () {
         const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, decimals);
         await oracle.deployed();
 
-        const computer = await factory.deploy(oracle.address, DATA_SLOT_LIQUIDITY_TOKEN, DEFAULT_ONE_X_SCALAR, 100);
+        const computer = await factory.deploy(
+            oracle.address,
+            DATA_SLOT_LIQUIDITY_TOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
+            DEFAULT_ONE_X_SCALAR,
+            100
+        );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
         expect(await computer.decimalsOffset()).to.equal(100);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(decimals);
@@ -130,15 +161,39 @@ describe("OracleMutationComputer#constructor", function () {
         const computer = await factory.deploy(
             oracle.address,
             DATA_SLOT_LIQUIDITY_QUOTETOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             100
         );
 
         await computer.deployed();
 
+        expect(await computer.minimumFreshness()).to.equal(DEFAULT_MINIMUM_FRESHNESS);
         expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
         expect(await computer.decimalsOffset()).to.equal(100);
         expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(decimals);
+    });
+
+    it("Works with an alternative minimum freshness", async function () {
+        const oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
+        await oracle.deployed();
+
+        const minimumFreshness = DEFAULT_MINIMUM_FRESHNESS * 2 + 5;
+
+        const computer = await factory.deploy(
+            oracle.address,
+            DEFAULT_DATA_SLOT,
+            minimumFreshness,
+            DEFAULT_ONE_X_SCALAR,
+            DEFAULT_DECIMAL_OFFSET
+        );
+
+        await computer.deployed();
+
+        expect(await computer.minimumFreshness()).to.equal(minimumFreshness);
+        expect(await computer.defaultOneXScalar()).to.equal(DEFAULT_ONE_X_SCALAR);
+        expect(await computer.decimalsOffset()).to.equal(DEFAULT_DECIMAL_OFFSET);
+        expect(await computer.stubGetTokenDecimalsOrDefault(USDC)).to.equal(DEFAULT_DECIMALS);
     });
 
     it("Reverts with an invalid data slot (=0)", async function () {
@@ -146,7 +201,7 @@ describe("OracleMutationComputer#constructor", function () {
         await oracle.deployed();
 
         await expect(
-            factory.deploy(oracle.address, 0, DEFAULT_ONE_X_SCALAR, DEFAULT_DECIMAL_OFFSET)
+            factory.deploy(oracle.address, 0, DEFAULT_MINIMUM_FRESHNESS, DEFAULT_ONE_X_SCALAR, DEFAULT_DECIMAL_OFFSET)
         ).to.be.revertedWith("InvalidDataSlot");
     });
 
@@ -155,7 +210,7 @@ describe("OracleMutationComputer#constructor", function () {
         await oracle.deployed();
 
         await expect(
-            factory.deploy(oracle.address, 4, DEFAULT_ONE_X_SCALAR, DEFAULT_DECIMAL_OFFSET)
+            factory.deploy(oracle.address, 4, DEFAULT_MINIMUM_FRESHNESS, DEFAULT_ONE_X_SCALAR, DEFAULT_DECIMAL_OFFSET)
         ).to.be.revertedWith("InvalidDataSlot");
     });
 });
@@ -180,21 +235,21 @@ describe("OracleMutationComputer#getValue", function () {
             slot: DATA_SLOT_PRICE,
             name: "price",
             setValue: async function (token, value) {
-                await oracle.stubSetObservation(token, value, scrap, scrap, await currentBlockTimestamp());
+                await oracle.stubSetObservationNow(token, value, scrap, scrap);
             },
         },
         {
             slot: DATA_SLOT_LIQUIDITY_TOKEN,
             name: "token liquidity",
             setValue: async function (token, value) {
-                await oracle.stubSetObservation(token, scrap, value, scrap, await currentBlockTimestamp());
+                await oracle.stubSetObservationNow(token, scrap, value, scrap);
             },
         },
         {
             slot: DATA_SLOT_LIQUIDITY_QUOTETOKEN,
             name: "quote token liquidity",
             setValue: async function (token, value) {
-                await oracle.stubSetObservation(token, scrap, scrap, value, await currentBlockTimestamp());
+                await oracle.stubSetObservationNow(token, scrap, scrap, value);
             },
         },
     ];
@@ -250,6 +305,7 @@ describe("OracleMutationComputer#getValue", function () {
                                 computer = await computerFactory.deploy(
                                     oracle.address,
                                     slot.slot,
+                                    DEFAULT_MINIMUM_FRESHNESS,
                                     DEFAULT_ONE_X_SCALAR,
                                     decimalsOffset
                                 );
@@ -264,6 +320,55 @@ describe("OracleMutationComputer#getValue", function () {
             }
         });
     }
+
+    it("Reverts if the underlying consultation is too old", async function () {
+        const oracleFactory = await ethers.getContractFactory("MockOracle2");
+        oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
+        await oracle.deployed();
+
+        const computerFactory = await ethers.getContractFactory("OracleMutationComputerStub");
+        computer = await computerFactory.deploy(
+            oracle.address,
+            DATA_SLOT_PRICE,
+            DEFAULT_MINIMUM_FRESHNESS,
+            DEFAULT_ONE_X_SCALAR,
+            DEFAULT_DECIMAL_OFFSET
+        );
+
+        token = USDC;
+
+        // Set the observation to a timestamp in the past
+        const timestamp = (await currentBlockTimestamp()) - DEFAULT_MINIMUM_FRESHNESS;
+        // This call will advance the time by 1 second, making the observation stale
+        await oracle.stubSetObservation(token, scrap, scrap, scrap, timestamp);
+
+        await expect(computer.stubGetValue(token)).to.be.revertedWith("AbstractOracle: RATE_TOO_OLD");
+    });
+
+    it("Uses instant consultation when the minimum freshness is zero", async function () {
+        const oracleFactory = await ethers.getContractFactory("MockOracle2");
+        oracle = await oracleFactory.deploy(ethers.constants.AddressZero, DEFAULT_DECIMALS, DEFAULT_DECIMALS);
+        await oracle.deployed();
+
+        const computerFactory = await ethers.getContractFactory("OracleMutationComputerStub");
+        computer = await computerFactory.deploy(
+            oracle.address,
+            DATA_SLOT_PRICE,
+            0, // Minimum freshness
+            DEFAULT_ONE_X_SCALAR,
+            DEFAULT_DECIMALS
+        );
+
+        token = USDC;
+
+        const storedRate = scrap;
+        const instantRate = scrap.add(1000); // A different value to ensure we use the instant rate
+
+        await oracle.stubSetInstantRates(token, instantRate, instantRate, instantRate);
+        await oracle.stubSetObservationNow(token, storedRate, storedRate, storedRate);
+
+        expect(await computer.stubGetValue(token)).to.equal(instantRate);
+    });
 });
 
 describe("SlopedOracleMutationComputer#getValue", function () {
@@ -294,6 +399,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
         computer = await computerFactory.deploy(
             oracle.address,
             DATA_SLOT_LIQUIDITY_TOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             decimals
         );
@@ -301,7 +407,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
         await computer.setConfig(token, MAX_RATE, 0, 0, DEFAULT_ONE_X_SCALAR);
 
         // Ensure the oracle is able to return data
-        await oracle.stubSetObservation(token, 0, 0, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, 0, 0);
     });
 
     it("Reverts if the input value equals 2^255", async function () {
@@ -339,7 +445,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
     it("Reverts if the config has not been set", async function () {
         const input = ethers.constants.Zero;
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         await expect(computer.stubGetValue(token)).to.be.revertedWith("MissingSlopeConfig");
     });
@@ -354,7 +460,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
         expect(value).to.equal(base);
@@ -370,7 +476,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
         expect(value).to.equal(input);
@@ -386,7 +492,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
         expect(value).to.equal(input);
@@ -402,7 +508,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
 
@@ -426,7 +532,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
 
@@ -451,7 +557,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         await computer.stubSetSanitizeInput(true, sanitizedInput);
 
@@ -477,7 +583,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
         await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-        await oracle.stubSetObservation(token, 0, input, 0, 1);
+        await oracle.stubSetObservationNow(token, 0, input, 0);
 
         const value = await computer.stubGetValue(token);
 
@@ -504,7 +610,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
             await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-            await oracle.stubSetObservation(token, 0, input, 0, 1);
+            await oracle.stubSetObservationNow(token, 0, input, 0);
 
             const value = await computer.stubGetValue(token);
 
@@ -553,7 +659,7 @@ describe("SlopedOracleMutationComputer#getValue", function () {
 
             await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
 
-            await oracle.stubSetObservation(token, 0, input, 0, 1);
+            await oracle.stubSetObservationNow(token, 0, input, 0);
 
             const value = await computer.stubGetValue(token);
 
@@ -595,6 +701,8 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
     var token;
     var oracle;
 
+    let adminAddress;
+
     before(async function () {
         const tokenFactory = await ethers.getContractFactory("FakeERC20");
         const tokenContract = await tokenFactory.deploy("Token", "TKN", decimals);
@@ -613,9 +721,14 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
         computer = await computerFactory.deploy(
             oracle.address,
             DATA_SLOT_LIQUIDITY_TOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             decimals
         );
+
+        const [signer] = await ethers.getSigners();
+
+        adminAddress = await signer.getAddress();
     });
 
     it("Reverts if everyting is zero", async function () {
@@ -659,7 +772,29 @@ describe("SlopedOracleMutationComputer#setSlopeConfig", function () {
         const kink = ethers.constants.One;
         const kinkSlope = ethers.constants.One;
 
-        await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
+        const tx = await computer.setSlopeConfig(token, base, baseSlope, kink, kinkSlope);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "SlopeConfigUpdated")
+            .withArgs(
+                adminAddress,
+                token,
+                {
+                    base: BigNumber.from(0),
+                    baseSlope: BigNumber.from(0),
+                    kinkSlope: BigNumber.from(0),
+                    kink: BigNumber.from(0),
+                },
+                {
+                    base: base,
+                    baseSlope: baseSlope,
+                    kinkSlope: kinkSlope,
+                    kink: kink,
+                },
+                timestamp
+            );
 
         const config = await computer.getSlopeConfig(token);
 
@@ -710,6 +845,7 @@ describe("ManagedSlopedOracleMutationComputer#setSlopeConfig", function () {
         computer = await computerFactory.deploy(
             oracle.address,
             DATA_SLOT_LIQUIDITY_TOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             decimals
         );
@@ -736,9 +872,31 @@ describe("ManagedSlopedOracleMutationComputer#setSlopeConfig", function () {
     it("Works if the caller has the rate admin role", async function () {
         await computer.grantRole(RATE_ADMIN_ROLE, signer2Address);
 
-        await computer
+        const tx = await computer
             .connect(signer2)
             .setSlopeConfig(token, DEFAULT_BASE, DEFAULT_BASE_SLOPE, DEFAULT_KINK, DEFAULT_KINK_SLOPE);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "SlopeConfigUpdated")
+            .withArgs(
+                await signer2.getAddress(),
+                token,
+                {
+                    base: BigNumber.from(0),
+                    baseSlope: BigNumber.from(0),
+                    kinkSlope: BigNumber.from(0),
+                    kink: BigNumber.from(0),
+                },
+                {
+                    base: DEFAULT_BASE,
+                    baseSlope: DEFAULT_BASE_SLOPE,
+                    kinkSlope: DEFAULT_KINK_SLOPE,
+                    kink: DEFAULT_KINK,
+                },
+                timestamp
+            );
 
         const config = await computer.getSlopeConfig(token);
 
@@ -789,6 +947,7 @@ describe("ManagedSlopedOracleMutationComputer#setConfig", function () {
         computer = await computerFactory.deploy(
             oracle.address,
             DATA_SLOT_LIQUIDITY_TOKEN,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             decimals
         );
@@ -811,7 +970,31 @@ describe("ManagedSlopedOracleMutationComputer#setConfig", function () {
     it("Works if the caller has the rate admin role", async function () {
         await computer.grantRole(RATE_ADMIN_ROLE, signer2Address);
 
-        await computer.connect(signer2).setConfig(token, DEFAULT_MAX, DEFAULT_MIN, DEFAULT_OFFSET, DEFAULT_SCALAR);
+        const tx = await computer
+            .connect(signer2)
+            .setConfig(token, DEFAULT_MAX, DEFAULT_MIN, DEFAULT_OFFSET, DEFAULT_SCALAR);
+
+        const timestamp = await blockTimestamp(tx.blockNumber);
+
+        await expect(tx)
+            .to.emit(computer, "ConfigUpdated")
+            .withArgs(
+                await signer2.getAddress(),
+                token,
+                {
+                    max: BigNumber.from(0),
+                    min: BigNumber.from(0),
+                    offset: BigNumber.from(0),
+                    scalar: 0,
+                },
+                {
+                    max: DEFAULT_MAX,
+                    min: DEFAULT_MIN,
+                    offset: DEFAULT_OFFSET,
+                    scalar: DEFAULT_SCALAR,
+                },
+                timestamp
+            );
 
         const config = await computer.getConfig(token);
 
@@ -835,6 +1018,7 @@ describe("OracleMutationComputer#supportsInterface", function () {
         computer = await factory.deploy(
             oracle.address,
             DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             DEFAULT_DECIMAL_OFFSET
         );
@@ -867,6 +1051,7 @@ describe("ManagedSlopedOracleMutationComputer#supportsInterface", function () {
         computer = await factory.deploy(
             oracle.address,
             DEFAULT_DATA_SLOT,
+            DEFAULT_MINIMUM_FRESHNESS,
             DEFAULT_ONE_X_SCALAR,
             DEFAULT_DECIMAL_OFFSET
         );

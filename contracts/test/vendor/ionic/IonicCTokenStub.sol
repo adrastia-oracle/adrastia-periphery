@@ -5,6 +5,8 @@ import {ICToken} from "../../../vendor/ionic/ICToken.sol";
 import {IRateComputer} from "../../../rates/IRateComputer.sol";
 
 contract IonicCTokenStub is ICToken {
+    uint256 public stubAccrueInterestCallTimes;
+
     uint256 public _totalUnderlyingSupplied;
     address public _underlying;
 
@@ -93,6 +95,8 @@ contract IonicCTokenStub is ICToken {
 
         // Emit an event
         emit InterestAccrued(rate);
+
+        ++stubAccrueInterestCallTimes;
 
         return _accrueInterestReturnCode;
     }
