@@ -333,6 +333,14 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /**
      * @notice Sets the hook configuration for a specific hook type.
      *
+     * If the hookAddress is set to the zero address, it indicates that no post-update hook is set. In that case,
+     * hookGasLimit must be 0 and allowHookFailure must be false to prevent accidental misconfiguration.
+     *
+     * If the hookAddress is set to a non-zero address, hookGasLimit must be non-zero to prevent accidental
+     * misconfiguration.
+     *
+     * Please ensure that the hook implements ERC165 and supports the expected interface for the hook type.
+     *
      * @dev To uninstall a hook, all fields of the hook config must be set to zero/false.
      *
      * @param hookType The type of the hook to set the configuration for.
