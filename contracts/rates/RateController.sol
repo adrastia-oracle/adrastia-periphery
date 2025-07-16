@@ -319,7 +319,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     }
 
     /**
-     * @notice Gets the hook configuration for a specific hook type.
+     * @notice Gets the hook configuration for a specific hook type. A zero address indicates that no hook is set.
      *
      * @param hookType The type of the hook to retrieve the configuration for.
      *
