@@ -48,7 +48,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
          */
         uint64 hookGasLimit;
         /**
-         * @notice The address of the hook. The zero address indicates that no post-update hook is set.
+         * @notice The address of the hook. The zero address indicates that no hook is set.
          */
         address hookAddress;
     }
