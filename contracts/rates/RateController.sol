@@ -565,7 +565,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
     /// @inheritdoc IUpdateable
     function canUpdate(bytes memory data) public view virtual override returns (bool b) {
         (bool callSuccess, bytes memory callReturn) = address(this).staticcall(
-            abi.encodeWithSelector(this.canComputeNextRate.selector, data)
+            abi.encodeCall(this.canComputeNextRate, (data))
         );
         if (!callSuccess) {
             // Call reverted. We can't compute the next rate.
@@ -913,7 +913,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             Hook memory preUpdateHook = _getHook(uint256(HookType.PreUpdate));
 
             (bool success, bytes memory returnData) = preUpdateHook.hookAddress.call{gas: preUpdateHook.hookGasLimit}(
-                abi.encodeWithSelector(IControllerPreUpdateHook.onPreControllerUpdate.selector, token, rate)
+                abi.encodeCall(IControllerPreUpdateHook.onPreControllerUpdate, (token, rate))
             );
 
             if (!success) {
@@ -939,7 +939,7 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
             Hook memory postUpdateHook = _getHook(uint256(HookType.PostUpdate));
 
             (bool success, bytes memory returnData) = postUpdateHook.hookAddress.call{gas: postUpdateHook.hookGasLimit}(
-                abi.encodeWithSelector(IControllerPostUpdateHook.onPostControllerUpdate.selector, token, rate)
+                abi.encodeCall(IControllerPostUpdateHook.onPostControllerUpdate, (token, rate))
             );
 
             if (!success) {
