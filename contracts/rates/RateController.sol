@@ -906,57 +906,41 @@ abstract contract RateController is ERC165, HistoricalRates, IRateComputer, IUpd
         return hooks[hookType];
     }
 
+    function _executeHook(uint256 hookType, address token, bytes memory callData) internal virtual {
+        Hook memory hook = _getHook(hookType);
+
+        (bool success, bytes memory returnData) = hook.hookAddress.call{gas: hook.hookGasLimit}(callData);
+
+        if (!success) {
+            if (hook.allowHookFailure) {
+                // The hook failed, but we allow it to fail
+                emit HookFailed(hookType, hook.hookAddress, token, returnData, block.timestamp);
+            } else {
+                // The hook failed, and we do not allow it to fail
+                revert HookFailedError(hookType, hook.hookAddress, token, returnData);
+            }
+        }
+    }
+
     function push(address token, RateLibrary.Rate memory rate) internal virtual override {
         uint256 activeHooks = activeHookTypes;
 
         if (_isHookSet(activeHooks, uint256(HookType.PreUpdate))) {
-            Hook memory preUpdateHook = _getHook(uint256(HookType.PreUpdate));
-
-            (bool success, bytes memory returnData) = preUpdateHook.hookAddress.call{gas: preUpdateHook.hookGasLimit}(
+            _executeHook(
+                uint256(HookType.PreUpdate),
+                token,
                 abi.encodeCall(IControllerPreUpdateHook.onPreControllerUpdate, (token, rate))
             );
-
-            if (!success) {
-                if (preUpdateHook.allowHookFailure) {
-                    // The hook failed, but we allow it to fail
-                    emit HookFailed(
-                        uint256(HookType.PreUpdate),
-                        preUpdateHook.hookAddress,
-                        token,
-                        returnData,
-                        block.timestamp
-                    );
-                } else {
-                    // The hook failed, and we do not allow it to fail
-                    revert HookFailedError(uint256(HookType.PreUpdate), preUpdateHook.hookAddress, token, returnData);
-                }
-            }
         }
 
         super.push(token, rate);
 
         if (_isHookSet(activeHooks, uint256(HookType.PostUpdate))) {
-            Hook memory postUpdateHook = _getHook(uint256(HookType.PostUpdate));
-
-            (bool success, bytes memory returnData) = postUpdateHook.hookAddress.call{gas: postUpdateHook.hookGasLimit}(
+            _executeHook(
+                uint256(HookType.PostUpdate),
+                token,
                 abi.encodeCall(IControllerPostUpdateHook.onPostControllerUpdate, (token, rate))
             );
-
-            if (!success) {
-                if (postUpdateHook.allowHookFailure) {
-                    // The hook failed, but we allow it to fail
-                    emit HookFailed(
-                        uint256(HookType.PostUpdate),
-                        postUpdateHook.hookAddress,
-                        token,
-                        returnData,
-                        block.timestamp
-                    );
-                } else {
-                    // The hook failed, and we do not allow it to fail
-                    revert HookFailedError(uint256(HookType.PostUpdate), postUpdateHook.hookAddress, token, returnData);
-                }
-            }
         }
     }
 
